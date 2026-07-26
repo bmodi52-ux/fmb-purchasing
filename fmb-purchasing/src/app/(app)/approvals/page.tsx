@@ -1,0 +1,91 @@
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/permissions";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { ApprovalsList, type ApprovalRow } from "./approvals-list";
+
+export default async function ApprovalsPage() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "approvals", "approve");
+
+  const admin = createAdminClient();
+  const { data: expenses } = await admin
+    .from("expenses")
+    .select("id, vendor_name_raw, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, submitted_by, created_at")
+    .eq("status", "submitted")
+    .order("created_at");
+
+  if (!expenses || expenses.length === 0) {
+    return (
+      <div className="flex flex-col gap-3">
+        <h1 className="font-serif text-3xl font-semibold text-ink">Approvals</h1>
+        <p className="text-sm text-ink/50">Nothing waiting for review.</p>
+      </div>
+    );
+  }
+
+  const submitterIds = [...new Set(expenses.map((e) => e.submitted_by))];
+  const expenseIds = expenses.map((e) => e.id);
+
+  const [{ data: profiles }, { data: lineItems }] = await Promise.all([
+    admin.from("profiles").select("id, full_name, username").in("id", submitterIds),
+    admin
+      .from("expense_line_items")
+      .select("expense_id, description_raw, quantity, unit_price, line_total, category_id")
+      .in("expense_id", expenseIds),
+  ]);
+  const submitterNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.username]));
+
+  const categoryIds = [...new Set((lineItems ?? []).map((li) => li.category_id).filter(Boolean))];
+  const { data: categories } = categoryIds.length
+    ? await admin.from("categories").select("id, name").in("id", categoryIds)
+    : { data: [] };
+  const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
+
+  const itemsByExpense = new Map<string, typeof lineItems>();
+  for (const li of lineItems ?? []) {
+    const list = itemsByExpense.get(li.expense_id) ?? [];
+    list.push(li);
+    itemsByExpense.set(li.expense_id, list);
+  }
+
+  const receiptUrls = new Map<string, string>();
+  for (const e of expenses) {
+    if (e.receipt_file_path) {
+      const { data } = await admin.storage.from("receipts").createSignedUrl(e.receipt_file_path, 3600);
+      if (data) receiptUrls.set(e.id, data.signedUrl);
+    }
+  }
+
+  const rows: ApprovalRow[] = expenses.map((e) => ({
+    id: e.id,
+    vendor_name_raw: e.vendor_name_raw,
+    invoice_number: e.invoice_number,
+    receipt_date: e.receipt_date,
+    subtotal: e.subtotal,
+    gst_amount: e.gst_amount,
+    total: e.total,
+    submittedByName: submitterNameById.get(e.submitted_by) ?? "—",
+    created_at: e.created_at,
+    receiptUrl: receiptUrls.get(e.id) ?? null,
+    lineItems: (itemsByExpense.get(e.id) ?? []).map((li) => ({
+      description_raw: li.description_raw,
+      categoryName: li.category_id ? (categoryNameById.get(li.category_id) ?? "—") : "—",
+      quantity: li.quantity,
+      unit_price: li.unit_price,
+      line_total: li.line_total,
+    })),
+  }));
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="font-serif text-3xl font-semibold text-ink">Approvals</h1>
+        <p className="mt-1 text-ink/70">{expenses.length} expense(s) waiting for review.</p>
+      </div>
+
+      <ApprovalsList expenses={rows} />
+    </div>
+  );
+}

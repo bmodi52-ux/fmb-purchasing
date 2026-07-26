@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Misri Hijri Calendar — Demo</title>
+<style>
+  :root {
+    --ink: #1f2421;
+    --paper: #faf8f4;
+    --line: #ddd6c9;
+    --accent: #7a5c3e;
+    --accent-soft: #efe6d8;
+    --muted: #8b8477;
+    --today: #b34a3c;
+    --radius: 10px;
+    --font-display: "Georgia", "Iowan Old Style", serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-ar: "Traditional Arabic", "Scheherazade New", serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    padding: 2.5rem 1.25rem;
+  }
+  .cal {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  .cal-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .cal-header h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 1.6rem;
+    margin: 0;
+    letter-spacing: 0.01em;
+  }
+  .cal-header .hijri-label {
+    font-size: 0.95rem;
+    color: var(--accent);
+  }
+  .cal-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .cal-nav button {
+    border: 1px solid var(--line);
+    background: white;
+    color: var(--ink);
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .cal-nav button:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .cal-nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  table.grid {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  .grid th {
+    font-weight: 500;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-bottom: 0.6rem;
+    text-align: center;
+  }
+  .grid td {
+    border: 1px solid var(--line);
+    height: 5.4rem;
+    vertical-align: top;
+    padding: 0.4rem 0.5rem;
+    position: relative;
+  }
+  .grid td.outside { background: #f4f1ea; color: var(--muted); }
+  .grid td.today { background: var(--accent-soft); }
+  .grid td.today .greg-day { color: var(--today); font-weight: 700; }
+
+  .greg-day {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+  .hijri-day {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.5rem;
+    font-family: var(--font-ar);
+    font-size: 1rem;
+    color: var(--accent);
+    direction: rtl;
+  }
+  .hijri-month-tick {
+    display: block;
+    font-size: 0.6rem;
+    color: var(--muted);
+    margin-top: 1.6rem;
+    letter-spacing: 0.02em;
+  }
+
+  footer.note {
+    max-width: 760px;
+    margin: 1.5rem auto 0;
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  @media (max-width: 560px) {
+    .grid td { height: 3.6rem; padding: 0.25rem 0.35rem; }
+    .greg-day { font-size: 0.95rem; }
+    .hijri-day { font-size: 0.8rem; top: 0.25rem; right: 0.3rem; }
+    .cal-header h1 { font-size: 1.25rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cal">
+  <div class="cal-header">
+    <div>
+      <h1 id="gregLabel">Loading…</h1>
+      <div class="hijri-label" id="hijriLabel"></div>
+    </div>
+    <div class="cal-nav">
+      <button id="prevBtn" aria-label="Previous month">‹</button>
+      <button id="todayBtn" aria-label="Jump to today" style="width:auto; border-radius:999px; padding:0 0.9rem; font-size:0.8rem;">Today</button>
+      <button id="nextBtn" aria-label="Next month">›</button>
+    </div>
+  </div>
+
+  <table class="grid">
+    <thead>
+      <tr id="dowRow"></tr>
+    </thead>
+    <tbody id="gridBody"></tbody>
+  </table>
+</div>
+
+<footer class="note">
+  Hijri dates follow the Misri (Dawoodi Bohra) tabular calendar — a fixed calculated
+  system rather than moon-sighting, so dates here are computed directly rather than
+  pulled from a third-party site.
+</footer>
+
+<script type="module">
+  import { gregorianToHijri, formatHijri, buildMonthGrid, toArabicNumeral } from "./hijri.js";
+
+  const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const GREG_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  let view = new Date();
+  view.setDate(1);
+
+  const dowRow = document.getElementById("dowRow");
+  DOW.forEach(d => {
+    const th = document.createElement("th");
+    th.textContent = d;
+    dowRow.appendChild(th);
+  });
+
+  function isSameDay(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+
+  function render() {
+    const y = view.getFullYear();
+    const m = view.getMonth() + 1;
+
+    document.getElementById("gregLabel").textContent = `${GREG_MONTHS[m - 1]} ${y}`;
+    document.getElementById("hijriLabel").textContent = formatHijri(gregorianToHijri(new Date(y, m - 1, 15)));
+
+    const weeks = buildMonthGrid(y, m);
+    const body = document.getElementById("gridBody");
+    body.innerHTML = "";
+    const today = new Date();
+
+    weeks.forEach(week => {
+      const tr = document.createElement("tr");
+      week.forEach(cell => {
+        const td = document.createElement("td");
+        if (!cell.inCurrentMonth) td.classList.add("outside");
+        if (isSameDay(cell.gregorian, today)) td.classList.add("today");
+
+        const greg = document.createElement("span");
+        greg.className = "greg-day";
+        greg.textContent = cell.gregorian.getDate();
+
+        const hijri = document.createElement("span");
+        hijri.className = "hijri-day";
+        hijri.textContent = toArabicNumeral(cell.hijri.day);
+
+        td.appendChild(greg);
+        td.appendChild(hijri);
+
+        if (cell.hijri.day === 1) {
+          const tick = document.createElement("span");
+          tick.className = "hijri-month-tick";
+          tick.textContent = cell.hijri.year + "H";
+          td.appendChild(tick);
+        }
+
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+  }
+
+  document.getElementById("prevBtn").addEventListener("click", () => {
+    view = new Date(view.getFullYear(), view.getMonth() - 1, 1);
+    render();
+  });
+  document.getElementById("nextBtn").addEventListener("click", () => {
+    view = new Date(view.getFullYear(), view.getMonth() + 1, 1);
+    render();
+  });
+  document.getElementById("todayBtn").addEventListener("click", () => {
+    view = new Date();
+    view.setDate(1);
+    render();
+  });
+
+  render();
+</script>
+
+</body>
+</html>
