@@ -66,6 +66,7 @@ export function AppSidebar({
             <Link
               key={item.key}
               href={item.href}
+              prefetch={false}
               onClick={() => setOpen(false)}
               className="rounded-md px-3 py-2 text-ink/70 transition-colors hover:bg-gold/15 hover:text-ink"
             >
