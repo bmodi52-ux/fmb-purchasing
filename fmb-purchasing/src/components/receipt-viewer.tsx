@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getExpenseReceiptUrl } from "@/lib/receipts";
+import { PdfPages } from "./pdf-pages";
 
 export function ReceiptViewer({ expenseId, label = "View receipt" }: { expenseId: string; label?: string }) {
   const [open, setOpen] = useState(false);
@@ -64,7 +65,7 @@ export function ReceiptViewer({ expenseId, label = "View receipt" }: { expenseId
               {failed && <p className="p-6 text-sm text-maroon/70">Couldn&apos;t load this receipt.</p>}
               {url &&
                 (isPdf ? (
-                  <iframe src={url} title="Receipt" className="h-[80vh] w-full" />
+                  <PdfPages url={url} />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={url} alt="Receipt" className="h-auto w-full" />
