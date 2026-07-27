@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { usernameToAuthEmail, isValidUsername, normalizeUsername } from "@/lib/auth/username";
+import { sendEmail, emailTemplate, detailsBox, SITE_URL } from "@/lib/notifications";
 
 export type CreateUserState = { error: string | null };
 
@@ -49,6 +50,19 @@ export async function createUser(
   if (error) {
     return { error: error.message.includes("already been registered") ? "That username is taken." : error.message };
   }
+
+  await sendEmail({
+    to: contactEmail,
+    subject: "Welcome to FMB Purchasing — your account is ready",
+    html: emailTemplate(`
+      <p style="margin:0 0 8px 0;">Hi ${fullName}, an account has been created for you on FMB Purchasing.</p>
+      ${detailsBox([
+        { label: "Username", value: username },
+        { label: "Temporary password", value: password },
+      ])}
+      <p style="margin:8px 0 0 0;">Sign in at <a href="${SITE_URL}" style="color:#A97614;">${SITE_URL}</a>. We'd recommend changing your password after your first login.</p>
+    `),
+  });
 
   revalidatePath("/admin/users");
   return { error: null };

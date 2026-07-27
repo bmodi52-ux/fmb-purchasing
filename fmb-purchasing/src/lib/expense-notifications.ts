@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendEmail, emailTemplate } from "@/lib/notifications";
+import { sendEmail, emailTemplate, detailsBox } from "@/lib/notifications";
 import type { PageKey, ActionKey } from "@/lib/permissions";
 
 /** Contact emails for every active user whose team grants the given permission. */
@@ -39,22 +39,6 @@ async function submitterEmail(admin: ReturnType<typeof createAdminClient>, userI
 
 function money(n: number) {
   return `$${n.toFixed(2)} AUD`;
-}
-
-function detailsBox(rows: { label: string; value: string }[]): string {
-  const rowsHtml = rows
-    .map(
-      ({ label, value }) => `
-      <tr>
-        <td style="padding:4px 0; color:#6E5F52; font-size:13px;">${label}</td>
-        <td style="padding:4px 0; color:#2B211C; font-size:13px; text-align:right; font-weight:bold;">${value}</td>
-      </tr>`
-    )
-    .join("");
-  return `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF; border:1px solid #E7DCC5; border-radius:6px; padding:12px 16px; margin:16px 0;">
-      ${rowsHtml}
-    </table>`;
 }
 
 export async function notifyExpenseSubmitted(expense: ExpenseSummary) {
