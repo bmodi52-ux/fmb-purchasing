@@ -3,6 +3,7 @@
 import { reviewExpense, bulkReviewExpenses } from "./actions";
 import { formatDate } from "@/lib/format";
 import { FilterableSection, type BulkAction } from "@/components/filterable-section";
+import { ReceiptViewer } from "@/components/receipt-viewer";
 import type { ExportColumn } from "@/lib/export";
 
 export type ApprovalLineItem = {
@@ -23,7 +24,7 @@ export type ApprovalRow = {
   total: number;
   submittedByName: string;
   created_at: string;
-  receiptUrl: string | null;
+  hasReceipt: boolean;
   lineItems: ApprovalLineItem[];
 };
 
@@ -91,10 +92,8 @@ export function ApprovalsList({ expenses }: { expenses: ApprovalRow[] }) {
                 <div className="flex flex-wrap gap-x-8 gap-y-1 text-sm text-ink/70">
                   <span>Invoice: {e.invoice_number || "—"}</span>
                   <span>Date: {e.receipt_date || "—"}</span>
-                  {e.receiptUrl ? (
-                    <a href={e.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-ink underline">
-                      View receipt
-                    </a>
+                  {e.hasReceipt ? (
+                    <ReceiptViewer expenseId={e.id} />
                   ) : (
                     <span className="text-ink/40">No receipt attached</span>
                   )}

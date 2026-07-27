@@ -13,10 +13,12 @@ export default async function MySubmissionsPage() {
   const { data: expenses } = await admin
     .from("expenses")
     .select(
-      "id, vendor_name_raw, invoice_number, total, status, decision_comment, decided_at, payment_reference, payment_date, created_at"
+      "id, vendor_name_raw, invoice_number, total, status, decision_comment, decided_at, payment_reference, payment_date, created_at, receipt_file_path"
     )
     .eq("submitted_by", user.id)
     .order("created_at", { ascending: false });
+
+  const rows = (expenses ?? []).map((e) => ({ ...e, hasReceipt: e.receipt_file_path != null }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -25,7 +27,7 @@ export default async function MySubmissionsPage() {
         <p className="mt-1 text-ink/70">Track the status of expenses you&apos;ve submitted.</p>
       </div>
 
-      <SubmissionsList expenses={expenses ?? []} />
+      <SubmissionsList expenses={rows} />
     </div>
   );
 }

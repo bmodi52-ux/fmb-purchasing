@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ApprovalsList, type ApprovalRow } from "./approvals-list";
+import { categoryLabelsById } from "@/lib/categories";
 
 export default async function ApprovalsPage() {
   const user = await getCurrentUser();
@@ -37,25 +38,14 @@ export default async function ApprovalsPage() {
   ]);
   const submitterNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.username]));
 
-  const categoryIds = [...new Set((lineItems ?? []).map((li) => li.category_id).filter(Boolean))];
-  const { data: categories } = categoryIds.length
-    ? await admin.from("categories").select("id, name").in("id", categoryIds)
-    : { data: [] };
-  const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
+  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
+  const categoryNameById = categoryLabelsById(categories ?? []);
 
   const itemsByExpense = new Map<string, typeof lineItems>();
   for (const li of lineItems ?? []) {
     const list = itemsByExpense.get(li.expense_id) ?? [];
     list.push(li);
     itemsByExpense.set(li.expense_id, list);
-  }
-
-  const receiptUrls = new Map<string, string>();
-  for (const e of expenses) {
-    if (e.receipt_file_path) {
-      const { data } = await admin.storage.from("receipts").createSignedUrl(e.receipt_file_path, 3600);
-      if (data) receiptUrls.set(e.id, data.signedUrl);
-    }
   }
 
   const rows: ApprovalRow[] = expenses.map((e) => ({
@@ -68,7 +58,7 @@ export default async function ApprovalsPage() {
     total: e.total,
     submittedByName: submitterNameById.get(e.submitted_by) ?? "—",
     created_at: e.created_at,
-    receiptUrl: receiptUrls.get(e.id) ?? null,
+    hasReceipt: e.receipt_file_path != null,
     lineItems: (itemsByExpense.get(e.id) ?? []).map((li) => ({
       description_raw: li.description_raw,
       categoryName: li.category_id ? (categoryNameById.get(li.category_id) ?? "—") : "—",

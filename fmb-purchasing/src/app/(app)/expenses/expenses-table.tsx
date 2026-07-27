@@ -1,6 +1,7 @@
 "use client";
 
 import { ColumnsDataTable, type ColumnDef } from "@/components/columns-data-table";
+import { ReceiptViewer } from "@/components/receipt-viewer";
 import { formatDate } from "@/lib/format";
 import { formatFiscalYear } from "@/lib/fiscal-year";
 
@@ -12,6 +13,7 @@ export type ExpenseRow = {
   status: string;
   invoice_number: string | null;
   receipt_date: string | null;
+  hasReceipt: boolean;
   subtotal: number;
   gst_amount: number;
   total: number;
@@ -35,6 +37,12 @@ const ALL_COLUMNS: ColumnDef<ExpenseRow>[] = [
   { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} />, exportValue: (r) => r.status },
   { key: "invoice_number", label: "Invoice #", render: (r) => r.invoice_number ?? "—", exportValue: (r) => r.invoice_number ?? "" },
   { key: "receipt_date", label: "Receipt date", render: (r) => r.receipt_date ?? "—", exportValue: (r) => r.receipt_date ?? "" },
+  {
+    key: "receipt",
+    label: "Receipt",
+    render: (r) => (r.hasReceipt ? <ReceiptViewer expenseId={r.id} /> : "—"),
+    exportValue: (r) => (r.hasReceipt ? "attached" : ""),
+  },
   { key: "subtotal", label: "Subtotal", render: (r) => `$${r.subtotal.toFixed(2)}`, exportValue: (r) => r.subtotal },
   { key: "gst_amount", label: "GST", render: (r) => `$${r.gst_amount.toFixed(2)}`, exportValue: (r) => r.gst_amount },
   { key: "total", label: "Total", render: (r) => `$${r.total.toFixed(2)}`, exportValue: (r) => r.total },

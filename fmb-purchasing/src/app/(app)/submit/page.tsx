@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SubmitForm } from "./submit-form";
 import { getExpenseForEdit } from "./actions";
+import { leafCategories } from "@/lib/categories";
 
 export default async function SubmitExpensePage({
   searchParams,
@@ -19,7 +20,7 @@ export default async function SubmitExpensePage({
 
   const admin = createAdminClient();
   const [{ data: categories }, { data: vendors }] = await Promise.all([
-    admin.from("categories").select("id, name").order("sort_order"),
+    admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
     admin.from("vendors").select("id, name").eq("status", "approved").order("name"),
   ]);
 
@@ -36,7 +37,7 @@ export default async function SubmitExpensePage({
         </p>
       </div>
       <SubmitForm
-        categories={(categories ?? []).map((c) => c.name)}
+        categories={leafCategories(categories ?? []).map((c) => c.name)}
         vendorNames={(vendors ?? []).map((v) => v.name)}
         editExpense={editExpense}
       />

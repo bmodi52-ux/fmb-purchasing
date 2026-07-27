@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import { saveColumnPreference } from "@/lib/column-prefs-actions";
 import { ExportToolbar } from "./export-toolbar";
 
@@ -26,6 +26,7 @@ export function ColumnsDataTable<T extends { id: string }>({
   initialVisible,
   emptyLabel = "None.",
   bulkActions,
+  renderExpanded,
 }: {
   pageKey: string;
   title: string;
@@ -34,13 +35,23 @@ export function ColumnsDataTable<T extends { id: string }>({
   initialVisible: string[];
   emptyLabel?: string;
   bulkActions?: BulkAction<T>[];
+  /** When provided, rows get a chevron that expands an extra detail row in place. */
+  renderExpanded?: (row: T) => React.ReactNode;
 }) {
   const [visible, setVisible] = useState<Set<string>>(new Set(initialVisible));
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [, startTransition] = useTransition();
+
+  function toggleExpanded(id: string) {
+    const next = new Set(expanded);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setExpanded(next);
+  }
 
   function toggle(key: string) {
     const next = new Set(visible);
@@ -182,6 +193,7 @@ export function ColumnsDataTable<T extends { id: string }>({
                 <th className="p-2">
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} aria-label="Select all" />
                 </th>
+                {renderExpanded && <th className="p-2" />}
                 {visibleColumns.map((c) => (
                   <th key={c.key} className="p-2">
                     {c.label}
@@ -191,21 +203,43 @@ export function ColumnsDataTable<T extends { id: string }>({
             </thead>
             <tbody>
               {filteredRows.map((row) => (
-                <tr key={row.id} className="border-t border-ink/10">
-                  <td className="p-2">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(row.id)}
-                      onChange={() => toggleRow(row.id)}
-                      aria-label="Select row"
-                    />
-                  </td>
-                  {visibleColumns.map((c) => (
-                    <td key={c.key} className="p-2">
-                      {c.render(row)}
+                <Fragment key={row.id}>
+                  <tr className="border-t border-ink/10">
+                    <td className="p-2">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(row.id)}
+                        onChange={() => toggleRow(row.id)}
+                        aria-label="Select row"
+                      />
                     </td>
-                  ))}
-                </tr>
+                    {renderExpanded && (
+                      <td className="p-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(row.id)}
+                          aria-label={expanded.has(row.id) ? "Collapse" : "Expand"}
+                          className="text-ink/40 hover:text-ink"
+                        >
+                          {expanded.has(row.id) ? "▾" : "▸"}
+                        </button>
+                      </td>
+                    )}
+                    {visibleColumns.map((c) => (
+                      <td key={c.key} className="p-2">
+                        {c.render(row)}
+                      </td>
+                    ))}
+                  </tr>
+                  {renderExpanded && expanded.has(row.id) && (
+                    <tr className="border-t border-ink/5 bg-ink/[0.02]">
+                      <td />
+                      <td colSpan={visibleColumns.length + 1} className="p-3">
+                        {renderExpanded(row)}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
