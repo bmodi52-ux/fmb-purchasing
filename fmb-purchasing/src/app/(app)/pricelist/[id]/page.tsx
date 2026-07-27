@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateTime } from "@/lib/format";
 import { updateItem, addPackSize, removePackSize, addOffer, updateOffer, reviewOffer } from "../actions";
 import { OfferForm } from "./offer-form";
+import { MergePanel, type DuplicateCandidate } from "./merge-panel";
 import { leafCategories, categoryLabelsById } from "@/lib/categories";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
@@ -75,6 +76,13 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     (offerCosts ?? []).map((c) => [c.offer_id as string, c as { cost_per_base_unit: number | null; base_unit_code: string }])
   );
 
+  const { data: duplicateRows } = await admin
+    .from("item_duplicate_candidates")
+    .select("candidate_id, candidate_name, candidate_item_number, candidate_category_id, score")
+    .eq("item_id", id)
+    .order("score", { ascending: false })
+    .limit(5);
+
   const offerIds = new Set((offers ?? []).map((o) => o.id));
   const offerHistory = (offerHistoryRows ?? []).filter((h) => offerIds.has(h.item_id));
 
@@ -123,6 +131,14 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     if (field.endsWith("_unit_id")) return unitLabelById.get(String(value)) ?? "—";
     return String(value);
   }
+
+  const duplicateCandidates: DuplicateCandidate[] = (duplicateRows ?? []).map((d) => ({
+    id: d.candidate_id as string,
+    itemNumber: (d.candidate_item_number as string | null) ?? null,
+    name: d.candidate_name as string,
+    categoryLabel: d.candidate_category_id ? (categoryNameById.get(d.candidate_category_id as string) ?? null) : null,
+    score: Number(d.score),
+  }));
 
   const updatedByName = item.updated_by ? profileNameById.get(item.updated_by) : null;
   const offersByPackSize = new Map<string, typeof offers>();
@@ -408,6 +424,25 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           </form>
         )}
       </section>
+
+      {canEdit && (
+        <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+          <h2 className="mb-1 font-serif text-lg font-semibold text-ink">Duplicates</h2>
+          <p className="mb-4 text-sm text-ink/50">
+            Receipts create a new item whenever the wording differs, so the same product can end up recorded twice with
+            its price history split between them.
+          </p>
+          <MergePanel
+            itemId={item.id}
+            itemName={item.name}
+            itemNumber={item.item_number}
+            packSizeCount={(packSizes ?? []).length}
+            offerCount={(offers ?? []).length}
+            purchaseCount={itemCost?.purchase_count ?? 0}
+            candidates={duplicateCandidates}
+          />
+        </section>
+      )}
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-4 font-serif text-lg font-semibold text-ink">Item change history</h2>

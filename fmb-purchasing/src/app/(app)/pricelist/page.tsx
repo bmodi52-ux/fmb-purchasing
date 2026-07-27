@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getUserPermissions, can, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -6,6 +7,7 @@ import { getColumnPreference } from "@/lib/column-prefs";
 import { AddItemModal } from "./add-item-modal";
 import { UnitsManager } from "./units-manager";
 import { ItemsTable, type OfferRow } from "./items-table";
+import { dismissDuplicatePair } from "./actions";
 import { leafCategories, categoryLabelsById } from "@/lib/categories";
 
 const PAGE_KEY = "pricelist";
@@ -83,6 +85,21 @@ export default async function PricelistPage() {
       getColumnPreference(user.id, PAGE_KEY, DEFAULT_VISIBLE),
     ]);
 
+  const { data: duplicateRows } = await admin
+    .from("item_duplicate_candidates")
+    .select("item_id, item_name, item_number, candidate_id, candidate_name, candidate_item_number, score")
+    .order("score", { ascending: false })
+    .limit(50);
+
+  // The view reports each pair from both sides; keep one row per pair.
+  const seenPairs = new Set<string>();
+  const duplicatePairs = (duplicateRows ?? []).filter((d) => {
+    const key = [d.item_id, d.candidate_id].sort().join("|");
+    if (seenPairs.has(key)) return false;
+    seenPairs.add(key);
+    return true;
+  });
+
   const vendorById = new Map((vendors ?? []).map((v) => [v.id, v]));
   const categoryNameById = categoryLabelsById(categories ?? []);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id, u.label]));
@@ -145,6 +162,41 @@ export default async function PricelistPage() {
       </div>
 
       {canEdit && <UnitsManager units={units ?? []} />}
+
+      {canEdit && duplicatePairs.length > 0 && (
+        <details className="rounded-lg border border-gold/40 bg-gold/5 px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-ink">
+            {duplicatePairs.length} possible duplicate item{duplicatePairs.length === 1 ? "" : "s"} — worth a look
+          </summary>
+          <p className="mt-2 text-sm text-ink/60">
+            Similar names usually mean the same product got recorded twice, which splits its price history. Open either
+            item to merge them.
+          </p>
+          <ul className="mt-2 flex flex-col gap-1 text-sm">
+            {duplicatePairs.map((d) => (
+              <li key={`${d.item_id}-${d.candidate_id}`} className="flex flex-wrap items-center gap-2">
+                <Link href={`/pricelist/${d.item_id}`} className="text-ink underline">
+                  {d.item_number ? `${d.item_number} — ` : ""}
+                  {d.item_name as string}
+                </Link>
+                <span className="text-ink/40">vs</span>
+                <Link href={`/pricelist/${d.candidate_id}`} className="text-ink underline">
+                  {d.candidate_item_number ? `${d.candidate_item_number} — ` : ""}
+                  {d.candidate_name as string}
+                </Link>
+                <span className="text-xs text-ink/40">{Math.round(Number(d.score) * 100)}% similar</span>
+                <form action={dismissDuplicatePair}>
+                  <input type="hidden" name="item_a" value={d.item_id as string} />
+                  <input type="hidden" name="item_b" value={d.candidate_id as string} />
+                  <button type="submit" className="text-xs text-ink/50 hover:text-ink hover:underline">
+                    not a duplicate
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {pending.length > 0 && (
         <section>
