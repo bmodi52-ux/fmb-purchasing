@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendEmail } from "@/lib/notifications";
+import { sendEmail, emailTemplate } from "@/lib/notifications";
 import type { PageKey, ActionKey } from "@/lib/permissions";
 
 /** Contact emails for every active user whose team grants the given permission. */
@@ -41,6 +41,22 @@ function money(n: number) {
   return `$${n.toFixed(2)} AUD`;
 }
 
+function detailsBox(rows: { label: string; value: string }[]): string {
+  const rowsHtml = rows
+    .map(
+      ({ label, value }) => `
+      <tr>
+        <td style="padding:4px 0; color:#6E5F52; font-size:13px;">${label}</td>
+        <td style="padding:4px 0; color:#2B211C; font-size:13px; text-align:right; font-weight:bold;">${value}</td>
+      </tr>`
+    )
+    .join("");
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF; border:1px solid #E7DCC5; border-radius:6px; padding:12px 16px; margin:16px 0;">
+      ${rowsHtml}
+    </table>`;
+}
+
 export async function notifyExpenseSubmitted(expense: ExpenseSummary) {
   const admin = createAdminClient();
   const [submitter, reviewers] = await Promise.all([
@@ -48,18 +64,27 @@ export async function notifyExpenseSubmitted(expense: ExpenseSummary) {
     emailsWithPermission("approvals", "approve"),
   ]);
 
+  const details = detailsBox([
+    { label: "Vendor", value: expense.vendor_name_raw ?? "—" },
+    { label: "Total", value: money(expense.total) },
+  ]);
+
   if (submitter) {
     await sendEmail({
       to: submitter,
       subject: `Expense submitted — ${expense.vendor_name_raw ?? "expense"} (${money(expense.total)})`,
-      html: `<p>Your expense for <strong>${expense.vendor_name_raw ?? "—"}</strong> (${money(expense.total)}) has been submitted for review.</p>`,
+      html: emailTemplate(
+        `<p style="margin:0 0 8px 0;">Your expense has been submitted for review.</p>${details}`
+      ),
     });
   }
   if (reviewers.length) {
     await sendEmail({
       to: reviewers,
       subject: `New expense to review — ${expense.vendor_name_raw ?? "expense"} (${money(expense.total)})`,
-      html: `<p>A new expense from <strong>${expense.vendor_name_raw ?? "—"}</strong> (${money(expense.total)}) is waiting for review.</p>`,
+      html: emailTemplate(
+        `<p style="margin:0 0 8px 0;">A new expense is waiting for your review.</p>${details}`
+      ),
     });
   }
 }
@@ -73,15 +98,23 @@ export async function notifyExpenseDecision(
   const submitter = await submitterEmail(admin, expense.submitted_by);
   if (!submitter) return;
 
-  const html =
+  const details = detailsBox([
+    { label: "Vendor", value: expense.vendor_name_raw ?? "—" },
+    { label: "Total", value: money(expense.total) },
+  ]);
+  const commentHtml = comment
+    ? `<p style="margin:8px 0 0 0; color:#6E5F52;">Comment: ${comment}</p>`
+    : "";
+
+  const bodyHtml =
     decision === "approved"
-      ? `<p>Your expense for <strong>${expense.vendor_name_raw ?? "—"}</strong> (${money(expense.total)}) was approved and has moved to Accounts for reimbursement.</p>${comment ? `<p>Comment: ${comment}</p>` : ""}`
-      : `<p>Declined — please contact FMB Procurement Head.</p>${comment ? `<p>Comment: ${comment}</p>` : ""}<p>Expense: ${expense.vendor_name_raw ?? "—"} (${money(expense.total)})</p>`;
+      ? `<p style="margin:0 0 8px 0;">Your expense was <strong style="color:#009C48;">approved</strong> and has moved to Accounts for reimbursement.</p>${details}${commentHtml}`
+      : `<p style="margin:0 0 8px 0;"><strong style="color:#4A160A;">Declined</strong> — please contact FMB Procurement Head.</p>${details}${commentHtml}`;
 
   await sendEmail({
     to: submitter,
     subject: `Expense ${decision} — ${expense.vendor_name_raw ?? "expense"}`,
-    html,
+    html: emailTemplate(bodyHtml),
   });
 }
 
@@ -90,9 +123,15 @@ export async function notifyExpensePaid(expense: ExpenseSummary, paymentReferenc
   const submitter = await submitterEmail(admin, expense.submitted_by);
   if (!submitter) return;
 
+  const details = detailsBox([
+    { label: "Vendor", value: expense.vendor_name_raw ?? "—" },
+    { label: "Total", value: money(expense.total) },
+    ...(paymentReference ? [{ label: "Reference", value: paymentReference }] : []),
+  ]);
+
   await sendEmail({
     to: submitter,
     subject: `Expense reimbursed — ${expense.vendor_name_raw ?? "expense"} (${money(expense.total)})`,
-    html: `<p>Your expense for <strong>${expense.vendor_name_raw ?? "—"}</strong> (${money(expense.total)}) has been paid.${paymentReference ? ` Reference: ${paymentReference}.` : ""}</p>`,
+    html: emailTemplate(`<p style="margin:0 0 8px 0;">Your expense has been paid.</p>${details}`),
   });
 }
