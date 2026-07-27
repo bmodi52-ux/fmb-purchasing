@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { canonicalUnitCode } from "@/lib/units";
 
 function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -36,22 +37,50 @@ export async function matchOrCreateVendor(
   return { id: created.id, status: "created" };
 }
 
-async function resolveOrCreateUnitId(admin: SupabaseClient, code: string | null): Promise<string> {
-  const raw = (code ?? "").trim() || "unit";
-  const { data: existing } = await admin.from("units").select("id").ilike("code", raw).maybeSingle();
-  if (existing) return existing.id;
+async function unitIdByCode(admin: SupabaseClient, code: string): Promise<string | null> {
+  const { data } = await admin.from("units").select("id").eq("code", code).maybeSingle();
+  return data?.id ?? null;
+}
 
-  const { data: created, error } = await admin.from("units").insert({ code: raw, label: raw }).select("id").single();
-  if (error) throw error;
-  return created.id;
+/**
+ * Resolve receipt-extracted unit text against the existing units picklist.
+ * Never creates a unit: doing so previously turned every spelling variant
+ * ("kg", "kgs", "kilo") into its own incomparable unit, which broke the
+ * per-unit cost comparison the Pricelist exists for. Unrecognised text falls
+ * back to the caller's unit instead.
+ */
+async function resolveUnitId(
+  admin: SupabaseClient,
+  raw: string | null,
+  fallbackUnitId: string | null
+): Promise<string | null> {
+  const canonical = canonicalUnitCode(raw);
+  if (canonical) {
+    const id = await unitIdByCode(admin, canonical);
+    if (id) return id;
+  }
+
+  // an admin may have added a bespoke unit (e.g. "bunch") — match that directly
+  const trimmed = (raw ?? "").trim();
+  if (trimmed) {
+    const { data } = await admin.from("units").select("id").ilike("code", trimmed).maybeSingle();
+    if (data) return data.id;
+  }
+
+  return fallbackUnitId;
 }
 
 /**
  * Match/create the top-level Item — one row per canonical product (e.g.
- * "Chicken Breast", canonical unit kg), independent of vendor or packaging.
- * v1 groups by exact normalized name, same simplification as the
- * canonical-group matching this replaces; a proper mis-grouping merge tool
- * is explicitly deferred (§9/§14).
+ * "Chicken Thighs", canonical unit kg), independent of vendor or packaging.
+ *
+ * Scoped by category, matching the unique (category_id, name) constraint from
+ * 0009: different meats have different cuts, so "Legs and Shoulders" under
+ * Mutton and under Beef are different products and must not collapse into one.
+ *
+ * Still exact-normalized-name within a category — OCR variants of the same
+ * product ("Mutton Legs/Shoulders" vs "Legs and Shoulders") will each create
+ * an item, and a merge tool remains deferred (§9/§14).
  */
 export async function matchOrCreateItem(
   admin: SupabaseClient,
@@ -69,10 +98,16 @@ export async function matchOrCreateItem(
 ): Promise<{ id: string; status: "matched" | "created" }> {
   const name = normalize(description);
 
-  const { data: existing } = await admin.from("items").select("id").ilike("name", name).maybeSingle();
+  const lookup = admin.from("items").select("id").ilike("name", name);
+  const { data: existing } = await (categoryId
+    ? lookup.eq("category_id", categoryId)
+    : lookup.is("category_id", null)
+  ).maybeSingle();
   if (existing) return { id: existing.id, status: "matched" };
 
-  const canonicalUnitId = await resolveOrCreateUnitId(admin, normalizedUnit);
+  const fallbackUnitId = await unitIdByCode(admin, "ea");
+  const canonicalUnitId = await resolveUnitId(admin, normalizedUnit, fallbackUnitId);
+  if (!canonicalUnitId) throw new Error("No units are configured — seed the units picklist first.");
 
   const { data: created, error } = await admin
     .from("items")
@@ -91,39 +126,42 @@ export async function matchOrCreateItem(
 
 /**
  * Match/create the pack size an offer is sold in, nested under an Item.
- * Uses the AI-normalized quantity/unit from the receipt line as the pack
- * size when available (e.g. "10 kg" purchased -> a 10 kg pack size);
- * otherwise defaults to "1 x canonical unit".
+ *
+ * Always the plain "one unit" shape. A receipt line tells us how much was
+ * bought, not how the vendor packages it — reading "80 kg purchased" as an
+ * "80 kg pack size" is what produced nonsense pack sizes previously. The
+ * quantity bought lives on the expense line item, where it drives
+ * item_paid_unit_costs; real pack shapes (1 L x 10 and the like) are entered
+ * by a human on the item page.
  */
 async function matchOrCreatePackSize(
   admin: SupabaseClient,
   {
     itemId,
     canonicalUnitId,
-    normalizedQuantity,
     normalizedUnit,
   }: {
     itemId: string;
     canonicalUnitId: string;
-    normalizedQuantity: number | null;
     normalizedUnit: string | null;
   }
 ): Promise<string> {
-  const packSize = normalizedQuantity && normalizedQuantity > 0 ? normalizedQuantity : 1;
-  const packSizeUnitId = normalizedUnit ? await resolveOrCreateUnitId(admin, normalizedUnit) : canonicalUnitId;
+  const innerUnitId = (await resolveUnitId(admin, normalizedUnit, canonicalUnitId)) ?? canonicalUnitId;
 
   const { data: existing } = await admin
     .from("item_pack_sizes")
     .select("id")
     .eq("item_id", itemId)
-    .eq("pack_size", packSize)
-    .eq("pack_size_unit_id", packSizeUnitId)
+    .eq("inner_quantity", 1)
+    .eq("inner_unit_id", innerUnitId)
+    .eq("pack_count", 1)
+    .is("label", null)
     .maybeSingle();
   if (existing) return existing.id;
 
   const { data: created, error } = await admin
     .from("item_pack_sizes")
-    .insert({ item_id: itemId, pack_size: packSize, pack_size_unit_id: packSizeUnitId })
+    .insert({ item_id: itemId, inner_quantity: 1, inner_unit_id: innerUnitId, pack_count: 1 })
     .select("id")
     .single();
   if (error) throw error;
@@ -142,14 +180,12 @@ export async function matchOrCreateOffer(
     description,
     categoryId,
     userId,
-    normalizedQuantity = null,
     normalizedUnit = null,
   }: {
     vendorId: string;
     description: string;
     categoryId: string | null;
     userId: string;
-    normalizedQuantity?: number | null;
     normalizedUnit?: string | null;
   }
 ): Promise<{ id: string; status: "matched" | "created" }> {
@@ -159,7 +195,6 @@ export async function matchOrCreateOffer(
   const packSizeId = await matchOrCreatePackSize(admin, {
     itemId: item.id,
     canonicalUnitId: itemRow!.canonical_unit_id,
-    normalizedQuantity,
     normalizedUnit,
   });
 

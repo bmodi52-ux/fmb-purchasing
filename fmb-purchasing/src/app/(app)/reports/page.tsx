@@ -78,44 +78,34 @@ export default async function ReportsPage({
     .map(([vendorName, v]) => ({ vendorName, ...v }))
     .sort((a, b) => b.total - a.total);
 
-  // Per-unit cost trends
+  // Per-unit cost trends, from the shared item_paid_unit_costs view (0010) so
+  // this page and the future Thaali cost calculator use one definition of
+  // "what we paid per unit" rather than each deriving their own.
   const expenseById = new Map((expenses ?? []).map((e) => [e.id, e]));
-  const receiptDateById = new Map((expenses ?? []).map((e) => [e.id, e.receipt_date]));
 
-  const pricelistItemIds = [
-    ...new Set((lineItems ?? []).map((li) => li.pricelist_item_id).filter(Boolean) as string[]),
-  ];
-  const { data: offers } = pricelistItemIds.length
-    ? await admin.from("pricelist_items").select("id, pack_size_id").in("id", pricelistItemIds)
+  const { data: paidCosts } = expenseIds.length
+    ? await admin
+        .from("item_paid_unit_costs")
+        .select("item_id, expense_id, receipt_date, base_quantity, base_unit_code, cost_per_base_unit")
+        .in("expense_id", expenseIds)
     : { data: [] };
-  const packSizeIdByOfferId = new Map((offers ?? []).map((o) => [o.id, o.pack_size_id]));
 
-  const packSizeIds = [...new Set([...packSizeIdByOfferId.values()].filter(Boolean) as string[])];
-  const { data: packSizes } = packSizeIds.length
-    ? await admin.from("item_pack_sizes").select("id, item_id").in("id", packSizeIds)
-    : { data: [] };
-  const itemIdByPackSizeId = new Map((packSizes ?? []).map((p) => [p.id, p.item_id]));
-
-  const itemIds = [...new Set([...itemIdByPackSizeId.values()].filter(Boolean) as string[])];
+  const itemIds = [...new Set((paidCosts ?? []).map((c) => c.item_id as string))];
   const { data: items } = itemIds.length
     ? await admin.from("items").select("id, name").in("id", itemIds)
     : { data: [] };
   const itemNameById = new Map((items ?? []).map((i) => [i.id, i.name]));
 
-  const perUnitRows: PerUnitRow[] = (lineItems ?? [])
-    .filter((li) => li.normalized_quantity != null && li.normalized_quantity > 0)
-    .map((li) => {
-      const packSizeId = li.pricelist_item_id ? packSizeIdByOfferId.get(li.pricelist_item_id) : null;
-      const itemId = packSizeId ? itemIdByPackSizeId.get(packSizeId) : null;
-      const groupName = (itemId && itemNameById.get(itemId)) || li.description_raw;
-      const expense = expenseById.get(li.expense_id);
+  const perUnitRows: PerUnitRow[] = (paidCosts ?? [])
+    .map((c) => {
+      const expense = expenseById.get(c.expense_id as string);
       return {
-        groupName,
+        groupName: itemNameById.get(c.item_id as string) ?? "—",
         vendorName: expense?.vendor_name_raw ?? "—",
-        receiptDate: receiptDateById.get(li.expense_id) ?? null,
-        normalizedQuantity: li.normalized_quantity!,
-        normalizedUnit: li.normalized_unit ?? "",
-        perUnit: Math.round((li.line_total / li.normalized_quantity!) * 10000) / 10000,
+        receiptDate: (c.receipt_date as string | null) ?? null,
+        normalizedQuantity: Number(c.base_quantity),
+        normalizedUnit: c.base_unit_code as string,
+        perUnit: Number(c.cost_per_base_unit),
       };
     })
     .sort((a, b) => a.groupName.localeCompare(b.groupName) || (a.receiptDate ?? "").localeCompare(b.receiptDate ?? ""));

@@ -24,11 +24,6 @@ function numberOrNull(formData: FormData, key: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function computePerUnitCost(unitPrice: number | null, packSize: number | null): number | null {
-  if (unitPrice == null || packSize == null || packSize === 0) return null;
-  return Math.round((unitPrice / packSize) * 10000) / 10000;
-}
-
 export type CreateItemState = { error: string | null; success: boolean };
 
 /**
@@ -46,11 +41,18 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
   if (!canonicalUnitId) return { error: "Canonical unit is required.", success: false };
 
   const admin = createAdminClient();
+  const categoryId = fieldOrNull(formData, "category_id");
 
-  const { data: existing } = await admin.from("items").select("item_number, name").ilike("name", name).maybeSingle();
+  // Uniqueness is per category (0009) — the same cut name under two different
+  // meats is two different products.
+  const duplicateLookup = admin.from("items").select("item_number, name").ilike("name", name);
+  const { data: existing } = await (categoryId
+    ? duplicateLookup.eq("category_id", categoryId)
+    : duplicateLookup.is("category_id", null)
+  ).maybeSingle();
   if (existing) {
     return {
-      error: `This item already exists: ${existing.item_number} — ${existing.name}. Open it to add a pack size or vendor offer instead.`,
+      error: `This item already exists in that category: ${existing.item_number} — ${existing.name}. Open it to add a pack size or vendor offer instead.`,
       success: false,
     };
   }
@@ -59,7 +61,7 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
     .from("items")
     .insert({
       name,
-      category_id: fieldOrNull(formData, "category_id"),
+      category_id: categoryId,
       canonical_unit_id: canonicalUnitId,
       status: "approved",
       created_by: user.id,
@@ -71,15 +73,13 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
     .single();
   if (itemError || !item) return { error: itemError?.message ?? "Could not create the item.", success: false };
 
-  const packSize = numberOrNull(formData, "pack_size") ?? 1;
-  const packSizeUnitId = fieldOrNull(formData, "pack_size_unit_id") ?? canonicalUnitId;
-
   const { data: packSizeRow, error: packSizeError } = await admin
     .from("item_pack_sizes")
     .insert({
       item_id: item.id,
-      pack_size: packSize,
-      pack_size_unit_id: packSizeUnitId,
+      inner_quantity: numberOrNull(formData, "inner_quantity") ?? 1,
+      inner_unit_id: fieldOrNull(formData, "inner_unit_id") ?? canonicalUnitId,
+      pack_count: numberOrNull(formData, "pack_count") ?? 1,
       label: fieldOrNull(formData, "pack_label"),
       created_by: user.id,
     })
@@ -89,17 +89,12 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
     return { error: packSizeError?.message ?? "Could not create the pack size.", success: false };
   }
 
-  const unitPrice = numberOrNull(formData, "unit_price");
-  const perUnitCostUnitId = fieldOrNull(formData, "per_unit_cost_unit_id") ?? packSizeUnitId;
-
   const { error: offerError } = await admin.from("pricelist_items").insert({
     pack_size_id: packSizeRow.id,
     vendor_id: fieldOrNull(formData, "vendor_id"),
     brand: fieldOrNull(formData, "brand"),
-    unit_price: unitPrice,
-    unit_price_unit_id: fieldOrNull(formData, "unit_price_unit_id"),
-    per_unit_cost: computePerUnitCost(unitPrice, packSize),
-    per_unit_cost_unit_id: perUnitCostUnitId,
+    vendor_sku: fieldOrNull(formData, "vendor_sku"),
+    pack_price: numberOrNull(formData, "pack_price"),
     comments: fieldOrNull(formData, "comments"),
     status: "approved",
     created_by: user.id,
@@ -117,15 +112,16 @@ export async function addPackSize(formData: FormData) {
   const user = await requirePricelistEdit();
 
   const itemId = String(formData.get("item_id") ?? "");
-  const packSize = numberOrNull(formData, "pack_size");
-  const packSizeUnitId = fieldOrNull(formData, "pack_size_unit_id");
-  if (!itemId || packSize == null || !packSizeUnitId) return;
+  const innerQuantity = numberOrNull(formData, "inner_quantity");
+  const innerUnitId = fieldOrNull(formData, "inner_unit_id");
+  if (!itemId || innerQuantity == null || !innerUnitId) return;
 
   const admin = createAdminClient();
   await admin.from("item_pack_sizes").insert({
     item_id: itemId,
-    pack_size: packSize,
-    pack_size_unit_id: packSizeUnitId,
+    inner_quantity: innerQuantity,
+    inner_unit_id: innerUnitId,
+    pack_count: numberOrNull(formData, "pack_count") ?? 1,
     label: fieldOrNull(formData, "label"),
     created_by: user.id,
   });
@@ -158,24 +154,12 @@ export async function addOffer(formData: FormData) {
   if (!itemId || !packSizeId) return;
 
   const admin = createAdminClient();
-  const { data: packSizeRow } = await admin
-    .from("item_pack_sizes")
-    .select("pack_size, pack_size_unit_id")
-    .eq("id", packSizeId)
-    .maybeSingle();
-  if (!packSizeRow) return;
-
-  const unitPrice = numberOrNull(formData, "unit_price");
-  const perUnitCostUnitId = fieldOrNull(formData, "per_unit_cost_unit_id") ?? packSizeRow.pack_size_unit_id;
-
   await admin.from("pricelist_items").insert({
     pack_size_id: packSizeId,
     vendor_id: fieldOrNull(formData, "vendor_id"),
     brand: fieldOrNull(formData, "brand"),
-    unit_price: unitPrice,
-    unit_price_unit_id: fieldOrNull(formData, "unit_price_unit_id"),
-    per_unit_cost: computePerUnitCost(unitPrice, packSizeRow.pack_size),
-    per_unit_cost_unit_id: perUnitCostUnitId,
+    vendor_sku: fieldOrNull(formData, "vendor_sku"),
+    pack_price: numberOrNull(formData, "pack_price"),
     comments: fieldOrNull(formData, "comments"),
     status: "approved",
     created_by: user.id,
@@ -278,11 +262,9 @@ export async function updateItem(formData: FormData) {
 const OFFER_TRACKED_FIELDS = [
   "vendor_id",
   "brand",
+  "vendor_sku",
   "pack_size_id",
-  "unit_price",
-  "unit_price_unit_id",
-  "per_unit_cost",
-  "per_unit_cost_unit_id",
+  "pack_price",
   "comments",
 ] as const;
 type OfferTrackedRow = Record<(typeof OFFER_TRACKED_FIELDS)[number], unknown>;
@@ -302,23 +284,12 @@ export async function updateOffer(formData: FormData) {
     .single<OfferTrackedRow>();
   if (!before) return;
 
-  const packSizeId = fieldOrNull(formData, "pack_size_id") ?? String(before.pack_size_id);
-  const { data: packSizeRow } = await admin
-    .from("item_pack_sizes")
-    .select("pack_size")
-    .eq("id", packSizeId)
-    .maybeSingle();
-
-  const unitPrice = numberOrNull(formData, "unit_price");
-
   const next: OfferTrackedRow = {
     vendor_id: fieldOrNull(formData, "vendor_id"),
     brand: fieldOrNull(formData, "brand"),
-    pack_size_id: packSizeId,
-    unit_price: unitPrice,
-    unit_price_unit_id: fieldOrNull(formData, "unit_price_unit_id"),
-    per_unit_cost: computePerUnitCost(unitPrice, packSizeRow?.pack_size ?? null),
-    per_unit_cost_unit_id: fieldOrNull(formData, "per_unit_cost_unit_id"),
+    vendor_sku: fieldOrNull(formData, "vendor_sku"),
+    pack_size_id: fieldOrNull(formData, "pack_size_id") ?? String(before.pack_size_id),
+    pack_price: numberOrNull(formData, "pack_price"),
     comments: fieldOrNull(formData, "comments"),
   };
 

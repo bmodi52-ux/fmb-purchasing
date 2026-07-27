@@ -23,18 +23,27 @@ export function AddItemForm({
   const [state, formAction, pending] = useActionState(createItem, initialState);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const [packSize, setPackSize] = useState("1");
-  const [unitPrice, setUnitPrice] = useState("");
+  const [innerQuantity, setInnerQuantity] = useState("1");
+  const [packCount, setPackCount] = useState("1");
+  const [packPrice, setPackPrice] = useState("");
   const [canonicalUnitId, setCanonicalUnitId] = useState("");
-  const [packSizeUnitId, setPackSizeUnitId] = useState("");
-  const [perUnitCostUnitId, setPerUnitCostUnitId] = useState("");
+  const [innerUnitId, setInnerUnitId] = useState("");
 
-  const perUnitCost = useMemo(() => {
-    const p = Number(packSize);
-    const u = Number(unitPrice);
-    if (!p || !u) return null;
-    return Math.round((u / p) * 10000) / 10000;
-  }, [packSize, unitPrice]);
+  const totalQuantity = useMemo(() => {
+    const inner = Number(innerQuantity);
+    const count = Number(packCount);
+    if (!inner || !count) return null;
+    return Math.round(inner * count * 1000) / 1000;
+  }, [innerQuantity, packCount]);
+
+  const costPerUnit = useMemo(() => {
+    const price = Number(packPrice);
+    if (!price || !totalQuantity) return null;
+    return Math.round((price / totalQuantity) * 10000) / 10000;
+  }, [packPrice, totalQuantity]);
+
+  const innerUnitLabel =
+    units.find((u) => u.id === (innerUnitId || canonicalUnitId))?.label ?? "";
 
   // Resets local form state in response to the server action's result — an
   // external system, not a derivable value — so an effect is the right tool.
@@ -42,11 +51,11 @@ export function AddItemForm({
     if (state.success) {
       formRef.current?.reset();
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPackSize("1");
-      setUnitPrice("");
+      setInnerQuantity("1");
+      setPackCount("1");
+      setPackPrice("");
       setCanonicalUnitId("");
-      setPackSizeUnitId("");
-      setPerUnitCostUnitId("");
+      setInnerUnitId("");
       onSuccess?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,25 +100,25 @@ export function AddItemForm({
 
       <div className="border-t border-ink/10 pt-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/40">First pack size</p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <label className="flex flex-1 flex-col gap-1 text-sm">
-            <span className="text-ink/70">Pack size</span>
+            <span className="text-ink/70">Each holds</span>
             <input
-              name="pack_size"
+              name="inner_quantity"
               type="number"
               step="any"
-              value={packSize}
-              onChange={(e) => setPackSize(e.target.value)}
+              value={innerQuantity}
+              onChange={(e) => setInnerQuantity(e.target.value)}
               className="input"
             />
           </label>
           <label className="flex w-28 flex-col gap-1 text-sm">
             <span className="text-ink/70">Unit</span>
             <select
-              name="pack_size_unit_id"
+              name="inner_unit_id"
               className="input"
-              value={packSizeUnitId}
-              onChange={(e) => setPackSizeUnitId(e.target.value)}
+              value={innerUnitId}
+              onChange={(e) => setInnerUnitId(e.target.value)}
             >
               <option value="">— use canonical —</option>
               {units.map((u) => (
@@ -119,11 +128,28 @@ export function AddItemForm({
               ))}
             </select>
           </label>
+          <label className="flex w-32 flex-col gap-1 text-sm">
+            <span className="text-ink/70">How many per pack</span>
+            <input
+              name="pack_count"
+              type="number"
+              step="1"
+              min={1}
+              value={packCount}
+              onChange={(e) => setPackCount(e.target.value)}
+              className="input"
+            />
+          </label>
           <label className="flex flex-1 flex-col gap-1 text-sm">
             <span className="text-ink/70">Label (optional)</span>
-            <input name="pack_label" placeholder="e.g. Carton" className="input" />
+            <input name="pack_label" placeholder="e.g. 1L x 10 carton" className="input" />
           </label>
         </div>
+        {totalQuantity != null && (
+          <p className="mt-2 font-mono text-xs text-ink/50">
+            Pack contains {totalQuantity} {innerUnitLabel}
+          </p>
+        )}
       </div>
 
       <div className="border-t border-ink/10 pt-4">
@@ -147,54 +173,31 @@ export function AddItemForm({
         </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-ink/70">
+              Vendor&apos;s product code <span className="text-ink/40">(optional)</span>
+            </span>
+            <input name="vendor_sku" placeholder="as printed on their invoice" className="input" />
+          </label>
+
           <div className="flex gap-2">
             <label className="flex flex-1 flex-col gap-1 text-sm">
-              <span className="text-ink/70">Unit price</span>
+              <span className="text-ink/70">Price for the whole pack</span>
               <input
-                name="unit_price"
+                name="pack_price"
                 type="number"
                 step="any"
-                value={unitPrice}
-                onChange={(e) => setUnitPrice(e.target.value)}
+                value={packPrice}
+                onChange={(e) => setPackPrice(e.target.value)}
                 className="input"
               />
             </label>
-            <label className="flex w-28 flex-col gap-1 text-sm">
-              <span className="text-ink/70">Unit</span>
-              <select name="unit_price_unit_id" className="input" defaultValue="">
-                <option value="">—</option>
-                {units.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="flex items-end gap-2">
-            <div className="flex flex-1 flex-col gap-1 text-sm">
-              <span className="text-ink/70">Per-unit cost</span>
-              <div className="input flex items-center bg-ink/[0.03] text-ink/70">
-                {perUnitCost != null ? perUnitCost.toFixed(4) : "—"}
+            <div className="flex w-32 flex-col gap-1 text-sm">
+              <span className="text-ink/70">Works out to</span>
+              <div className="input flex items-center bg-ink/[0.03] font-mono text-ink/70">
+                {costPerUnit != null ? `${costPerUnit.toFixed(4)}/${innerUnitLabel}` : "—"}
               </div>
             </div>
-            <label className="flex w-28 flex-col gap-1 text-sm">
-              <span className="text-ink/70">Unit</span>
-              <select
-                name="per_unit_cost_unit_id"
-                className="input"
-                value={perUnitCostUnitId || packSizeUnitId || canonicalUnitId}
-                onChange={(e) => setPerUnitCostUnitId(e.target.value)}
-              >
-                <option value="">—</option>
-                {units.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
         </div>
 

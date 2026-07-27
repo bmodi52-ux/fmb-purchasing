@@ -131,6 +131,15 @@ export type ItemLookupSuggestion = {
   categoryName: string | null;
 };
 
+function formatPackSizeLabel(
+  packSize: { inner_quantity: number; pack_count: number; total_quantity: number },
+  unitLabel: string
+): string {
+  return packSize.pack_count > 1
+    ? `${packSize.inner_quantity} ${unitLabel} × ${packSize.pack_count}`.trim()
+    : `${packSize.inner_quantity} ${unitLabel}`.trim();
+}
+
 /** Item #/name typeahead for manual entry line items — matches at the Item
  * level, then surfaces each approved vendor offer under it (pack size +
  * vendor) as a separate suggestion. */
@@ -155,7 +164,7 @@ export async function searchPricelistItemsAction(query: string): Promise<ItemLoo
 
   const { data: packSizes } = await admin
     .from("item_pack_sizes")
-    .select("id, item_id, pack_size, pack_size_unit_id")
+    .select("id, item_id, inner_quantity, inner_unit_id, pack_count, total_quantity")
     .in("item_id", itemIds);
   const packSizeById = new Map((packSizes ?? []).map((p) => [p.id, p]));
   const packSizeIds = [...packSizeById.keys()];
@@ -188,7 +197,7 @@ export async function searchPricelistItemsAction(query: string): Promise<ItemLoo
       id: r.id,
       itemNumber: item.item_number,
       description: item.name,
-      packSizeLabel: `${packSize.pack_size} ${unitLabelById.get(packSize.pack_size_unit_id) ?? ""}`.trim(),
+      packSizeLabel: formatPackSizeLabel(packSize, unitLabelById.get(packSize.inner_unit_id) ?? ""),
       brand: r.brand,
       vendorName: r.vendor_id ? (vendorNameById.get(r.vendor_id) ?? null) : null,
       categoryName: item.category_id ? (categoryNameById.get(item.category_id) ?? null) : null,
@@ -274,7 +283,6 @@ export async function createExpense(
       description: item.description,
       categoryId,
       userId: user.id,
-      normalizedQuantity: item.normalizedQuantity,
       normalizedUnit: item.normalizedUnit,
     });
 
@@ -423,7 +431,6 @@ export async function updateExpense(
       description: item.description,
       categoryId,
       userId: user.id,
-      normalizedQuantity: item.normalizedQuantity,
       normalizedUnit: item.normalizedUnit,
     });
 
