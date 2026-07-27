@@ -13,18 +13,32 @@ export type OfferRow = {
   vendorLabel: string;
   categoryLabel: string;
   brand: string | null;
-  packSize: number;
-  packSizeUnitLabel: string | null;
+  vendorSku: string | null;
+  innerQuantity: number;
+  innerUnitLabel: string | null;
+  packCount: number;
+  totalQuantity: number;
   packLabel: string | null;
-  unit_price: number | null;
-  per_unit_cost: number | null;
-  perUnitCostUnitLabel: string | null;
+  packPrice: number | null;
+  /** Derived by the offer_unit_costs view, expressed in baseUnitCode. */
+  costPerBaseUnit: number | null;
+  baseUnitCode: string | null;
   comments: string | null;
 };
 
+/** e.g. "1 L × 10 (10 L)" for a carton of ten litres, "1 kg" for loose. */
 function formatPackSize(r: OfferRow): string {
-  const size = `${r.packSize} ${r.packSizeUnitLabel ?? ""}`.trim();
-  return r.packLabel ? `${r.packLabel} (${size})` : size;
+  const unit = r.innerUnitLabel ?? "";
+  const shape =
+    r.packCount > 1
+      ? `${r.innerQuantity} ${unit} × ${r.packCount} (${r.totalQuantity} ${unit})`
+      : `${r.innerQuantity} ${unit}`.trim();
+  return r.packLabel ? `${r.packLabel} — ${shape}` : shape;
+}
+
+function formatCostPerUnit(r: OfferRow): string {
+  if (r.costPerBaseUnit == null) return "—";
+  return `$${r.costPerBaseUnit.toFixed(4)}/${r.baseUnitCode ?? ""}`;
 }
 
 function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
@@ -57,20 +71,22 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
       exportValue: (r) => formatPackSize(r),
     },
     {
-      key: "unit_price",
-      label: "Unit price",
-      render: (r) => <span className="font-mono text-ink/70">{r.unit_price != null ? `$${r.unit_price}` : "—"}</span>,
-      exportValue: (r) => r.unit_price ?? "",
+      key: "vendor_sku",
+      label: "Vendor code",
+      render: (r) => <span className="font-mono text-ink/60">{r.vendorSku ?? "—"}</span>,
+      exportValue: (r) => r.vendorSku ?? "",
     },
     {
-      key: "per_unit_cost",
-      label: "Per-unit cost",
-      render: (r) => (
-        <span className="font-mono text-ink/70">
-          {r.per_unit_cost != null ? `$${r.per_unit_cost.toFixed(4)}/${r.perUnitCostUnitLabel ?? ""}` : "—"}
-        </span>
-      ),
-      exportValue: (r) => (r.per_unit_cost != null ? `${r.per_unit_cost.toFixed(4)}/${r.perUnitCostUnitLabel ?? ""}` : ""),
+      key: "pack_price",
+      label: "Pack price",
+      render: (r) => <span className="font-mono text-ink/70">{r.packPrice != null ? `$${r.packPrice}` : "—"}</span>,
+      exportValue: (r) => r.packPrice ?? "",
+    },
+    {
+      key: "cost_per_unit",
+      label: "Cost per unit",
+      render: (r) => <span className="font-mono text-ink/70">{formatCostPerUnit(r)}</span>,
+      exportValue: (r) => (r.costPerBaseUnit != null ? `${r.costPerBaseUnit.toFixed(4)}/${r.baseUnitCode ?? ""}` : ""),
     },
     { key: "comments", label: "Comments", render: (r) => r.comments || "—", exportValue: (r) => r.comments ?? "" },
     { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} />, exportValue: (r) => r.status },
@@ -136,9 +152,14 @@ export function ItemsTable({
     : undefined;
 
   function renderExpanded(row: OfferRow) {
+    // Cheapest per base unit first — the comparison the expand exists to make.
     const itemOffers = allOffers
       .filter((o) => o.itemId === row.itemId)
-      .sort((a, b) => a.packSize - b.packSize || a.vendorLabel.localeCompare(b.vendorLabel));
+      .sort(
+        (a, b) =>
+          (a.costPerBaseUnit ?? Infinity) - (b.costPerBaseUnit ?? Infinity) ||
+          a.vendorLabel.localeCompare(b.vendorLabel)
+      );
 
     return (
       <div className="flex flex-col gap-2 text-sm">
@@ -146,13 +167,17 @@ export function ItemsTable({
           Pack sizes &amp; vendor offers for {row.name}
         </p>
         <ul className="flex flex-col gap-1">
-          {itemOffers.map((o) => (
+          {itemOffers.map((o, index) => (
             <li key={o.id} className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-ink/70">{formatPackSize(o)}</span>
               <span className="text-ink/40">—</span>
               <span className="text-ink">{o.vendorLabel}</span>
               {o.brand && <span className="text-xs text-ink/40">({o.brand})</span>}
-              <span className="font-mono text-ink/70">{o.unit_price != null ? `$${o.unit_price}` : "—"}</span>
+              <span className="font-mono text-ink/70">{o.packPrice != null ? `$${o.packPrice}` : "—"}</span>
+              <span className="font-mono text-ink/50">{formatCostPerUnit(o)}</span>
+              {index === 0 && o.costPerBaseUnit != null && itemOffers.length > 1 && (
+                <span className="rounded-full bg-palm/15 px-2 py-0.5 text-xs text-palm">cheapest</span>
+              )}
               <StatusBadge status={o.status} />
             </li>
           ))}

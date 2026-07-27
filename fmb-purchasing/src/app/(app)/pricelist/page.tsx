@@ -15,8 +15,8 @@ const DEFAULT_VISIBLE = [
   "vendor",
   "category",
   "pack_size",
-  "unit_price",
-  "per_unit_cost",
+  "pack_price",
+  "cost_per_unit",
   "status",
   "actions",
 ];
@@ -26,16 +26,15 @@ type OfferQueryRow = {
   status: string;
   vendor_id: string | null;
   brand: string | null;
-  unit_price: number | null;
-  unit_price_unit_id: string | null;
-  per_unit_cost: number | null;
-  per_unit_cost_unit_id: string | null;
+  vendor_sku: string | null;
   comments: string | null;
   pack_size_id: string;
   item_pack_sizes: {
     id: string;
-    pack_size: number;
-    pack_size_unit_id: string;
+    inner_quantity: number;
+    inner_unit_id: string;
+    pack_count: number;
+    total_quantity: number;
     label: string | null;
     item_id: string;
     items: {
@@ -48,6 +47,14 @@ type OfferQueryRow = {
   } | null;
 };
 
+/** Cost per base unit is derived by the offer_unit_costs view, never stored. */
+type OfferCostRow = {
+  offer_id: string;
+  pack_price: number | null;
+  cost_per_base_unit: number | null;
+  base_unit_code: string;
+};
+
 export default async function PricelistPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -58,14 +65,18 @@ export default async function PricelistPage() {
   const canApprove = can(permissions, "pricelist", "approve_master_data");
 
   const admin = createAdminClient();
-  const [{ data: offers }, { data: vendors }, { data: categories }, { data: units }, visibleColumns] =
+  const [{ data: offers }, { data: offerCosts }, { data: vendors }, { data: categories }, { data: units }, visibleColumns] =
     await Promise.all([
       admin
         .from("pricelist_items")
         .select(
-          "id, status, vendor_id, brand, unit_price, unit_price_unit_id, per_unit_cost, per_unit_cost_unit_id, comments, pack_size_id, item_pack_sizes ( id, pack_size, pack_size_unit_id, label, item_id, items ( id, item_number, name, category_id, status ) )"
+          "id, status, vendor_id, brand, vendor_sku, comments, pack_size_id, item_pack_sizes ( id, inner_quantity, inner_unit_id, pack_count, total_quantity, label, item_id, items ( id, item_number, name, category_id, status ) )"
         )
         .returns<OfferQueryRow[]>(),
+      admin
+        .from("offer_unit_costs")
+        .select("offer_id, pack_price, cost_per_base_unit, base_unit_code")
+        .returns<OfferCostRow[]>(),
       admin.from("vendors").select("id, name, vendor_number").order("name"),
       admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
       admin.from("units").select("id, code, label").order("sort_order"),
@@ -75,6 +86,7 @@ export default async function PricelistPage() {
   const vendorById = new Map((vendors ?? []).map((v) => [v.id, v]));
   const categoryNameById = categoryLabelsById(categories ?? []);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id, u.label]));
+  const costByOfferId = new Map((offerCosts ?? []).map((c) => [c.offer_id, c]));
   const assignableCategories = leafCategories(categories ?? []).map((c) => ({
     id: c.id,
     name: categoryNameById.get(c.id) ?? c.name,
@@ -85,6 +97,7 @@ export default async function PricelistPage() {
     .map((o) => {
       const packSize = o.item_pack_sizes!;
       const item = packSize.items!;
+      const cost = costByOfferId.get(o.id);
       return {
         id: o.id,
         itemId: item.id,
@@ -94,12 +107,15 @@ export default async function PricelistPage() {
         vendorLabel: o.vendor_id ? (vendorById.get(o.vendor_id)?.name ?? "—") : "— no vendor —",
         categoryLabel: item.category_id ? (categoryNameById.get(item.category_id) ?? "—") : "—",
         brand: o.brand,
-        packSize: packSize.pack_size,
-        packSizeUnitLabel: unitLabelById.get(packSize.pack_size_unit_id) ?? null,
+        vendorSku: o.vendor_sku,
+        innerQuantity: packSize.inner_quantity,
+        innerUnitLabel: unitLabelById.get(packSize.inner_unit_id) ?? null,
+        packCount: packSize.pack_count,
+        totalQuantity: packSize.total_quantity,
         packLabel: packSize.label,
-        unit_price: o.unit_price,
-        per_unit_cost: o.per_unit_cost,
-        perUnitCostUnitLabel: o.per_unit_cost_unit_id ? (unitLabelById.get(o.per_unit_cost_unit_id) ?? null) : null,
+        packPrice: cost?.pack_price ?? null,
+        costPerBaseUnit: cost?.cost_per_base_unit ?? null,
+        baseUnitCode: cost?.base_unit_code ?? null,
         comments: o.comments,
       };
     })

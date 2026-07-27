@@ -18,12 +18,15 @@ const ITEM_FIELD_LABELS: Record<string, string> = {
 const OFFER_FIELD_LABELS: Record<string, string> = {
   vendor_id: "Vendor",
   brand: "Brand",
+  vendor_sku: "Vendor's product code",
   pack_size_id: "Pack size",
+  pack_price: "Pack price",
+  comments: "Comments",
+  // retained so history written before 0009 still reads sensibly
   unit_price: "Unit price",
   unit_price_unit_id: "Unit price unit",
   per_unit_cost: "Per-unit cost",
   per_unit_cost_unit_id: "Per-unit cost unit",
-  comments: "Comments",
 };
 
 export default async function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -43,14 +46,14 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
       admin.from("vendors").select("id, name, vendor_number").order("name"),
       admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
       admin.from("units").select("id, code, label").order("sort_order"),
-      admin.from("item_pack_sizes").select("*").eq("item_id", id).order("pack_size"),
+      admin.from("item_pack_sizes").select("*").eq("item_id", id).order("total_quantity"),
       admin.from("item_history").select("id, changed_at, changed_by, changes").eq("item_id", id).order("changed_at", { ascending: false }),
     ]);
 
   if (!item) notFound();
 
   const packSizeIds = (packSizes ?? []).map((p) => p.id);
-  const [{ data: offers }, { data: offerHistoryRows }] = await Promise.all([
+  const [{ data: offers }, { data: offerHistoryRows }, { data: offerCosts }, { data: itemCost }] = await Promise.all([
     packSizeIds.length
       ? admin.from("pricelist_items").select("*").in("pack_size_id", packSizeIds).order("created_at")
       : Promise.resolve({ data: [] }),
@@ -60,7 +63,17 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           .select("id, item_id, changed_at, changed_by, changes")
           .order("changed_at", { ascending: false })
       : Promise.resolve({ data: [] }),
+    admin.from("offer_unit_costs").select("offer_id, cost_per_base_unit, base_unit_code").eq("item_id", id),
+    admin
+      .from("item_unit_costs")
+      .select("base_unit_code, purchase_count, vendor_count, avg_cost_per_base_unit, latest_cost_per_base_unit, latest_receipt_date")
+      .eq("item_id", id)
+      .maybeSingle(),
   ]);
+
+  const costByOfferId = new Map(
+    (offerCosts ?? []).map((c) => [c.offer_id as string, c as { cost_per_base_unit: number | null; base_unit_code: string }])
+  );
 
   const offerIds = new Set((offers ?? []).map((o) => o.id));
   const offerHistory = (offerHistoryRows ?? []).filter((h) => offerIds.has(h.item_id));
@@ -84,11 +97,16 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     currentCategory && !assignableCategories.some((c) => c.id === currentCategory.id)
       ? [...assignableCategories, currentCategory]
       : assignableCategories;
+  /** e.g. "1 L × 10 (10 L)", or just "1 kg" when the pack holds one. */
+  function packShape(p: { inner_quantity: number; inner_unit_id: string; pack_count: number; total_quantity: number }) {
+    const unit = unitLabelById.get(p.inner_unit_id) ?? "";
+    return p.pack_count > 1
+      ? `${p.inner_quantity} ${unit} × ${p.pack_count} (${p.total_quantity} ${unit})`
+      : `${p.inner_quantity} ${unit}`.trim();
+  }
+
   const packSizeLabelById = new Map(
-    (packSizes ?? []).map((p) => [
-      p.id,
-      `${p.label ? `${p.label} (` : ""}${p.pack_size} ${unitLabelById.get(p.pack_size_unit_id) ?? ""}${p.label ? ")" : ""}`,
-    ])
+    (packSizes ?? []).map((p) => [p.id, p.label ? `${p.label} — ${packShape(p)}` : packShape(p)])
   );
 
   function itemDisplayValue(field: string, value: unknown): string {
@@ -185,19 +203,44 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
       </section>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <h2 className="mb-1 font-serif text-lg font-semibold text-ink">What we&apos;ve actually paid</h2>
+        <p className="mb-4 text-sm text-ink/50">
+          Derived from submitted receipts rather than quoted pricelist prices — this is the figure that will cost a
+          Thaali.
+        </p>
+        {itemCost ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Stat
+              label="Most recent"
+              value={`$${Number(itemCost.latest_cost_per_base_unit).toFixed(4)}/${itemCost.base_unit_code}`}
+              note={itemCost.latest_receipt_date ? `as at ${itemCost.latest_receipt_date}` : null}
+            />
+            <Stat
+              label="Average paid"
+              value={`$${Number(itemCost.avg_cost_per_base_unit).toFixed(4)}/${itemCost.base_unit_code}`}
+              note={`across ${itemCost.vendor_count} vendor(s)`}
+            />
+            <Stat label="Purchases" value={String(itemCost.purchase_count)} note="receipt lines" />
+          </div>
+        ) : (
+          <p className="text-sm text-ink/50">
+            No purchases recorded against this item yet — submit an expense and the cost per unit appears here.
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-4 font-serif text-lg font-semibold text-ink">Pack sizes &amp; vendor offers</h2>
         <div className="flex flex-col gap-5">
           {(packSizes ?? []).map((p) => {
             const packOffers = offersByPackSize.get(p.id) ?? [];
-            const packUnitLabel = unitLabelById.get(p.pack_size_unit_id) ?? null;
+            const packUnitLabel = unitLabelById.get(p.inner_unit_id) ?? null;
             return (
               <div key={p.id} className="rounded-md border border-ink/10 bg-white p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <p className="font-medium text-ink">
                     {p.label && <span>{p.label} — </span>}
-                    <span className="font-mono">
-                      {p.pack_size} {packUnitLabel}
-                    </span>
+                    <span className="font-mono">{packShape(p)}</span>
                   </p>
                   {canEdit && packOffers.length === 0 && (
                     <form action={removePackSize}>
@@ -213,6 +256,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                 <ul className="flex flex-col gap-3">
                   {packOffers.map((o) => {
                     const history = historyByOffer.get(o.id) ?? [];
+                    const cost = costByOfferId.get(o.id);
                     return (
                       <li key={o.id} className="rounded-md border border-ink/10 bg-cream/60 p-3 text-sm">
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -221,13 +265,14 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                               {o.vendor_id ? vendorNameById.get(o.vendor_id) : "— no vendor —"}
                             </span>
                             {o.brand && <span className="ml-1 text-xs text-ink/40">({o.brand})</span>}
+                            {o.vendor_sku && <span className="ml-1 font-mono text-xs text-ink/40">#{o.vendor_sku}</span>}
                             <StatusBadge status={o.status} />
                           </div>
                           <span className="font-mono text-ink/70">
-                            {o.unit_price != null ? `$${o.unit_price}` : "—"}
-                            {o.per_unit_cost != null && (
+                            {o.pack_price != null ? `$${o.pack_price}` : "—"}
+                            {cost?.cost_per_base_unit != null && (
                               <span className="ml-2 text-ink/50">
-                                (${o.per_unit_cost.toFixed(4)}/{o.per_unit_cost_unit_id ? unitLabelById.get(o.per_unit_cost_unit_id) : packUnitLabel})
+                                (${cost.cost_per_base_unit.toFixed(4)}/{cost.base_unit_code})
                               </span>
                             )}
                           </span>
@@ -263,16 +308,14 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                                   itemId={item.id}
                                   packSizeId={p.id}
                                   offerId={o.id}
-                                  packSize={p.pack_size}
-                                  packSizeUnitLabel={packUnitLabel}
+                                  totalQuantity={p.total_quantity}
+                                  innerUnitLabel={packUnitLabel}
                                   vendorId={o.vendor_id}
                                   brand={o.brand}
-                                  unitPrice={o.unit_price}
-                                  unitPriceUnitId={o.unit_price_unit_id}
-                                  perUnitCostUnitId={o.per_unit_cost_unit_id}
+                                  vendorSku={o.vendor_sku}
+                                  packPrice={o.pack_price}
                                   comments={o.comments}
                                   vendors={vendors ?? []}
-                                  units={units ?? []}
                                   submitLabel="Save"
                                 />
                               </div>
@@ -320,10 +363,9 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                         action={addOffer}
                         itemId={item.id}
                         packSizeId={p.id}
-                        packSize={p.pack_size}
-                        packSizeUnitLabel={packUnitLabel}
+                        totalQuantity={p.total_quantity}
+                        innerUnitLabel={packUnitLabel}
                         vendors={vendors ?? []}
-                        units={units ?? []}
                         submitLabel="+ Add offer"
                       />
                     </div>
@@ -339,12 +381,12 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           <form action={addPackSize} className="mt-5 flex flex-wrap items-end gap-2 border-t border-ink/10 pt-4">
             <input type="hidden" name="item_id" value={item.id} />
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink/70">Pack size</span>
-              <input name="pack_size" type="number" step="any" required className="input w-24" />
+              <span className="text-ink/70">Each holds</span>
+              <input name="inner_quantity" type="number" step="any" defaultValue={1} required className="input w-24" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-ink/70">Unit</span>
-              <select name="pack_size_unit_id" defaultValue={item.canonical_unit_id} required className="input w-28">
+              <select name="inner_unit_id" defaultValue={item.canonical_unit_id} required className="input w-28">
                 {(units ?? []).map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.label}
@@ -353,8 +395,12 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
               </select>
             </label>
             <label className="flex flex-col gap-1 text-sm">
+              <span className="text-ink/70">How many per pack</span>
+              <input name="pack_count" type="number" step="1" min={1} defaultValue={1} required className="input w-28" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
               <span className="text-ink/70">Label (optional)</span>
-              <input name="label" placeholder="e.g. Carton" className="input" />
+              <input name="label" placeholder="e.g. 1L x 10 carton" className="input" />
             </label>
             <button type="submit" className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
               + Add pack size
@@ -396,4 +442,14 @@ function StatusBadge({ status }: { status: string }) {
   if (status === "approved") return null;
   const color = status === "rejected" ? "text-maroon/70" : "text-gold-deep";
   return <span className={`ml-2 text-xs ${color}`}>{status}</span>;
+}
+
+function Stat({ label, value, note }: { label: string; value: string; note?: string | null }) {
+  return (
+    <div className="rounded-md border border-ink/10 bg-white p-3">
+      <p className="text-xs uppercase tracking-wide text-ink/40">{label}</p>
+      <p className="mt-1 font-mono text-base break-words text-ink">{value}</p>
+      {note && <p className="text-xs text-ink/50">{note}</p>}
+    </div>
+  );
 }
