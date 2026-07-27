@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
+import { categoryLabelsById } from "@/lib/categories";
 
 async function requirePricelistEdit() {
   const user = await getCurrentUser();
@@ -311,6 +312,101 @@ export async function updateOffer(formData: FormData) {
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
+}
+
+export type ItemSearchResult = {
+  id: string;
+  itemNumber: string | null;
+  name: string;
+  categoryLabel: string | null;
+  packSizeCount: number;
+};
+
+/** Item typeahead for choosing what to merge into. Excludes the item itself. */
+export async function searchItemsForMerge(query: string, excludeItemId: string): Promise<ItemSearchResult[]> {
+  await requirePricelistEdit();
+
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+
+  const admin = createAdminClient();
+  const { data: items } = await admin
+    .from("items")
+    .select("id, item_number, name, category_id")
+    .or(`item_number.ilike.%${trimmed}%,name.ilike.%${trimmed}%`)
+    .neq("id", excludeItemId)
+    .limit(10);
+  if (!items || items.length === 0) return [];
+
+  const [{ data: categories }, { data: packSizes }] = await Promise.all([
+    admin.from("categories").select("id, name, parent_category_id"),
+    admin.from("item_pack_sizes").select("item_id").in("item_id", items.map((i) => i.id)),
+  ]);
+  const labels = categoryLabelsById(categories ?? []);
+  const packCounts = new Map<string, number>();
+  for (const p of packSizes ?? []) packCounts.set(p.item_id, (packCounts.get(p.item_id) ?? 0) + 1);
+
+  return items.map((i) => ({
+    id: i.id,
+    itemNumber: i.item_number,
+    name: i.name,
+    categoryLabel: i.category_id ? (labels.get(i.category_id) ?? null) : null,
+    packSizeCount: packCounts.get(i.id) ?? 0,
+  }));
+}
+
+export type MergeItemState = { error: string | null };
+
+/**
+ * Folds one item into another. All the repointing happens inside the
+ * merge_items() SQL function so a failure can't leave expense line items
+ * pointing at a half-deleted item.
+ */
+export async function mergeItemAction(_prev: MergeItemState, formData: FormData): Promise<MergeItemState> {
+  const user = await requirePricelistEdit();
+
+  const loserId = String(formData.get("loser_id") ?? "");
+  const winnerId = String(formData.get("winner_id") ?? "");
+  if (!loserId || !winnerId) return { error: "Choose an item to merge into." };
+  if (loserId === winnerId) return { error: "That's the same item." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("merge_items", {
+    p_loser: loserId,
+    p_winner: winnerId,
+    p_actor: user.id,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/pricelist");
+  revalidatePath(`/pricelist/${winnerId}`);
+
+  // The page this was submitted from no longer exists, so redirect server-side
+  // — a client-side redirect loses the race against revalidation re-rendering
+  // the deleted item's page into a 404.
+  redirect(`/pricelist/${winnerId}`);
+}
+
+/** Records that two similarly-named items are genuinely different products. */
+export async function dismissDuplicatePair(formData: FormData) {
+  const user = await requirePricelistEdit();
+
+  const a = String(formData.get("item_a") ?? "");
+  const b = String(formData.get("item_b") ?? "");
+  if (!a || !b || a === b) return;
+
+  // stored lower-id-first so the pair is order-free
+  const [itemA, itemB] = a < b ? [a, b] : [b, a];
+
+  const admin = createAdminClient();
+  await admin
+    .from("item_duplicate_dismissals")
+    .upsert({ item_a: itemA, item_b: itemB, dismissed_by: user.id }, { onConflict: "item_a,item_b" });
+
+  revalidatePath("/pricelist");
+  revalidatePath(`/pricelist/${a}`);
+  revalidatePath(`/pricelist/${b}`);
 }
 
 export async function addUnit(formData: FormData) {
