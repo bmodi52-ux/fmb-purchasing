@@ -4,6 +4,7 @@ import Link from "next/link";
 import { deleteExpense, bulkDeleteExpenses } from "./actions";
 import { formatDate } from "@/lib/format";
 import { FilterableSection, type BulkAction } from "@/components/filterable-section";
+import { ReceiptViewer } from "@/components/receipt-viewer";
 import type { ExportColumn } from "@/lib/export";
 
 export type SubmissionRow = {
@@ -17,6 +18,7 @@ export type SubmissionRow = {
   payment_reference: string | null;
   payment_date: string | null;
   created_at: string;
+  hasReceipt: boolean;
 };
 
 const EXPORT_COLUMNS: ExportColumn[] = [
@@ -78,6 +80,7 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                   <span className="ml-2 text-sm text-ink/50">{formatDate(e.created_at)}</span>
                 </div>
                 <div className="flex items-center gap-3">
+                  {e.hasReceipt && <ReceiptViewer expenseId={e.id} label="Receipt" />}
                   <span className="font-mono text-ink">${e.total.toFixed(2)}</span>
                   <StatusBadge status={e.status} />
                 </div>

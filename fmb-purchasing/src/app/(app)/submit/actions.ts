@@ -10,6 +10,7 @@ import { lookupAbn, type AbnLookupResult } from "@/lib/abn-lookup";
 import { matchOrCreateVendor, matchOrCreateOffer } from "@/lib/expense-matching";
 import { fiscalYearHijri } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
+import { leafCategories } from "@/lib/categories";
 
 export type ExtractState = {
   data: ExtractedReceipt | null;
@@ -46,8 +47,8 @@ export async function extractReceiptAction(
     return { data: null, receiptPath: null, error: `Could not save the receipt file: ${uploadError.message}` };
   }
 
-  const { data: categories } = await admin.from("categories").select("name").order("sort_order");
-  const categoryNames = (categories ?? []).map((c) => c.name);
+  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id").order("sort_order");
+  const categoryNames = leafCategories(categories ?? []).map((c) => c.name);
 
   try {
     const base64 = Buffer.from(bytes).toString("base64");
@@ -235,8 +236,8 @@ export async function createExpense(
     userId: user.id,
   });
 
-  const { data: categories } = await admin.from("categories").select("id, name");
-  const categoryIdByName = new Map((categories ?? []).map((c) => [c.name.toLowerCase(), c.id]));
+  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
+  const categoryIdByName = new Map(leafCategories(categories ?? []).map((c) => [c.name.toLowerCase(), c.id]));
 
   const receiptDate = input.receiptDate ? new Date(input.receiptDate) : new Date();
   const fiscalYear = fiscalYearHijri(receiptDate);
@@ -387,8 +388,8 @@ export async function updateExpense(
     userId: user.id,
   });
 
-  const { data: categories } = await admin.from("categories").select("id, name");
-  const categoryIdByName = new Map((categories ?? []).map((c) => [c.name.toLowerCase(), c.id]));
+  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
+  const categoryIdByName = new Map(leafCategories(categories ?? []).map((c) => [c.name.toLowerCase(), c.id]));
 
   const receiptDate = input.receiptDate ? new Date(input.receiptDate) : new Date();
   const fiscalYear = fiscalYearHijri(receiptDate);

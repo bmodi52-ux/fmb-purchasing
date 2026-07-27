@@ -108,11 +108,15 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
 
 export function ItemsTable({
   rows,
+  allOffers,
   canApprove,
   initialVisible,
   emptyLabel,
 }: {
   rows: OfferRow[];
+  /** Every offer on the page, across both the pending and approved sections — used to show an
+   * item's full pack-size/offer breakdown inline, regardless of which section this row is in. */
+  allOffers: OfferRow[];
   canApprove: boolean;
   initialVisible: string[];
   emptyLabel?: string;
@@ -131,6 +135,35 @@ export function ItemsTable({
       ]
     : undefined;
 
+  function renderExpanded(row: OfferRow) {
+    const itemOffers = allOffers
+      .filter((o) => o.itemId === row.itemId)
+      .sort((a, b) => a.packSize - b.packSize || a.vendorLabel.localeCompare(b.vendorLabel));
+
+    return (
+      <div className="flex flex-col gap-2 text-sm">
+        <p className="text-xs font-medium uppercase tracking-wide text-ink/40">
+          Pack sizes &amp; vendor offers for {row.name}
+        </p>
+        <ul className="flex flex-col gap-1">
+          {itemOffers.map((o) => (
+            <li key={o.id} className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-ink/70">{formatPackSize(o)}</span>
+              <span className="text-ink/40">—</span>
+              <span className="text-ink">{o.vendorLabel}</span>
+              {o.brand && <span className="text-xs text-ink/40">({o.brand})</span>}
+              <span className="font-mono text-ink/70">{o.unit_price != null ? `$${o.unit_price}` : "—"}</span>
+              <StatusBadge status={o.status} />
+            </li>
+          ))}
+        </ul>
+        <Link href={`/pricelist/${row.itemId}`} className="text-xs text-ink/60 underline">
+          Open full item page →
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <ColumnsDataTable
       pageKey="pricelist"
@@ -140,6 +173,7 @@ export function ItemsTable({
       initialVisible={initialVisible}
       emptyLabel={emptyLabel}
       bulkActions={bulkActions}
+      renderExpanded={renderExpanded}
     />
   );
 }

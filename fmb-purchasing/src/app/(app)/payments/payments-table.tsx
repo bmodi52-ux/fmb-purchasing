@@ -4,6 +4,7 @@ import { useState } from "react";
 import { markExpensePaid, bulkMarkPaid } from "./actions";
 import { formatDate } from "@/lib/format";
 import { FilterableSection } from "@/components/filterable-section";
+import { ReceiptViewer } from "@/components/receipt-viewer";
 import type { ExportColumn } from "@/lib/export";
 
 export type PaymentRow = {
@@ -13,6 +14,7 @@ export type PaymentRow = {
   total: number;
   decided_at: string | null;
   submittedByName: string;
+  hasReceipt: boolean;
 };
 
 const EXPORT_COLUMNS: ExportColumn[] = [
@@ -100,6 +102,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                     <th className="p-2">Vendor</th>
                     <th className="p-2">Submitted by</th>
                     <th className="p-2">Invoice</th>
+                    <th className="p-2">Receipt</th>
                     <th className="p-2">Approved</th>
                     <th className="p-2">Total</th>
                     <th className="p-2">Payment reference</th>
@@ -121,6 +124,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                       <td className="p-2">{e.vendor_name_raw}</td>
                       <td className="p-2 text-ink/70">{e.submittedByName}</td>
                       <td className="p-2 text-ink/70">{e.invoice_number || "—"}</td>
+                      <td className="p-2">{e.hasReceipt ? <ReceiptViewer expenseId={e.id} /> : <span className="text-ink/40">—</span>}</td>
                       <td className="p-2 text-ink/70">{e.decided_at ? formatDate(e.decided_at) : "—"}</td>
                       <td className="p-2 font-mono">${e.total.toFixed(2)}</td>
                       <td colSpan={3} className="p-2">

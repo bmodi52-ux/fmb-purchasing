@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateTime } from "@/lib/format";
 import { updateItem, addPackSize, removePackSize, addOffer, updateOffer, reviewOffer } from "../actions";
 import { OfferForm } from "./offer-form";
+import { leafCategories, categoryLabelsById } from "@/lib/categories";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
   name: "Name",
@@ -40,7 +41,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     await Promise.all([
       admin.from("items").select("*").eq("id", id).maybeSingle(),
       admin.from("vendors").select("id, name, vendor_number").order("name"),
-      admin.from("categories").select("id, name").order("sort_order"),
+      admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
       admin.from("units").select("id, code, label").order("sort_order"),
       admin.from("item_pack_sizes").select("*").eq("item_id", id).order("pack_size"),
       admin.from("item_history").select("id, changed_at, changed_by, changes").eq("item_id", id).order("changed_at", { ascending: false }),
@@ -74,8 +75,15 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   const profileNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.username]));
 
   const vendorNameById = new Map((vendors ?? []).map((v) => [v.id, `${v.vendor_number} — ${v.name}`]));
-  const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
+  const categoryNameById = categoryLabelsById(categories ?? []);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id, u.label]));
+
+  const assignableCategories = leafCategories(categories ?? []);
+  const currentCategory = (categories ?? []).find((c) => c.id === item.category_id);
+  const categoryOptions =
+    currentCategory && !assignableCategories.some((c) => c.id === currentCategory.id)
+      ? [...assignableCategories, currentCategory]
+      : assignableCategories;
   const packSizeLabelById = new Map(
     (packSizes ?? []).map((p) => [
       p.id,
@@ -141,9 +149,9 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             <span className="text-ink/70">Item category</span>
             <select name="category_id" defaultValue={item.category_id ?? ""} disabled={!canEdit} className="input">
               <option value="">—</option>
-              {(categories ?? []).map((c) => (
+              {categoryOptions.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {categoryNameById.get(c.id) ?? c.name}
                 </option>
               ))}
             </select>

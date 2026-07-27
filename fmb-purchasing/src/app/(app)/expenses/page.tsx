@@ -6,7 +6,7 @@ import { getColumnPreference } from "@/lib/column-prefs";
 import { ExpensesTable, type ExpenseRow } from "./expenses-table";
 
 const PAGE_KEY = "all_expenses";
-const DEFAULT_VISIBLE = ["vendor", "submitted_by", "status", "invoice_number", "total", "created_at"];
+const DEFAULT_VISIBLE = ["vendor", "submitted_by", "status", "invoice_number", "receipt", "total", "created_at"];
 
 export default async function AllExpensesPage() {
   const user = await getCurrentUser();
@@ -17,7 +17,7 @@ export default async function AllExpensesPage() {
   const { data: expenses } = await admin
     .from("expenses")
     .select(
-      "id, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at"
+      "id, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at"
     )
     .order("created_at", { ascending: false });
 
@@ -43,6 +43,7 @@ export default async function AllExpensesPage() {
     status: e.status,
     invoice_number: e.invoice_number,
     receipt_date: e.receipt_date,
+    hasReceipt: e.receipt_file_path != null,
     subtotal: e.subtotal,
     gst_amount: e.gst_amount,
     total: e.total,

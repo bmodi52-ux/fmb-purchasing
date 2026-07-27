@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fiscalYearHijri } from "@/lib/fiscal-year";
 import { ReportsView, type CategorySpend, type VendorSpend, type PerUnitRow } from "./reports-view";
 import { FiscalYearSelect } from "./fiscal-year-select";
+import { categoryLabelsById } from "@/lib/categories";
 
 export default async function ReportsPage({
   searchParams,
@@ -48,11 +49,8 @@ export default async function ReportsPage({
         .in("expense_id", expenseIds)
     : { data: [] };
 
-  const categoryIds = [...new Set((lineItems ?? []).map((li) => li.category_id).filter(Boolean) as string[])];
-  const { data: categories } = categoryIds.length
-    ? await admin.from("categories").select("id, name").in("id", categoryIds)
-    : { data: [] };
-  const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
+  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
+  const categoryNameById = categoryLabelsById(categories ?? []);
 
   // Spend by category
   const categoryTotals = new Map<string, { total: number; count: number }>();

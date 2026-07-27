@@ -6,6 +6,7 @@ import { getColumnPreference } from "@/lib/column-prefs";
 import { AddItemModal } from "./add-item-modal";
 import { UnitsManager } from "./units-manager";
 import { ItemsTable, type OfferRow } from "./items-table";
+import { leafCategories, categoryLabelsById } from "@/lib/categories";
 
 const PAGE_KEY = "pricelist";
 const DEFAULT_VISIBLE = [
@@ -66,14 +67,18 @@ export default async function PricelistPage() {
         )
         .returns<OfferQueryRow[]>(),
       admin.from("vendors").select("id, name, vendor_number").order("name"),
-      admin.from("categories").select("id, name").order("sort_order"),
+      admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
       admin.from("units").select("id, code, label").order("sort_order"),
       getColumnPreference(user.id, PAGE_KEY, DEFAULT_VISIBLE),
     ]);
 
   const vendorById = new Map((vendors ?? []).map((v) => [v.id, v]));
-  const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
+  const categoryNameById = categoryLabelsById(categories ?? []);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id, u.label]));
+  const assignableCategories = leafCategories(categories ?? []).map((c) => ({
+    id: c.id,
+    name: categoryNameById.get(c.id) ?? c.name,
+  }));
 
   const rows: OfferRow[] = (offers ?? [])
     .filter((o) => o.item_pack_sizes?.items)
@@ -117,7 +122,7 @@ export default async function PricelistPage() {
         {canEdit && (
           <AddItemModal
             vendors={vendors ?? []}
-            categories={categories ?? []}
+            categories={assignableCategories}
             units={units ?? []}
           />
         )}
@@ -128,13 +133,13 @@ export default async function PricelistPage() {
       {pending.length > 0 && (
         <section>
           <h2 className="mb-2 font-serif text-lg font-semibold text-ink">Pending review ({pending.length})</h2>
-          <ItemsTable rows={pending} canApprove={canApprove} initialVisible={visibleColumns} />
+          <ItemsTable rows={pending} allOffers={rows} canApprove={canApprove} initialVisible={visibleColumns} />
         </section>
       )}
 
       <section>
         <h2 className="mb-2 font-serif text-lg font-semibold text-ink">All offers</h2>
-        <ItemsTable rows={rest} canApprove={canApprove} initialVisible={visibleColumns} emptyLabel="None." />
+        <ItemsTable rows={rest} allOffers={rows} canApprove={canApprove} initialVisible={visibleColumns} emptyLabel="None." />
       </section>
     </div>
   );
