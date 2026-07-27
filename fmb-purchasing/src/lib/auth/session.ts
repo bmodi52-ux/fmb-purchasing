@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -14,7 +15,7 @@ export type CurrentUser = {
  * Reads via the admin client because authorization is enforced in app code
  * (against team_permissions), not RLS — see migration 0001.
  */
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -43,4 +44,4 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     email: profile.email,
     teamIds: (memberships ?? []).map((m) => m.team_id),
   };
-}
+});

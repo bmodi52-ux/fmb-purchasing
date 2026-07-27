@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { CurrentUser } from "@/lib/auth/session";
@@ -27,9 +28,9 @@ export type ActionKey =
   | "export";
 
 /** All (page, action) grants across every team the user belongs to. */
-export async function getUserPermissions(
+export const getUserPermissions = cache(async (
   teamIds: string[]
-): Promise<Set<`${string}:${string}`>> {
+): Promise<Set<`${string}:${string}`>> => {
   if (teamIds.length === 0) return new Set();
 
   const admin = createAdminClient();
@@ -39,7 +40,7 @@ export async function getUserPermissions(
     .in("team_id", teamIds);
 
   return new Set((data ?? []).map((row) => `${row.page_key}:${row.action_key}` as const));
-}
+});
 
 export function can(
   permissions: Set<`${string}:${string}`>,
