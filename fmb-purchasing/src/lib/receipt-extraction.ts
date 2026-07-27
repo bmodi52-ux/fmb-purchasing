@@ -81,7 +81,7 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
 const SYSTEM_PROMPT = `You extract structured accounting data from photos or PDFs of receipts/invoices for an Australian organization that is GST-registered and reconciles GST at year end.
 
 Rules:
-- Every receipt must resolve to Subtotal (excl. GST) -> GST amount -> Total (incl. GST). Infer GST from whatever the receipt makes inferable (an explicit GST line, "Total incl. GST", a registered ABN printed on a tax invoice, etc.). If the receipt gives no GST signal at all, leave subtotal/gstAmount null and only fill total.
+- Every receipt must resolve to Subtotal (excl. GST) -> GST amount -> Total (incl. GST). Infer GST from whatever the receipt makes inferable (an explicit GST line, "Total incl. GST", a registered ABN printed on a tax invoice, etc.). If the receipt gives no GST signal at all — no GST line, and nothing indicating whether printed prices are GST-inclusive or GST-free — do NOT assume GST-free. Assume all printed prices are GST-inclusive (standard 10% Australian GST): set total to the printed total, then compute gstAmount = total / 11 and subtotal = total - gstAmount.
 - For each line item, infer the canonical base unit and total quantity from the printed pack description (e.g. "Tomato Sauce Carton — 3x4L" -> normalizedQuantity 12, normalizedUnit "L"; "Chicken 10kg box" -> normalizedQuantity 10, normalizedUnit "kg"). If no sensible unit conversion applies (e.g. a service line), leave both null.
 - Assign each line item the closest category from the provided enum. Use "Miscellaneous" only when nothing else fits.
 - Strip currency symbols from numbers. If a value is unreadable or absent, use null rather than guessing.

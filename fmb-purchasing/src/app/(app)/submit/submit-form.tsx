@@ -101,9 +101,12 @@ export function SubmitForm({
       const reviewItems = toReviewItems(d.lineItems);
       setItems(reviewItems.length ? reviewItems : [blankItem()]);
       const computedTotal = d.total ?? reviewItems.reduce((s, it) => s + (it.lineTotal || 0), 0);
+      // If the AI couldn't determine a GST breakdown, assume prices are
+      // GST-inclusive (standard 10% AU GST) rather than GST-free.
+      const computedGst = d.gstAmount ?? round2(computedTotal / 11);
       setTotal(round2(computedTotal));
-      setSubtotal(round2(d.subtotal ?? computedTotal));
-      setGstAmount(round2(d.gstAmount ?? 0));
+      setSubtotal(round2(d.subtotal ?? computedTotal - computedGst));
+      setGstAmount(round2(computedGst));
       setReceiptPath(extractState.receiptPath);
       setMode("review");
     } else if (extractState.receiptPath && extractState.error) {
