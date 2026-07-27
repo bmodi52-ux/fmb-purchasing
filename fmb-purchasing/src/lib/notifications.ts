@@ -1,6 +1,6 @@
 // Email clients need a real, publicly-reachable URL for images — can't
 // reference localhost or a relative path. Update this if the domain changes.
-const SITE_URL = "https://www.fmbpurchasing.com.au";
+export const SITE_URL = "https://www.fmbpurchasing.com.au";
 
 /**
  * Wraps a notification's body HTML in the FMB branded header/footer.
@@ -48,6 +48,23 @@ export function emailTemplate(bodyHtml: string): string {
     </table>
   </body>
 </html>`;
+}
+
+/** A bordered white key/value box for a handful of rows — vendor/total, username/password, etc. */
+export function detailsBox(rows: { label: string; value: string }[]): string {
+  const rowsHtml = rows
+    .map(
+      ({ label, value }) => `
+      <tr>
+        <td style="padding:4px 0; color:#6E5F52; font-size:13px;">${label}</td>
+        <td style="padding:4px 0; color:#2B211C; font-size:13px; text-align:right; font-weight:bold;">${value}</td>
+      </tr>`
+    )
+    .join("");
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF; border:1px solid #E7DCC5; border-radius:6px; padding:12px 16px; margin:16px 0;">
+      ${rowsHtml}
+    </table>`;
 }
 
 /**
