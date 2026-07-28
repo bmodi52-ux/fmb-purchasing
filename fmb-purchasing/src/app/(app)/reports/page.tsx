@@ -19,38 +19,49 @@ export default async function ReportsPage({
   const admin = createAdminClient();
   const currentFy = fiscalYearHijri(new Date());
 
-  const { data: fyRows } = await admin.from("expenses").select("fiscal_year_hijri");
-  const fiscalYears = [...new Set((fyRows ?? []).map((r) => r.fiscal_year_hijri))].sort((a, b) => b - a);
-  if (!fiscalYears.includes(currentFy)) fiscalYears.unshift(currentFy);
-
+  // The function runs a long way from the database, so each round trip is
+  // expensive. Everything that doesn't depend on another query's result is
+  // issued together; only the line-item lookups genuinely have to wait (they
+  // need the expense ids). Two round trips instead of seven.
   const { fy } = await searchParams;
   const selectedFy = fy ? Number(fy) : currentFy;
 
-  const { data: expenses } = await admin
-    .from("expenses")
-    .select("id, vendor_name_raw, subtotal, gst_amount, total, status, receipt_date")
-    .eq("fiscal_year_hijri", selectedFy)
-    .neq("status", "declined");
+  const [{ data: fyRows }, { data: categories }, { data: expenses }, { data: statusRows }] = await Promise.all([
+    admin.from("expense_fiscal_years").select("fiscal_year_hijri"),
+    admin.from("categories").select("id, name, parent_category_id"),
+    admin
+      .from("expenses")
+      .select("id, vendor_name_raw, subtotal, gst_amount, total, status, receipt_date")
+      .eq("fiscal_year_hijri", selectedFy)
+      .neq("status", "declined"),
+    admin.from("expenses").select("status").eq("fiscal_year_hijri", selectedFy),
+  ]);
 
-  const { data: statusRows } = await admin
-    .from("expenses")
-    .select("status")
-    .eq("fiscal_year_hijri", selectedFy);
+  const fiscalYears = [...new Set((fyRows ?? []).map((r) => r.fiscal_year_hijri))].sort((a, b) => b - a);
+  if (!fiscalYears.includes(currentFy)) fiscalYears.unshift(currentFy);
+
   const statusCounts = { submitted: 0, approved: 0, paid: 0, declined: 0 };
   for (const r of statusRows ?? []) {
     if (r.status in statusCounts) statusCounts[r.status as keyof typeof statusCounts] += 1;
   }
 
-  const expenseIds = (expenses ?? []).map((e) => e.id);
-  const { data: lineItems } = expenseIds.length
-    ? await admin
-        .from("expense_line_items")
-        .select("expense_id, category_id, line_total, description_raw, normalized_quantity, normalized_unit, pricelist_item_id")
-        .in("expense_id", expenseIds)
-    : { data: [] };
-
-  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
   const categoryNameById = categoryLabelsById(categories ?? []);
+
+  const expenseIds = (expenses ?? []).map((e) => e.id);
+  const [{ data: lineItems }, { data: paidCosts }] = expenseIds.length
+    ? await Promise.all([
+        admin
+          .from("expense_line_items")
+          .select("expense_id, category_id, line_total, description_raw, normalized_quantity, normalized_unit, pricelist_item_id")
+          .in("expense_id", expenseIds),
+        // item_name comes from the view (0013), so there's no follow-up
+        // query to resolve item ids into names.
+        admin
+          .from("item_paid_unit_costs")
+          .select("item_id, item_name, expense_id, receipt_date, base_quantity, base_unit_code, cost_per_base_unit")
+          .in("expense_id", expenseIds),
+      ])
+    : [{ data: [] }, { data: [] }];
 
   // Spend by category
   const categoryTotals = new Map<string, { total: number; count: number }>();
@@ -83,24 +94,11 @@ export default async function ReportsPage({
   // "what we paid per unit" rather than each deriving their own.
   const expenseById = new Map((expenses ?? []).map((e) => [e.id, e]));
 
-  const { data: paidCosts } = expenseIds.length
-    ? await admin
-        .from("item_paid_unit_costs")
-        .select("item_id, expense_id, receipt_date, base_quantity, base_unit_code, cost_per_base_unit")
-        .in("expense_id", expenseIds)
-    : { data: [] };
-
-  const itemIds = [...new Set((paidCosts ?? []).map((c) => c.item_id as string))];
-  const { data: items } = itemIds.length
-    ? await admin.from("items").select("id, name").in("id", itemIds)
-    : { data: [] };
-  const itemNameById = new Map((items ?? []).map((i) => [i.id, i.name]));
-
   const perUnitRows: PerUnitRow[] = (paidCosts ?? [])
     .map((c) => {
       const expense = expenseById.get(c.expense_id as string);
       return {
-        groupName: itemNameById.get(c.item_id as string) ?? "—",
+        groupName: (c.item_name as string) ?? "—",
         vendorName: expense?.vendor_name_raw ?? "—",
         receiptDate: (c.receipt_date as string | null) ?? null,
         normalizedQuantity: Number(c.base_quantity),
