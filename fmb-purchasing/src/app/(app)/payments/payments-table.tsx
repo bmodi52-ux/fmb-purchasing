@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { useState } from "react";
 import { markExpensePaid, bulkMarkPaid } from "./actions";
 import { formatDate } from "@/lib/format";
@@ -150,12 +151,9 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                             required
                             className="input h-8 py-1 text-xs"
                           />
-                          <button
-                            type="submit"
-                            className="rounded-md bg-gold px-3 py-1.5 text-xs font-medium text-ink hover:bg-gold-deep"
-                          >
+                          <SubmitButton className="rounded-md bg-gold px-3 py-1.5 text-xs font-medium text-ink hover:bg-gold-deep">
                             Mark paid
-                          </button>
+                          </SubmitButton>
                         </form>
                       </td>
                     </tr>

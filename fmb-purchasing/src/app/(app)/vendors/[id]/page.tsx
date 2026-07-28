@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -69,9 +70,9 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
           </div>
 
           {canEdit && (
-            <button type="submit" className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
+            <SubmitButton className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
               Save details
-            </button>
+            </SubmitButton>
           )}
         </form>
       </section>
@@ -91,9 +92,9 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
                 <form action={removeCollectionAddress}>
                   <input type="hidden" name="address_id" value={a.id} />
                   <input type="hidden" name="vendor_id" value={vendor.id} />
-                  <button type="submit" className="text-xs text-maroon/70 hover:underline">
+                  <SubmitButton className="text-xs text-maroon/70 hover:underline">
                     remove
-                  </button>
+                  </SubmitButton>
                 </form>
               )}
             </li>
@@ -111,9 +112,9 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
             <input name="state" placeholder="State" className="input" />
             <input name="postcode" placeholder="Postcode" className="input" />
             <input name="country" placeholder="Country" defaultValue="Australia" className="input" />
-            <button type="submit" className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30 sm:col-span-2">
+            <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30 sm:col-span-2">
               + Add collection address
-            </button>
+            </SubmitButton>
           </form>
         )}
       </section>
@@ -131,9 +132,9 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
                 <form action={removeContact}>
                   <input type="hidden" name="contact_id" value={c.id} />
                   <input type="hidden" name="vendor_id" value={vendor.id} />
-                  <button type="submit" className="text-xs text-maroon/70 hover:underline">
+                  <SubmitButton className="text-xs text-maroon/70 hover:underline">
                     remove
-                  </button>
+                  </SubmitButton>
                 </form>
               )}
             </li>
@@ -152,9 +153,9 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
               <span className="text-ink/70">Phone</span>
               <input name="contact_phone" className="input" />
             </label>
-            <button type="submit" className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+            <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
               + Add contact
-            </button>
+            </SubmitButton>
           </form>
         )}
       </section>

@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { useActionState, useEffect, useState, useTransition } from "react";
 import {
   dismissDuplicatePair,
@@ -95,9 +96,9 @@ export function MergePanel({
                   <form action={dismissDuplicatePair}>
                     <input type="hidden" name="item_a" value={itemId} />
                     <input type="hidden" name="item_b" value={c.id} />
-                    <button type="submit" className="text-xs text-ink/50 hover:text-ink hover:underline">
+                    <SubmitButton className="text-xs text-ink/50 hover:text-ink hover:underline">
                       Not a duplicate
-                    </button>
+                    </SubmitButton>
                   </form>
                 </span>
               </li>
@@ -141,13 +142,9 @@ export function MergePanel({
             </li>
           </ul>
           <div className="mt-3 flex gap-3">
-            <button
-              type="submit"
-              disabled={pending}
-              className="rounded-md bg-maroon px-4 py-2 text-sm font-medium text-cream hover:opacity-90 disabled:opacity-50"
-            >
+            <SubmitButton disabled={pending} className="rounded-md bg-maroon px-4 py-2 text-sm font-medium text-cream hover:opacity-90 disabled:opacity-50">
               {pending ? "Merging…" : "Merge and delete"}
-            </button>
+            </SubmitButton>
             <button
               type="button"
               onClick={() => setTarget(null)}

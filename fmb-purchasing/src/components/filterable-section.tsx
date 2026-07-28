@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ExportToolbar } from "./export-toolbar";
+import { useReportPending } from "./pending";
 import type { ExportColumn } from "@/lib/export";
 
 export type SelectionApi = {
@@ -65,6 +66,9 @@ export function FilterableSection<T extends Record<string, unknown>>({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  // Bulk actions run through onClick rather than a form, so useFormStatus
+  // can't see them — report their own busy flag instead.
+  useReportPending(busyAction !== null);
   const [sortKey, setSortKey] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const rowId = useMemo(

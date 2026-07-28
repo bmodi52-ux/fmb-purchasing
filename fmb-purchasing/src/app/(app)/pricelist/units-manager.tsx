@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { addUnit } from "./actions";
 
 export function UnitsManager({ units }: { units: { id: string; label: string }[] }) {
@@ -16,9 +17,9 @@ export function UnitsManager({ units }: { units: { id: string; label: string }[]
             placeholder="New unit (e.g. box)"
             className="input h-8 py-1 text-xs"
           />
-          <button type="submit" className="rounded-md border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
+          <SubmitButton className="rounded-md border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
             + Add unit
-          </button>
+          </SubmitButton>
         </form>
       </div>
     </details>

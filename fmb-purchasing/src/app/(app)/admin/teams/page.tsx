@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
@@ -44,12 +45,9 @@ export default async function TeamsAdminPage() {
             className="rounded-md border border-ink/15 bg-white px-3 py-2 text-ink outline-none focus:border-gold focus:ring-1 focus:ring-gold"
           />
         </label>
-        <button
-          type="submit"
-          className="rounded-md bg-gold px-4 py-2 font-medium text-ink transition-colors hover:bg-gold-deep"
-        >
+        <SubmitButton className="rounded-md bg-gold px-4 py-2 font-medium text-ink transition-colors hover:bg-gold-deep">
           Create team
-        </button>
+        </SubmitButton>
       </form>
 
       <div className="flex flex-col gap-8">
@@ -83,12 +81,9 @@ export default async function TeamsAdminPage() {
                           <form action={removeTeamMember}>
                             <input type="hidden" name="team_id" value={team.id} />
                             <input type="hidden" name="user_id" value={userId} />
-                            <button
-                              type="submit"
-                              className="text-xs text-maroon/70 hover:text-maroon"
-                            >
+                            <SubmitButton className="text-xs text-maroon/70 hover:text-maroon">
                               remove
-                            </button>
+                            </SubmitButton>
                           </form>
                         </li>
                       );
@@ -112,12 +107,9 @@ export default async function TeamsAdminPage() {
                           </option>
                         ))}
                       </select>
-                      <button
-                        type="submit"
-                        className="rounded-md bg-gold/20 px-3 py-1 text-sm text-ink hover:bg-gold/30"
-                      >
+                      <SubmitButton className="rounded-md bg-gold/20 px-3 py-1 text-sm text-ink hover:bg-gold/30">
                         Add
-                      </button>
+                      </SubmitButton>
                     </form>
                   )}
                 </div>
@@ -148,17 +140,9 @@ export default async function TeamsAdminPage() {
                                   <input type="hidden" name="page_key" value={page.key} />
                                   <input type="hidden" name="action_key" value={a.key} />
                                   <input type="hidden" name="granted" value={String(granted)} />
-                                  <button
-                                    type="submit"
-                                    aria-label={`${granted ? "Revoke" : "Grant"} ${a.label} on ${page.label}`}
-                                    className={`h-5 w-5 rounded border ${
-                                      granted
-                                        ? "border-palm bg-palm/80 text-white"
-                                        : "border-ink/20 bg-white"
-                                    }`}
-                                  >
+                                  <SubmitButton aria-label={`${granted ? "Revoke" : "Grant"} ${a.label} on ${page.label}`} className={`h-5 w-5 rounded border ${ granted ? "border-palm bg-palm/80 text-white" : "border-ink/20 bg-white" }`}>
                                     {granted ? "✓" : ""}
-                                  </button>
+                                  </SubmitButton>
                                 </form>
                               </td>
                             );

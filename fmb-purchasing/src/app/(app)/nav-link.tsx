@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
+import { useReportPending } from "@/components/pending";
 
 /**
  * Sidebar link with feedback for the wait between tap and page change.
@@ -23,12 +23,13 @@ export function NavLink({
   href,
   label,
   onNavigate,
-  onPendingChange,
+  badge,
 }: {
   href: string;
   label: string;
   onNavigate?: () => void;
-  onPendingChange?: (href: string, pending: boolean) => void;
+  /** Unread count; hidden when zero. */
+  badge?: number;
 }) {
   const pathname = usePathname();
   // "/" would otherwise prefix-match every route
@@ -43,33 +44,27 @@ export function NavLink({
       className="nav-link"
     >
       <span>{label}</span>
-      <PendingIndicator href={href} onPendingChange={onPendingChange} />
+      <span className="flex items-center gap-2">
+        {badge != null && badge > 0 && (
+          <span
+            className="rounded-full bg-gold-deep px-1.5 py-0.5 text-[0.65rem] font-medium leading-none text-cream"
+            aria-label={`${badge} unread`}
+          >
+            {badge > 99 ? "99+" : badge}
+          </span>
+        )}
+        <PendingIndicator />
+      </span>
     </Link>
   );
 }
 
 /** Must be a descendant of the Link for useLinkStatus to see it. */
-function PendingIndicator({
-  href,
-  onPendingChange,
-}: {
-  href: string;
-  onPendingChange?: (href: string, pending: boolean) => void;
-}) {
+function PendingIndicator() {
   const { pending } = useLinkStatus();
+  // Reported to the shared provider, which draws the bar outside the
+  // collapsible menu — a display:none ancestor would stop it rendering.
+  useReportPending(pending);
 
-  useEffect(() => {
-    onPendingChange?.(href, pending);
-  }, [pending, href, onPendingChange]);
-
-  return (
-    <>
-      <span aria-hidden className="nav-spinner" data-pending={pending || undefined} />
-      {pending && (
-        <span role="status" aria-live="polite" className="sr-only">
-          Loading
-        </span>
-      )}
-    </>
-  );
+  return <span aria-hidden className="nav-spinner" data-pending={pending || undefined} />;
 }

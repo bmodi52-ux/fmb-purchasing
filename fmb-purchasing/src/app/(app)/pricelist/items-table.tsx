@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { ColumnsDataTable, type ColumnDef, type BulkAction } from "@/components/columns-data-table";
 import { reviewOffer, bulkReviewOffers } from "./actions";
@@ -127,16 +128,16 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
             <form action={reviewOffer}>
               <input type="hidden" name="offer_id" value={r.id} />
               <input type="hidden" name="decision" value="approved" />
-              <button type="submit" className="text-xs text-palm hover:underline">
+              <SubmitButton className="text-xs text-palm hover:underline">
                 Approve
-              </button>
+              </SubmitButton>
             </form>
             <form action={reviewOffer}>
               <input type="hidden" name="offer_id" value={r.id} />
               <input type="hidden" name="decision" value="rejected" />
-              <button type="submit" className="text-xs text-maroon/70 hover:underline">
+              <SubmitButton className="text-xs text-maroon/70 hover:underline">
                 Reject
-              </button>
+              </SubmitButton>
             </form>
           </div>
         ) : null,

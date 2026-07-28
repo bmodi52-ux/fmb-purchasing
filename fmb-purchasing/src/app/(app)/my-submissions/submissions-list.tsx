@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { deleteExpense, bulkDeleteExpenses } from "./actions";
 import { formatDate } from "@/lib/format";
@@ -120,9 +121,9 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                   </Link>
                   <form action={deleteExpense}>
                     <input type="hidden" name="expense_id" value={e.id} />
-                    <button type="submit" className="text-maroon/70 underline hover:text-maroon">
+                    <SubmitButton className="text-maroon/70 underline hover:text-maroon">
                       Delete
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
               )}

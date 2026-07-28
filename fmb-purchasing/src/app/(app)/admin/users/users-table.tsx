@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { ColumnsDataTable, type ColumnDef, type BulkAction } from "@/components/columns-data-table";
 import { setUserActive, bulkSetUserActive } from "./actions";
 
@@ -35,9 +36,9 @@ const COLUMNS: ColumnDef<UserRow>[] = [
       <form action={setUserActive}>
         <input type="hidden" name="user_id" value={u.id} />
         <input type="hidden" name="active" value={String(u.is_active)} />
-        <button type="submit" className="text-xs text-ink/60 hover:text-ink">
+        <SubmitButton className="text-xs text-ink/60 hover:text-ink">
           {u.is_active ? "Disable" : "Enable"}
-        </button>
+        </SubmitButton>
       </form>
     ),
     exportValue: () => "",

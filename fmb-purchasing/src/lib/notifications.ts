@@ -80,9 +80,15 @@ export function detailsBox(rows: { label: string; value: string }[]): string {
 }
 
 /**
- * Email notifications (§7) via Resend. Degrades gracefully — if
- * RESEND_API_KEY isn't set, sends are skipped (logged) rather than
- * failing, so the rest of the app works before this is configured.
+ * Email via Resend. Degrades gracefully — if RESEND_API_KEY isn't set, sends
+ * are skipped (logged) rather than failing.
+ *
+ * As of the in-app notifications work this has exactly one caller: the
+ * welcome email that gives a new account its username and temporary
+ * password. Expense submissions, decisions and payments no longer send mail;
+ * they write notifications the user reads in the app instead. The welcome
+ * message is the one thing that cannot move in-app, since its whole purpose
+ * is to reach someone who cannot sign in yet.
  */
 export async function sendEmail({
   to,

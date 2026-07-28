@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { useMemo, useState } from "react";
 
 type Vendor = { id: string; name: string; vendor_number: string | null };
@@ -118,12 +119,9 @@ export function OfferForm({
         <textarea name="comments" defaultValue={comments ?? ""} rows={2} className="input" />
       </label>
 
-      <button
-        type="submit"
-        className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30"
-      >
+      <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
         {submitLabel}
-      </button>
+      </SubmitButton>
     </form>
   );
 }

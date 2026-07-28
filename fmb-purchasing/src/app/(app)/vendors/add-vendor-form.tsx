@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   createVendor,
@@ -191,13 +192,9 @@ export function AddVendorForm({ onSuccess }: { onSuccess?: () => void }) {
         <p className="text-xs text-ink/40">More contacts can be added later on the vendor page.</p>
       </fieldset>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep disabled:opacity-60"
-      >
+      <SubmitButton disabled={pending} className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep disabled:opacity-60">
         {pending ? "Adding…" : "Add vendor"}
-      </button>
+      </SubmitButton>
 
       {state.error && <p className="text-sm text-red-700">{state.error}</p>}
     </form>

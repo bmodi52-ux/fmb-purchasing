@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -246,9 +247,9 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             <textarea name="comments" defaultValue={item.comments ?? ""} disabled={!canEdit} rows={2} className="input" />
           </label>
           {canEdit && (
-            <button type="submit" className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
+            <SubmitButton className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
               Save changes
-            </button>
+            </SubmitButton>
           )}
         </form>
       </section>
@@ -309,9 +310,9 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                     <form action={removePackSize}>
                       <input type="hidden" name="pack_size_id" value={p.id} />
                       <input type="hidden" name="item_id" value={item.id} />
-                      <button type="submit" className="text-xs text-maroon/70 hover:underline">
+                      <SubmitButton className="text-xs text-maroon/70 hover:underline">
                         remove
-                      </button>
+                      </SubmitButton>
                     </form>
                   )}
                 </div>
@@ -368,16 +369,16 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                             <form action={reviewOffer}>
                               <input type="hidden" name="offer_id" value={o.id} />
                               <input type="hidden" name="decision" value="approved" />
-                              <button type="submit" className="text-xs text-palm hover:underline">
+                              <SubmitButton className="text-xs text-palm hover:underline">
                                 Approve
-                              </button>
+                              </SubmitButton>
                             </form>
                             <form action={reviewOffer}>
                               <input type="hidden" name="offer_id" value={o.id} />
                               <input type="hidden" name="decision" value="rejected" />
-                              <button type="submit" className="text-xs text-maroon/70 hover:underline">
+                              <SubmitButton className="text-xs text-maroon/70 hover:underline">
                                 Reject
-                              </button>
+                              </SubmitButton>
                             </form>
                           </div>
                         )}
@@ -413,9 +414,9 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                             <form action={deleteOffer}>
                               <input type="hidden" name="offer_id" value={o.id} />
                               <input type="hidden" name="item_id" value={item.id} />
-                              <button type="submit" className="text-xs text-maroon/70 hover:underline">
+                              <SubmitButton className="text-xs text-maroon/70 hover:underline">
                                 Delete offer
-                              </button>
+                              </SubmitButton>
                             </form>
                           )}
                           <details>
@@ -499,9 +500,9 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
               <span className="text-ink/70">Label (optional)</span>
               <input name="label" placeholder="e.g. 1L x 10 carton" className="input" />
             </label>
-            <button type="submit" className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+            <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
               + Add pack size
-            </button>
+            </SubmitButton>
           </form>
         )}
       </section>

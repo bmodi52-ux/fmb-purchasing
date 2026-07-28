@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { useActionState, useRef, useEffect } from "react";
 import { createUser, type CreateUserState } from "./actions";
 
@@ -56,13 +57,9 @@ export function CreateUserForm() {
           className="w-40 rounded-md border border-ink/15 bg-white px-3 py-2"
         />
       </label>
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md bg-gold px-4 py-2 font-medium text-ink transition-colors hover:bg-gold-deep disabled:opacity-60"
-      >
+      <SubmitButton disabled={pending} className="rounded-md bg-gold px-4 py-2 font-medium text-ink transition-colors hover:bg-gold-deep disabled:opacity-60">
         {pending ? "Creating…" : "Create user"}
-      </button>
+      </SubmitButton>
       {state.error && <p className="w-full text-sm text-red-700">{state.error}</p>}
     </form>
   );
