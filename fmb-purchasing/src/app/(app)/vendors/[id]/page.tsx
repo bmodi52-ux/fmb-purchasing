@@ -37,7 +37,9 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
         <Link href="/vendors" className="text-sm text-ink/50 hover:text-ink">
           ← Vendors
         </Link>
-        <div className="mt-1 flex items-center gap-3">
+        {/* Wraps so a long vendor name doesn't squeeze the reference code
+            against the edge on a narrow screen. */}
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="page-title text-ink">{vendor.name}</h1>
           <span className="font-mono text-sm text-ink/50">{vendor.vendor_number}</span>
         </div>
