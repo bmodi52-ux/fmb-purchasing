@@ -19,6 +19,9 @@ export type OfferRow = {
   packCount: number;
   totalQuantity: number;
   packLabel: string | null;
+  soldLoose: boolean;
+  /** False while nobody has said what one unit holds — cost is then per pack. */
+  contentsConfirmed: boolean;
   packPrice: number | null;
   /** Derived by the offer_unit_costs view, expressed in baseUnitCode. */
   costPerBaseUnit: number | null;
@@ -26,13 +29,15 @@ export type OfferRow = {
   comments: string | null;
 };
 
-/** e.g. "1 L × 10 (10 L)" for a carton of ten litres, "1 kg" for loose. */
+/** "1 L × 10 (10 L)" for a carton, "Loose (per kg)" when bought by weight. */
 function formatPackSize(r: OfferRow): string {
   const unit = r.innerUnitLabel ?? "";
   const shape =
-    r.packCount > 1
-      ? `${r.innerQuantity} ${unit} × ${r.packCount} (${r.totalQuantity} ${unit})`
-      : `${r.innerQuantity} ${unit}`.trim();
+    r.soldLoose && r.packCount === 1 && Number(r.innerQuantity) === 1
+      ? `Loose (per ${unit})`.trim()
+      : r.packCount > 1
+        ? `${r.innerQuantity} ${unit} × ${r.packCount} (${r.totalQuantity} ${unit})`
+        : `${r.innerQuantity} ${unit}`.trim();
   return r.packLabel ? `${r.packLabel} — ${shape}` : shape;
 }
 
@@ -67,7 +72,20 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
     {
       key: "pack_size",
       label: "Pack size",
-      render: (r) => <span className="font-mono text-ink/70">{formatPackSize(r)}</span>,
+      render: (r) => (
+        <span className="font-mono text-ink/70">
+          {formatPackSize(r)}
+          {!r.contentsConfirmed && (
+            <Link
+              href={`/pricelist/${r.itemId}`}
+              title="Nobody has said what one unit contains, so cost per unit is per pack"
+              className="ml-1 text-gold-deep hover:underline"
+            >
+              ⚠
+            </Link>
+          )}
+        </span>
+      ),
       exportValue: (r) => formatPackSize(r),
     },
     {
@@ -85,8 +103,15 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
     {
       key: "cost_per_unit",
       label: "Cost per unit",
-      render: (r) => <span className="font-mono text-ink/70">{formatCostPerUnit(r)}</span>,
-      exportValue: (r) => (r.costPerBaseUnit != null ? `${r.costPerBaseUnit.toFixed(4)}/${r.baseUnitCode ?? ""}` : ""),
+      render: (r) => (
+        <span className={`font-mono ${r.contentsConfirmed ? "text-ink/70" : "text-ink/40 italic"}`}>
+          {formatCostPerUnit(r)}
+        </span>
+      ),
+      exportValue: (r) =>
+        r.costPerBaseUnit != null
+          ? `${r.costPerBaseUnit.toFixed(4)}/${r.baseUnitCode ?? ""}${r.contentsConfirmed ? "" : " (provisional)"}`
+          : "",
     },
     { key: "comments", label: "Comments", render: (r) => r.comments || "—", exportValue: (r) => r.comments ?? "" },
     { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} />, exportValue: (r) => r.status },

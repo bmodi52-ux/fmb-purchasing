@@ -2,7 +2,7 @@
 
 import { reviewExpense, bulkReviewExpenses } from "./actions";
 import { formatDate } from "@/lib/format";
-import { FilterableSection, type BulkAction } from "@/components/filterable-section";
+import { FilterableSection, type BulkAction, type SortOption } from "@/components/filterable-section";
 import { ReceiptViewer } from "@/components/receipt-viewer";
 import type { ExportColumn } from "@/lib/export";
 
@@ -39,6 +39,14 @@ const EXPORT_COLUMNS: ExportColumn[] = [
   { key: "created_at", label: "Submitted at" },
 ];
 
+const SORT_OPTIONS: SortOption<ApprovalRow>[] = [
+  { key: "created_at", label: "Submitted", value: (e) => e.created_at },
+  { key: "receipt_date", label: "Receipt date", value: (e) => e.receipt_date ?? "" },
+  { key: "total", label: "Total", value: (e) => e.total },
+  { key: "vendor", label: "Vendor", value: (e) => e.vendor_name_raw ?? "" },
+  { key: "submitter", label: "Submitted by", value: (e) => e.submittedByName },
+];
+
 export function ApprovalsList({ expenses }: { expenses: ApprovalRow[] }) {
   if (expenses.length === 0) {
     return <p className="text-sm text-ink/50">Nothing waiting for review.</p>;
@@ -65,6 +73,7 @@ export function ApprovalsList({ expenses }: { expenses: ApprovalRow[] }) {
       title="Approvals"
       placeholder="Filter by vendor, submitter, invoice…"
       bulkActions={bulkActions}
+      sortOptions={SORT_OPTIONS}
     >
       {(rows, selection) => (
         <div className="flex flex-col gap-3">

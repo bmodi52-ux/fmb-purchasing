@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { markExpensePaid, bulkMarkPaid } from "./actions";
 import { formatDate } from "@/lib/format";
-import { FilterableSection } from "@/components/filterable-section";
+import { FilterableSection, type SortOption } from "@/components/filterable-section";
 import { ReceiptViewer } from "@/components/receipt-viewer";
 import type { ExportColumn } from "@/lib/export";
 
@@ -23,6 +23,13 @@ const EXPORT_COLUMNS: ExportColumn[] = [
   { key: "invoice_number", label: "Invoice" },
   { key: "decided_at", label: "Approved" },
   { key: "total", label: "Total" },
+];
+
+const SORT_OPTIONS: SortOption<PaymentRow>[] = [
+  { key: "decided_at", label: "Approved", value: (e) => e.decided_at ?? "" },
+  { key: "total", label: "Total", value: (e) => e.total },
+  { key: "vendor", label: "Vendor", value: (e) => e.vendor_name_raw ?? "" },
+  { key: "submitter", label: "Submitted by", value: (e) => e.submittedByName },
 ];
 
 const today = new Date().toISOString().slice(0, 10);
@@ -80,6 +87,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
       filenameBase="payments"
       title="Payments"
       placeholder="Filter by vendor, submitter, invoice…"
+      sortOptions={SORT_OPTIONS}
     >
       {(rows, selection) => {
         const selectedIds = rows.filter((r) => selection.isSelected(r.id)).map((r) => r.id);

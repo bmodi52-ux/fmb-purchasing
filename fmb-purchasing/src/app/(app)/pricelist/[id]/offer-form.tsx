@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 type Vendor = { id: string; name: string; vendor_number: string | null };
+type PackSizeOption = { id: string; label: string };
 
 export function OfferForm({
   action,
@@ -17,12 +18,15 @@ export function OfferForm({
   packPrice,
   comments,
   vendors,
+  packSizes,
   submitLabel,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   itemId: string;
   packSizeId: string;
   offerId?: string;
+  /** When given, the offer can be moved to a different pack size. */
+  packSizes?: PackSizeOption[];
   /** inner_quantity × pack_count, i.e. how much the whole pack contains. */
   totalQuantity: number;
   innerUnitLabel: string | null;
@@ -45,8 +49,22 @@ export function OfferForm({
   return (
     <form action={action} className="flex flex-col gap-3">
       <input type="hidden" name="item_id" value={itemId} />
-      <input type="hidden" name="pack_size_id" value={packSizeId} />
       {offerId && <input type="hidden" name="offer_id" value={offerId} />}
+
+      {packSizes && packSizes.length > 1 ? (
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-ink/70">Pack size</span>
+          <select name="pack_size_id" defaultValue={packSizeId} className="input">
+            {packSizes.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <input type="hidden" name="pack_size_id" value={packSizeId} />
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">

@@ -82,6 +82,8 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
       inner_unit_id: fieldOrNull(formData, "inner_unit_id") ?? canonicalUnitId,
       pack_count: numberOrNull(formData, "pack_count") ?? 1,
       label: fieldOrNull(formData, "pack_label"),
+      sold_loose: formData.get("sold_loose") === "on",
+      contents_confirmed: true,
       created_by: user.id,
     })
     .select("id")
@@ -124,10 +126,106 @@ export async function addPackSize(formData: FormData) {
     inner_unit_id: innerUnitId,
     pack_count: numberOrNull(formData, "pack_count") ?? 1,
     label: fieldOrNull(formData, "label"),
+    sold_loose: formData.get("sold_loose") === "on",
+    // entered by a human, so its contents are known by definition
+    contents_confirmed: true,
     created_by: user.id,
   });
 
   revalidatePath(`/pricelist/${itemId}`);
+  revalidatePath("/pricelist");
+}
+
+const PACK_SIZE_TRACKED_FIELDS = [
+  "inner_quantity",
+  "inner_unit_id",
+  "pack_count",
+  "label",
+  "sold_loose",
+  "contents_confirmed",
+] as const;
+type PackSizeTrackedRow = Record<(typeof PACK_SIZE_TRACKED_FIELDS)[number], unknown>;
+
+/**
+ * Pack sizes previously could not be corrected at all: there was no update
+ * action, and removal is refused while an offer is attached (with no way to
+ * delete an offer either), so a placeholder created from a receipt was a dead
+ * end fixable only in SQL.
+ *
+ * Editing one changes every derived per-unit cost for the purchases attached
+ * to it — that is the point, since it lets a reviewer correct history rather
+ * than re-enter it — so the change is written to the item's history.
+ */
+export async function updatePackSize(formData: FormData) {
+  const user = await requirePricelistEdit();
+
+  const packSizeId = String(formData.get("pack_size_id") ?? "");
+  const itemId = String(formData.get("item_id") ?? "");
+  if (!packSizeId || !itemId) return;
+
+  const admin = createAdminClient();
+  const { data: before } = await admin
+    .from("item_pack_sizes")
+    .select(PACK_SIZE_TRACKED_FIELDS.join(", "))
+    .eq("id", packSizeId)
+    .single<PackSizeTrackedRow>();
+  if (!before) return;
+
+  const innerQuantity = numberOrNull(formData, "inner_quantity");
+  const innerUnitId = fieldOrNull(formData, "inner_unit_id");
+  if (innerQuantity == null || innerQuantity <= 0 || !innerUnitId) return;
+
+  const next: PackSizeTrackedRow = {
+    inner_quantity: innerQuantity,
+    inner_unit_id: innerUnitId,
+    pack_count: numberOrNull(formData, "pack_count") ?? 1,
+    label: fieldOrNull(formData, "label"),
+    sold_loose: formData.get("sold_loose") === "on",
+    // Saving this form *is* the confirmation — a human has just stated what
+    // one unit contains.
+    contents_confirmed: true,
+  };
+
+  const changes: Record<string, { old: unknown; new: unknown }> = {};
+  for (const field of PACK_SIZE_TRACKED_FIELDS) {
+    if (String(before[field] ?? "") !== String(next[field] ?? "")) {
+      changes[field] = { old: before[field], new: next[field] };
+    }
+  }
+
+  if (Object.keys(changes).length > 0) {
+    const { error } = await admin.from("item_pack_sizes").update(next).eq("id", packSizeId);
+    if (error) return;
+    await admin.from("item_history").insert({ item_id: itemId, changed_by: user.id, changes });
+  }
+
+  revalidatePath(`/pricelist/${itemId}`);
+  revalidatePath("/pricelist");
+}
+
+/**
+ * Removes a vendor offer. Needed so a wrongly auto-created offer can be
+ * cleared — it is also what blocks its pack size from being removed.
+ * Refused once real expenses reference it, since that would orphan them.
+ */
+export async function deleteOffer(formData: FormData) {
+  await requirePricelistEdit();
+  const offerId = String(formData.get("offer_id") ?? "");
+  const itemId = String(formData.get("item_id") ?? "");
+  if (!offerId) return;
+
+  const admin = createAdminClient();
+  const { count } = await admin
+    .from("expense_line_items")
+    .select("id", { count: "exact", head: true })
+    .eq("pricelist_item_id", offerId);
+  if (count && count > 0) return; // submitted expenses point at it
+
+  await admin.from("pricelist_item_history").delete().eq("item_id", offerId);
+  await admin.from("pricelist_items").delete().eq("id", offerId);
+
+  revalidatePath(`/pricelist/${itemId}`);
+  revalidatePath("/pricelist");
 }
 
 export async function removePackSize(formData: FormData) {

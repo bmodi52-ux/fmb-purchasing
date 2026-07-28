@@ -4,8 +4,9 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getUserPermissions, can, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateTime } from "@/lib/format";
-import { updateItem, addPackSize, removePackSize, addOffer, updateOffer, reviewOffer } from "../actions";
+import { updateItem, addPackSize, removePackSize, addOffer, updateOffer, reviewOffer, deleteOffer } from "../actions";
 import { OfferForm } from "./offer-form";
+import { PackSizeForm } from "./pack-size-form";
 import { MergePanel, type DuplicateCandidate } from "./merge-panel";
 import { leafCategories, categoryLabelsById } from "@/lib/categories";
 
@@ -67,7 +68,9 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     admin.from("offer_unit_costs").select("offer_id, cost_per_base_unit, base_unit_code").eq("item_id", id),
     admin
       .from("item_unit_costs")
-      .select("base_unit_code, purchase_count, vendor_count, avg_cost_per_base_unit, latest_cost_per_base_unit, latest_receipt_date")
+      .select(
+        "base_unit_code, purchase_count, vendor_count, avg_cost_per_base_unit, latest_cost_per_base_unit, latest_receipt_date, all_contents_confirmed"
+      )
       .eq("item_id", id)
       .maybeSingle(),
   ]);
@@ -75,6 +78,24 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   const costByOfferId = new Map(
     (offerCosts ?? []).map((c) => [c.offer_id as string, c as { cost_per_base_unit: number | null; base_unit_code: string }])
   );
+
+  // How many submitted purchases hang off each pack size / offer. Drives both
+  // the "this will restate N purchases" warning when editing a pack size, and
+  // whether an offer can still be deleted.
+  const offerIdList = (offers ?? []).map((o) => o.id);
+  const { data: usageRows } = offerIdList.length
+    ? await admin.from("expense_line_items").select("pricelist_item_id").in("pricelist_item_id", offerIdList)
+    : { data: [] };
+  const purchasesByOffer = new Map<string, number>();
+  for (const r of usageRows ?? []) {
+    const key = r.pricelist_item_id as string;
+    purchasesByOffer.set(key, (purchasesByOffer.get(key) ?? 0) + 1);
+  }
+  const purchasesByPackSize = new Map<string, number>();
+  for (const o of offers ?? []) {
+    const n = purchasesByOffer.get(o.id) ?? 0;
+    if (n > 0) purchasesByPackSize.set(o.pack_size_id, (purchasesByPackSize.get(o.pack_size_id) ?? 0) + n);
+  }
 
   const { data: duplicateRows } = await admin
     .from("item_duplicate_candidates")
@@ -105,9 +126,21 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     currentCategory && !assignableCategories.some((c) => c.id === currentCategory.id)
       ? [...assignableCategories, currentCategory]
       : assignableCategories;
-  /** e.g. "1 L × 10 (10 L)", or just "1 kg" when the pack holds one. */
-  function packShape(p: { inner_quantity: number; inner_unit_id: string; pack_count: number; total_quantity: number }) {
+  /**
+   * "1 L × 10 (10 L)" for a carton, "Loose (per kg)" when bought by weight
+   * rather than in packs — otherwise a loose item reads as a 1 kg bag.
+   */
+  function packShape(p: {
+    inner_quantity: number;
+    inner_unit_id: string;
+    pack_count: number;
+    total_quantity: number;
+    sold_loose?: boolean;
+  }) {
     const unit = unitLabelById.get(p.inner_unit_id) ?? "";
+    if (p.sold_loose && p.pack_count === 1 && Number(p.inner_quantity) === 1) {
+      return `Loose (per ${unit})`.trim();
+    }
     return p.pack_count > 1
       ? `${p.inner_quantity} ${unit} × ${p.pack_count} (${p.total_quantity} ${unit})`
       : `${p.inner_quantity} ${unit}`.trim();
@@ -237,6 +270,13 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
               note={`across ${itemCost.vendor_count} vendor(s)`}
             />
             <Stat label="Purchases" value={String(itemCost.purchase_count)} note="receipt lines" />
+            {!itemCost.all_contents_confirmed && (
+              <p className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-ink/80 sm:col-span-3">
+                <strong>Provisional.</strong> At least one purchase is against a pack size whose contents haven&apos;t
+                been confirmed, so these figures are per <em>pack</em>, not per {itemCost.base_unit_code}. Set what one
+                unit contains below and they&apos;ll correct themselves.
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-sm text-ink/50">
@@ -253,10 +293,15 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             const packUnitLabel = unitLabelById.get(p.inner_unit_id) ?? null;
             return (
               <div key={p.id} className="rounded-md border border-ink/10 bg-white p-4">
-                <div className="mb-3 flex items-center justify-between">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium text-ink">
                     {p.label && <span>{p.label} — </span>}
                     <span className="font-mono">{packShape(p)}</span>
+                    {!p.contents_confirmed && (
+                      <span className="ml-2 rounded-full bg-gold/20 px-2 py-0.5 text-xs font-normal text-gold-deep">
+                        contents not confirmed
+                      </span>
+                    )}
                   </p>
                   {canEdit && packOffers.length === 0 && (
                     <form action={removePackSize}>
@@ -268,6 +313,27 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                     </form>
                   )}
                 </div>
+
+                {canEdit && (
+                  <details className="mb-3" open={!p.contents_confirmed}>
+                    <summary className="cursor-pointer text-sm text-ink/50 hover:text-ink">
+                      {p.contents_confirmed ? "Edit pack size" : "Confirm what one unit contains"}
+                    </summary>
+                    <div className="mt-2 rounded-md border border-ink/10 bg-cream/40 p-3">
+                      <PackSizeForm
+                        itemId={item.id}
+                        packSizeId={p.id}
+                        innerQuantity={p.inner_quantity}
+                        innerUnitId={p.inner_unit_id}
+                        packCount={p.pack_count}
+                        label={p.label}
+                        soldLoose={p.sold_loose}
+                        units={units ?? []}
+                        purchaseCount={purchasesByPackSize.get(p.id) ?? 0}
+                      />
+                    </div>
+                  </details>
+                )}
 
                 <ul className="flex flex-col gap-3">
                   {packOffers.map((o) => {
@@ -332,10 +398,23 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                                   packPrice={o.pack_price}
                                   comments={o.comments}
                                   vendors={vendors ?? []}
+                                  packSizes={(packSizes ?? []).map((ps) => ({
+                                    id: ps.id,
+                                    label: packSizeLabelById.get(ps.id) ?? "",
+                                  }))}
                                   submitLabel="Save"
                                 />
                               </div>
                             </details>
+                          )}
+                          {canEdit && (purchasesByOffer.get(o.id) ?? 0) === 0 && (
+                            <form action={deleteOffer}>
+                              <input type="hidden" name="offer_id" value={o.id} />
+                              <input type="hidden" name="item_id" value={item.id} />
+                              <button type="submit" className="text-xs text-maroon/70 hover:underline">
+                                Delete offer
+                              </button>
+                            </form>
                           )}
                           <details>
                             <summary className="cursor-pointer hover:text-ink">History ({history.length})</summary>

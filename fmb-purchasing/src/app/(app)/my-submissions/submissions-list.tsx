@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { deleteExpense, bulkDeleteExpenses } from "./actions";
 import { formatDate } from "@/lib/format";
-import { FilterableSection, type BulkAction } from "@/components/filterable-section";
+import { FilterableSection, type BulkAction, type SortOption } from "@/components/filterable-section";
 import { ReceiptViewer } from "@/components/receipt-viewer";
 import type { ExportColumn } from "@/lib/export";
 
@@ -30,6 +30,13 @@ const EXPORT_COLUMNS: ExportColumn[] = [
   { key: "payment_reference", label: "Payment reference" },
   { key: "payment_date", label: "Payment date" },
   { key: "created_at", label: "Submitted at" },
+];
+
+const SORT_OPTIONS: SortOption<SubmissionRow>[] = [
+  { key: "created_at", label: "Submitted", value: (e) => e.created_at },
+  { key: "total", label: "Total", value: (e) => e.total },
+  { key: "status", label: "Status", value: (e) => e.status },
+  { key: "vendor", label: "Vendor", value: (e) => e.vendor_name_raw ?? "" },
 ];
 
 export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
@@ -63,6 +70,7 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
       title="My submissions"
       placeholder="Filter by vendor, invoice, status…"
       bulkActions={bulkActions}
+      sortOptions={SORT_OPTIONS}
     >
       {(rows, selection) => (
         <div className="flex flex-col gap-3">
