@@ -192,14 +192,16 @@ export function ColumnsDataTable<T extends { id: string }>({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter…"
-          className="input w-56"
+          className="input w-full sm:w-56"
         />
-        <div className="flex items-center gap-3">
+        {/* Wraps as one group so the controls stay together on a phone rather
+            than scattering across several ragged lines. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <button
             type="button"
             onClick={() => setShowColumnFilters((v) => !v)}

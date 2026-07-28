@@ -33,9 +33,11 @@ export function AppSidebar({
 
       {/* Mobile-only top bar: unaffected by md: below, invisible on desktop */}
       <div className="flex items-center justify-between border-b border-gold/20 bg-cream px-4 py-3 md:hidden">
-        <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
-          <Image src="/fmb-logo.png" alt="FMB" width={28} height={28} className="rounded" />
-          <span className="brand-wordmark text-base font-semibold text-ink">FMB Sydney</span>
+        <Link href="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
+          <Image src="/fmb-logo.png" alt="FMB" width={34} height={34} className="rounded" />
+          {/* Sized above body text so the header anchors the page rather than
+              being dwarfed by the title beneath it. */}
+          <span className="brand-wordmark text-[1.15rem] font-semibold leading-none text-ink">FMB Sydney</span>
         </Link>
         <button
           type="button"

@@ -115,13 +115,13 @@ export function FilterableSection<T extends Record<string, unknown>>({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={placeholder}
-            className="input w-64"
+            className="input w-full sm:w-64"
           />
           {sortOptions && sortOptions.length > 0 && (
             <>

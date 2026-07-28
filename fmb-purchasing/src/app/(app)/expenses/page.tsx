@@ -69,7 +69,7 @@ export default async function AllExpensesPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="page-title text-ink">All expenses</h1>
-        <p className="mt-1 text-ink/70">Every expense across FMB, with status, category, vendor, amounts, and GST breakdown.</p>
+        <p className="page-description mt-1">Every expense across FMB, with status, category, vendor, amounts, and GST breakdown.</p>
       </div>
 
       <ExpensesTable rows={rows} initialVisible={visibleColumns} />
