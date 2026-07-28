@@ -58,10 +58,18 @@ const ALL_COLUMNS: ColumnDef<ExpenseRow>[] = [
     label: "Decided at",
     render: (r) => (r.decided_at ? formatDate(r.decided_at) : "—"),
     exportValue: (r) => (r.decided_at ? formatDate(r.decided_at) : ""),
+    // displayed as DD/MM/YYYY, which sorts wrongly as text
+    sortValue: (r) => r.decided_at ?? "",
   },
   { key: "payment_reference", label: "Payment reference", render: (r) => r.payment_reference ?? "—", exportValue: (r) => r.payment_reference ?? "" },
   { key: "payment_date", label: "Payment date", render: (r) => r.payment_date ?? "—", exportValue: (r) => r.payment_date ?? "" },
-  { key: "created_at", label: "Submitted at", render: (r) => formatDate(r.created_at), exportValue: (r) => formatDate(r.created_at) },
+  {
+    key: "created_at",
+    label: "Submitted at",
+    render: (r) => formatDate(r.created_at),
+    exportValue: (r) => formatDate(r.created_at),
+    sortValue: (r) => r.created_at,
+  },
 ];
 
 export function ExpensesTable({ rows, initialVisible }: { rows: ExpenseRow[]; initialVisible: string[] }) {

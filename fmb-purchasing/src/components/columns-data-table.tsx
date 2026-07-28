@@ -10,7 +10,28 @@ export type ColumnDef<T> = {
   render: (row: T) => React.ReactNode;
   /** Plain text/number used for search and file exports (render() may return JSX). */
   exportValue: (row: T) => string | number;
+  /**
+   * Value to sort by, when the displayed text sorts wrongly — dates rendered
+   * as "27/07/2026" being the usual case, where the raw ISO string is needed.
+   * Falls back to exportValue.
+   */
+  sortValue?: (row: T) => string | number;
 };
+
+type SortState = { key: string; direction: "asc" | "desc" } | null;
+
+function compareValues(a: string | number, b: string | number): number {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  const as = String(a ?? "");
+  const bs = String(b ?? "");
+  // blanks last regardless of direction — an empty cell isn't "smallest"
+  if (as === "" && bs !== "") return 1;
+  if (bs === "" && as !== "") return -1;
+  const an = Number(as);
+  const bn = Number(bs);
+  if (as !== "" && bs !== "" && !Number.isNaN(an) && !Number.isNaN(bn)) return an - bn;
+  return as.localeCompare(bs, undefined, { numeric: true, sensitivity: "base" });
+}
 
 export type BulkAction<T> = {
   label: string;
@@ -44,7 +65,25 @@ export function ColumnsDataTable<T extends { id: string }>({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<SortState>(null);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [showColumnFilters, setShowColumnFilters] = useState(false);
   const [, startTransition] = useTransition();
+
+  /** Click cycles ascending -> descending -> unsorted. */
+  function toggleSort(key: string) {
+    setSort((current) => {
+      if (current?.key !== key) return { key, direction: "asc" };
+      if (current.direction === "asc") return { key, direction: "desc" };
+      return null;
+    });
+  }
+
+  function setColumnFilter(key: string, value: string) {
+    setColumnFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  const activeColumnFilters = Object.entries(columnFilters).filter(([, v]) => v.trim() !== "");
 
   function toggleExpanded(id: string) {
     const next = new Set(expanded);
@@ -69,12 +108,42 @@ export function ColumnsDataTable<T extends { id: string }>({
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) =>
-      columns.some((c) => String(c.exportValue(row) ?? "").toLowerCase().includes(q))
-    );
+    const columnByKey = new Map(columns.map((c) => [c.key, c]));
+
+    let result = rows;
+
+    if (q) {
+      result = result.filter((row) =>
+        columns.some((c) => String(c.exportValue(row) ?? "").toLowerCase().includes(q))
+      );
+    }
+
+    for (const [key, raw] of activeColumnFilters) {
+      const column = columnByKey.get(key);
+      if (!column) continue;
+      const needle = raw.trim().toLowerCase();
+      result = result.filter((row) =>
+        String(column.exportValue(row) ?? "").toLowerCase().includes(needle)
+      );
+    }
+
+    if (sort) {
+      const column = columnByKey.get(sort.key);
+      if (column) {
+        const value = column.sortValue ?? column.exportValue;
+        // copy first — rows is props, sorting in place would mutate the caller's array
+        result = [...result].sort((a, b) => {
+          const cmp = compareValues(value(a), value(b));
+          return sort.direction === "asc" ? cmp : -cmp;
+        });
+      }
+    }
+
+    return result;
+    // columnFilters is replaced wholesale on every edit, so its identity is a
+    // sufficient dependency
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, query]);
+  }, [rows, query, sort, columnFilters]);
 
   const selectedRows = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected]);
   const exportSourceRows = selected.size > 0 ? selectedRows : filteredRows;
@@ -131,6 +200,31 @@ export function ColumnsDataTable<T extends { id: string }>({
           className="input w-56"
         />
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowColumnFilters((v) => !v)}
+            aria-pressed={showColumnFilters}
+            className={`rounded-md border px-3 py-1 text-xs ${
+              showColumnFilters || activeColumnFilters.length > 0
+                ? "border-gold/50 bg-gold/10 text-ink"
+                : "border-ink/15 text-ink/70 hover:border-ink/30"
+            }`}
+          >
+            Filter columns
+            {activeColumnFilters.length > 0 && ` (${activeColumnFilters.length})`}
+          </button>
+          {(activeColumnFilters.length > 0 || sort) && (
+            <button
+              type="button"
+              onClick={() => {
+                setColumnFilters({});
+                setSort(null);
+              }}
+              className="text-xs text-ink/50 hover:text-ink"
+            >
+              Reset
+            </button>
+          )}
           <ExportToolbar
             filenameBase={pageKey}
             title={title}
@@ -194,12 +288,42 @@ export function ColumnsDataTable<T extends { id: string }>({
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} aria-label="Select all" />
                 </th>
                 {renderExpanded && <th className="p-2" />}
-                {visibleColumns.map((c) => (
-                  <th key={c.key} className="p-2">
-                    {c.label}
-                  </th>
-                ))}
+                {visibleColumns.map((c) => {
+                  const sorted = sort?.key === c.key ? sort.direction : null;
+                  return (
+                    <th key={c.key} className="p-0">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(c.key)}
+                        title={`Sort by ${c.label}`}
+                        className="flex w-full items-center gap-1 p-2 text-left font-medium hover:text-ink"
+                      >
+                        <span>{c.label}</span>
+                        <span className={sorted ? "text-gold-deep" : "text-ink/25"}>
+                          {sorted === "asc" ? "▲" : sorted === "desc" ? "▼" : "↕"}
+                        </span>
+                      </button>
+                    </th>
+                  );
+                })}
               </tr>
+              {showColumnFilters && (
+                <tr className="text-left">
+                  <th className="p-1" />
+                  {renderExpanded && <th className="p-1" />}
+                  {visibleColumns.map((c) => (
+                    <th key={c.key} className="p-1">
+                      <input
+                        value={columnFilters[c.key] ?? ""}
+                        onChange={(e) => setColumnFilter(c.key, e.target.value)}
+                        placeholder={c.label}
+                        aria-label={`Filter by ${c.label}`}
+                        className="w-full rounded border border-ink/15 bg-white px-2 py-1 text-xs font-normal"
+                      />
+                    </th>
+                  ))}
+                </tr>
+              )}
             </thead>
             <tbody>
               {filteredRows.map((row) => (

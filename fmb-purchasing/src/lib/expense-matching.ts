@@ -43,6 +43,17 @@ async function unitIdByCode(admin: SupabaseClient, code: string): Promise<string
 }
 
 /**
+ * A quantity in a mass or volume unit is already expressed in the terms we
+ * cost by, so "80 kg purchased" needs nothing further from a human. A count
+ * ("12") is ambiguous — twelve eggs or twelve trays of thirty? — and only the
+ * Pricelist reviewer can say, so those packs stay unconfirmed.
+ */
+async function isSelfEvidentQuantity(admin: SupabaseClient, unitId: string): Promise<boolean> {
+  const { data } = await admin.from("units").select("dimension").eq("id", unitId).maybeSingle();
+  return data?.dimension === "mass" || data?.dimension === "volume";
+}
+
+/**
  * Resolve receipt-extracted unit text against the existing units picklist.
  * Never creates a unit: doing so previously turned every spelling variant
  * ("kg", "kgs", "kilo") into its own incomparable unit, which broke the
@@ -133,6 +144,11 @@ export async function matchOrCreateItem(
  * quantity bought lives on the expense line item, where it drives
  * item_paid_unit_costs; real pack shapes (1 L x 10 and the like) are entered
  * by a human on the item page.
+ *
+ * Weight and volume packs are marked confirmed straight away since the
+ * receipt quantity is already in costing terms. Countable ones are left
+ * unconfirmed: "12 @ $60" could be twelve eggs or twelve trays of thirty, and
+ * until someone says which, any per-unit figure derived from it is a guess.
  */
 async function matchOrCreatePackSize(
   admin: SupabaseClient,
@@ -159,9 +175,18 @@ async function matchOrCreatePackSize(
     .maybeSingle();
   if (existing) return existing.id;
 
+  const selfEvident = await isSelfEvidentQuantity(admin, innerUnitId);
+
   const { data: created, error } = await admin
     .from("item_pack_sizes")
-    .insert({ item_id: itemId, inner_quantity: 1, inner_unit_id: innerUnitId, pack_count: 1 })
+    .insert({
+      item_id: itemId,
+      inner_quantity: 1,
+      inner_unit_id: innerUnitId,
+      pack_count: 1,
+      sold_loose: selfEvident,
+      contents_confirmed: selfEvident,
+    })
     .select("id")
     .single();
   if (error) throw error;
