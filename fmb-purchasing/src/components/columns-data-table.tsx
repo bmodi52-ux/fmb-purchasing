@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState, useTransition } from "react";
 import { saveColumnPreference } from "@/lib/column-prefs-actions";
 import { ExportToolbar } from "./export-toolbar";
+import { useReportPending } from "./pending";
 
 export type ColumnDef<T> = {
   key: string;
@@ -64,6 +65,9 @@ export function ColumnsDataTable<T extends { id: string }>({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  // Bulk actions run through onClick rather than a form, so useFormStatus
+  // can't see them — report their own busy flag instead.
+  useReportPending(busyAction !== null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<SortState>(null);
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});

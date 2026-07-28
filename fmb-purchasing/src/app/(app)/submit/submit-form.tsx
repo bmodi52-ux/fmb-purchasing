@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -334,13 +335,9 @@ function ReviewForm(props: {
         ) : (
           <form action={uploadAction} className="flex flex-wrap items-center gap-2">
             <input type="file" name="file" accept="image/*,application/pdf" className="min-w-0 max-w-full text-xs" />
-            <button
-              type="submit"
-              disabled={uploading}
-              className="rounded-md border border-ink/15 px-3 py-1 text-xs hover:border-ink/30 disabled:opacity-60"
-            >
+            <SubmitButton disabled={uploading} className="rounded-md border border-ink/15 px-3 py-1 text-xs hover:border-ink/30 disabled:opacity-60">
               {uploading ? "Attaching…" : "Attach"}
-            </button>
+            </SubmitButton>
           </form>
         )}
         {!props.receiptPath && <span className="text-xs text-ink/40">Optional — never required.</span>}

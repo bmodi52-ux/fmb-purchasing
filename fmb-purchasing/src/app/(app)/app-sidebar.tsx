@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { SubmitButton } from "@/components/submit-button";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { NavLink } from "./nav-link";
@@ -11,25 +12,17 @@ export function AppSidebar({
   navItems,
   userName,
   signOutAction,
+  unreadCount,
 }: {
   navItems: NavItem[];
   userName: string;
   signOutAction: (formData: FormData) => void;
+  unreadCount: number;
 }) {
   const [open, setOpen] = useState(false);
-  // Which link is mid-navigation, tracked by href so a link going idle can't
-  // clear a bar that a different link now owns.
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
-
-  const handlePendingChange = useCallback((href: string, pending: boolean) => {
-    setPendingHref((current) => (pending ? href : current === href ? null : current));
-  }, []);
 
   return (
     <div className="relative md:contents">
-      {/* Deliberately outside the <aside>: tapping a link closes the mobile
-          menu, and a display:none ancestor would stop this rendering. */}
-      {pendingHref && <span className="route-progress" aria-hidden />}
 
       {/* Mobile-only top bar: unaffected by md: below, invisible on desktop */}
       <div className="flex items-center justify-between border-b border-gold/20 bg-cream px-4 py-3 md:hidden">
@@ -77,25 +70,22 @@ export function AppSidebar({
 
         <nav className="flex flex-1 flex-col gap-1 text-sm">
           {navItems.map((item) => (
-            <NavLink
-              key={item.key}
-              href={item.href}
-              label={item.label}
-              onNavigate={() => setOpen(false)}
-              onPendingChange={handlePendingChange}
-            />
+            <NavLink key={item.key} href={item.href} label={item.label} onNavigate={() => setOpen(false)} />
           ))}
+          <NavLink
+            href="/notifications"
+            label="Notifications"
+            badge={unreadCount}
+            onNavigate={() => setOpen(false)}
+          />
         </nav>
 
         <div className="flex flex-col gap-1 border-t border-ink/10 pt-4 text-sm">
           <p className="px-3 text-ink/60">{userName}</p>
           <form action={signOutAction}>
-            <button
-              type="submit"
-              className="w-full rounded-md px-3 py-2 text-left text-ink/70 transition-colors hover:bg-maroon/10 hover:text-maroon"
-            >
+            <SubmitButton className="w-full rounded-md px-3 py-2 text-left text-ink/70 transition-colors hover:bg-maroon/10 hover:text-maroon">
               Sign out
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </aside>

@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { createItem, type CreateItemState } from "./actions";
 
@@ -207,13 +208,9 @@ export function AddItemForm({
         </label>
       </div>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep disabled:opacity-60"
-      >
+      <SubmitButton disabled={pending} className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep disabled:opacity-60">
         {pending ? "Adding…" : "Add item"}
-      </button>
+      </SubmitButton>
 
       {state.error && <p className="text-sm text-red-700">{state.error}</p>}
     </form>

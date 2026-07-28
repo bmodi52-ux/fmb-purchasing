@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { useMemo, useState } from "react";
 import { updatePackSize } from "../actions";
 
@@ -125,12 +126,9 @@ export function PackSizeForm({
         </p>
       )}
 
-      <button
-        type="submit"
-        className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30"
-      >
+      <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
         Save pack size
-      </button>
+      </SubmitButton>
     </form>
   );
 }

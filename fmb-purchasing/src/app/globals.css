@@ -215,8 +215,18 @@ input[type="radio"] {
   }
 }
 
-/* Indeterminate hairline across the top of the viewport while a navigation is
-   in flight — the browser-style cue, at 2px so it informs without shouting. */
+/* Any control waiting on the server: dims and stops taking clicks, without
+   injecting a spinner element that would shift the label as it appears. The
+   shared hairline below carries the "something is happening" signal. */
+.is-pending-aware[data-pending="true"] {
+  opacity: 0.6;
+  cursor: progress;
+  pointer-events: none;
+}
+
+/* Indeterminate hairline across the top of the viewport while a navigation or
+   a server action is in flight — the browser-style cue, at 2px so it informs
+   without shouting. */
 .route-progress {
   position: fixed;
   inset: 0 0 auto 0;

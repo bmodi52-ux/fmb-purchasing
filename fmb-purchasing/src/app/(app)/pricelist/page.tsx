@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -194,9 +195,9 @@ export default async function PricelistPage() {
                 <form action={dismissDuplicatePair}>
                   <input type="hidden" name="item_a" value={d.item_id as string} />
                   <input type="hidden" name="item_b" value={d.candidate_id as string} />
-                  <button type="submit" className="text-xs text-ink/50 hover:text-ink hover:underline">
+                  <SubmitButton className="text-xs text-ink/50 hover:text-ink hover:underline">
                     not a duplicate
-                  </button>
+                  </SubmitButton>
                 </form>
               </li>
             ))}

@@ -1,85 +1,60 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendEmail, emailTemplate, detailsBox } from "@/lib/notifications";
-import type { PageKey, ActionKey } from "@/lib/permissions";
+import { notify, userIdsWithPermission } from "@/lib/notifications-inapp";
 
-/** Contact emails for every active user whose team grants the given permission. */
-async function emailsWithPermission(page: PageKey, action: ActionKey): Promise<string[]> {
-  const admin = createAdminClient();
-  const { data: teams } = await admin
-    .from("team_permissions")
-    .select("team_id")
-    .eq("page_key", page)
-    .eq("action_key", action);
-  const teamIds = [...new Set((teams ?? []).map((t) => t.team_id))];
-  if (teamIds.length === 0) return [];
-
-  const { data: members } = await admin.from("team_members").select("user_id").in("team_id", teamIds);
-  const userIds = [...new Set((members ?? []).map((m) => m.user_id))];
-  if (userIds.length === 0) return [];
-
-  const { data: profiles } = await admin
-    .from("profiles")
-    .select("email, is_active")
-    .in("id", userIds)
-    .eq("is_active", true);
-  return (profiles ?? []).map((p) => p.email);
-}
+/**
+ * Expense notifications, delivered in the app rather than by email.
+ *
+ * Every submission, decision and payment used to send mail. For anyone
+ * handling several a day that buried the messages worth reading, so the same
+ * events are now recorded as in-app notifications. Email is still used for
+ * the one case the app can't cover — telling a brand new user how to log in,
+ * see admin/users/actions.ts.
+ */
 
 type ExpenseSummary = {
   id: string;
-  /** Human reference (E-0001) so replies can quote it — see migration 0015. */
+  /** Human reference (E-0001) so a notification can be quoted aloud. */
   expense_number?: string | null;
   vendor_name_raw: string | null;
   total: number;
   submitted_by: string;
 };
 
-/** "E-0001 — Madani Mart ($1320.00 AUD)", or just the vendor before numbering. */
+function money(n: number) {
+  return `$${n.toFixed(2)} AUD`;
+}
+
+/** "E-0001 — Madani Mart", or just the vendor if numbering predates the row. */
 function expenseRef(e: ExpenseSummary): string {
   const vendor = e.vendor_name_raw ?? "expense";
   return e.expense_number ? `${e.expense_number} — ${vendor}` : vendor;
 }
 
-async function submitterEmail(admin: ReturnType<typeof createAdminClient>, userId: string): Promise<string | null> {
-  const { data } = await admin.from("profiles").select("email").eq("id", userId).maybeSingle();
-  return data?.email ?? null;
-}
-
-function money(n: number) {
-  return `$${n.toFixed(2)} AUD`;
-}
-
 export async function notifyExpenseSubmitted(expense: ExpenseSummary) {
   const admin = createAdminClient();
-  const [submitter, reviewers] = await Promise.all([
-    submitterEmail(admin, expense.submitted_by),
-    emailsWithPermission("approvals", "approve"),
-  ]);
+  const reviewers = await userIdsWithPermission(admin, "approvals", "approve");
 
-  const details = detailsBox([
-    ...(expense.expense_number ? [{ label: "Entry #", value: expense.expense_number }] : []),
-    { label: "Vendor", value: expense.vendor_name_raw ?? "—" },
-    { label: "Total", value: money(expense.total) },
+  await notify(admin, [
+    {
+      userId: expense.submitted_by,
+      kind: "expense_submitted",
+      title: `Submitted ${expenseRef(expense)}`,
+      body: `${money(expense.total)} — now waiting for review.`,
+      link: "/my-submissions",
+      expenseId: expense.id,
+    },
+    // the submitter may also be a reviewer; don't tell them twice
+    ...reviewers
+      .filter((id) => id !== expense.submitted_by)
+      .map((userId) => ({
+        userId,
+        kind: "expense_to_review" as const,
+        title: `New expense to review — ${expenseRef(expense)}`,
+        body: `${money(expense.total)} is waiting for your decision.`,
+        link: "/approvals",
+        expenseId: expense.id,
+      })),
   ]);
-
-  if (submitter) {
-    await sendEmail({
-      to: submitter,
-      subject: `Expense submitted — ${expenseRef(expense)} (${money(expense.total)})`,
-      html: emailTemplate(
-        `<p style="margin:0 0 8px 0;">Your expense has been submitted for review.</p>${details}`
-      ),
-    });
-  }
-  if (reviewers.length) {
-    await sendEmail({
-      to: reviewers,
-      subject: `New expense to review — ${expenseRef(expense)} (${money(expense.total)})`,
-      html: emailTemplate(
-        `<p style="margin:0 0 8px 0;">A new expense is waiting for your review.</p>${details}`
-      ),
-    });
-  }
 }
 
 export async function notifyExpenseDecision(
@@ -88,45 +63,36 @@ export async function notifyExpenseDecision(
   comment: string | null
 ) {
   const admin = createAdminClient();
-  const submitter = await submitterEmail(admin, expense.submitted_by);
-  if (!submitter) return;
 
-  const details = detailsBox([
-    ...(expense.expense_number ? [{ label: "Entry #", value: expense.expense_number }] : []),
-    { label: "Vendor", value: expense.vendor_name_raw ?? "—" },
-    { label: "Total", value: money(expense.total) },
+  await notify(admin, [
+    {
+      userId: expense.submitted_by,
+      kind: decision === "approved" ? "expense_approved" : "expense_declined",
+      title:
+        decision === "approved"
+          ? `Approved — ${expenseRef(expense)}`
+          : `Declined — ${expenseRef(expense)}`,
+      body:
+        decision === "approved"
+          ? `${money(expense.total)} approved and passed to Accounts for reimbursement.${comment ? ` Comment: ${comment}` : ""}`
+          : `${money(expense.total)} was declined. Please contact FMB Procurement Head.${comment ? ` Comment: ${comment}` : ""}`,
+      link: "/my-submissions",
+      expenseId: expense.id,
+    },
   ]);
-  const commentHtml = comment
-    ? `<p style="margin:8px 0 0 0; color:#6E5F52;">Comment: ${comment}</p>`
-    : "";
-
-  const bodyHtml =
-    decision === "approved"
-      ? `<p style="margin:0 0 8px 0;">Your expense was <strong style="color:#009C48;">approved</strong> and has moved to Accounts for reimbursement.</p>${details}${commentHtml}`
-      : `<p style="margin:0 0 8px 0;"><strong style="color:#4A160A;">Declined</strong> — please contact FMB Procurement Head.</p>${details}${commentHtml}`;
-
-  await sendEmail({
-    to: submitter,
-    subject: `Expense ${decision} — ${expenseRef(expense)}`,
-    html: emailTemplate(bodyHtml),
-  });
 }
 
 export async function notifyExpensePaid(expense: ExpenseSummary, paymentReference: string | null) {
   const admin = createAdminClient();
-  const submitter = await submitterEmail(admin, expense.submitted_by);
-  if (!submitter) return;
 
-  const details = detailsBox([
-    ...(expense.expense_number ? [{ label: "Entry #", value: expense.expense_number }] : []),
-    { label: "Vendor", value: expense.vendor_name_raw ?? "—" },
-    { label: "Total", value: money(expense.total) },
-    ...(paymentReference ? [{ label: "Reference", value: paymentReference }] : []),
+  await notify(admin, [
+    {
+      userId: expense.submitted_by,
+      kind: "expense_paid",
+      title: `Reimbursed — ${expenseRef(expense)}`,
+      body: `${money(expense.total)} has been paid.${paymentReference ? ` Reference: ${paymentReference}` : ""}`,
+      link: "/my-submissions",
+      expenseId: expense.id,
+    },
   ]);
-
-  await sendEmail({
-    to: submitter,
-    subject: `Expense reimbursed — ${expenseRef(expense)} (${money(expense.total)})`,
-    html: emailTemplate(`<p style="margin:0 0 8px 0;">Your expense has been paid.</p>${details}`),
-  });
 }

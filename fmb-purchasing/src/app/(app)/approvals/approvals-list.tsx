@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { reviewExpense, bulkReviewExpenses } from "./actions";
 import { formatDate } from "@/lib/format";
 import { FilterableSection, type BulkAction, type SortOption } from "@/components/filterable-section";
@@ -146,22 +147,12 @@ export function ApprovalsList({ expenses }: { expenses: ApprovalRow[] }) {
                     <span className="text-ink/70">Comment (optional)</span>
                     <input name="comment" className="input" />
                   </label>
-                  <button
-                    type="submit"
-                    name="decision"
-                    value="approved"
-                    className="rounded-md bg-palm/90 px-4 py-2 font-medium text-white hover:bg-palm"
-                  >
+                  <SubmitButton name="decision" value="approved" className="rounded-md bg-palm/90 px-4 py-2 font-medium text-white hover:bg-palm">
                     Approve
-                  </button>
-                  <button
-                    type="submit"
-                    name="decision"
-                    value="declined"
-                    className="rounded-md border border-maroon/40 px-4 py-2 font-medium text-maroon hover:bg-maroon/5"
-                  >
+                  </SubmitButton>
+                  <SubmitButton name="decision" value="declined" className="rounded-md border border-maroon/40 px-4 py-2 font-medium text-maroon hover:bg-maroon/5">
                     Decline
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
               </details>
