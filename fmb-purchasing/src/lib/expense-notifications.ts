@@ -27,10 +27,18 @@ async function emailsWithPermission(page: PageKey, action: ActionKey): Promise<s
 
 type ExpenseSummary = {
   id: string;
+  /** Human reference (E-0001) so replies can quote it — see migration 0015. */
+  expense_number?: string | null;
   vendor_name_raw: string | null;
   total: number;
   submitted_by: string;
 };
+
+/** "E-0001 — Madani Mart ($1320.00 AUD)", or just the vendor before numbering. */
+function expenseRef(e: ExpenseSummary): string {
+  const vendor = e.vendor_name_raw ?? "expense";
+  return e.expense_number ? `${e.expense_number} — ${vendor}` : vendor;
+}
 
 async function submitterEmail(admin: ReturnType<typeof createAdminClient>, userId: string): Promise<string | null> {
   const { data } = await admin.from("profiles").select("email").eq("id", userId).maybeSingle();
@@ -49,6 +57,7 @@ export async function notifyExpenseSubmitted(expense: ExpenseSummary) {
   ]);
 
   const details = detailsBox([
+    ...(expense.expense_number ? [{ label: "Entry #", value: expense.expense_number }] : []),
     { label: "Vendor", value: expense.vendor_name_raw ?? "—" },
     { label: "Total", value: money(expense.total) },
   ]);
@@ -56,7 +65,7 @@ export async function notifyExpenseSubmitted(expense: ExpenseSummary) {
   if (submitter) {
     await sendEmail({
       to: submitter,
-      subject: `Expense submitted — ${expense.vendor_name_raw ?? "expense"} (${money(expense.total)})`,
+      subject: `Expense submitted — ${expenseRef(expense)} (${money(expense.total)})`,
       html: emailTemplate(
         `<p style="margin:0 0 8px 0;">Your expense has been submitted for review.</p>${details}`
       ),
@@ -65,7 +74,7 @@ export async function notifyExpenseSubmitted(expense: ExpenseSummary) {
   if (reviewers.length) {
     await sendEmail({
       to: reviewers,
-      subject: `New expense to review — ${expense.vendor_name_raw ?? "expense"} (${money(expense.total)})`,
+      subject: `New expense to review — ${expenseRef(expense)} (${money(expense.total)})`,
       html: emailTemplate(
         `<p style="margin:0 0 8px 0;">A new expense is waiting for your review.</p>${details}`
       ),
@@ -83,6 +92,7 @@ export async function notifyExpenseDecision(
   if (!submitter) return;
 
   const details = detailsBox([
+    ...(expense.expense_number ? [{ label: "Entry #", value: expense.expense_number }] : []),
     { label: "Vendor", value: expense.vendor_name_raw ?? "—" },
     { label: "Total", value: money(expense.total) },
   ]);
@@ -97,7 +107,7 @@ export async function notifyExpenseDecision(
 
   await sendEmail({
     to: submitter,
-    subject: `Expense ${decision} — ${expense.vendor_name_raw ?? "expense"}`,
+    subject: `Expense ${decision} — ${expenseRef(expense)}`,
     html: emailTemplate(bodyHtml),
   });
 }
@@ -108,6 +118,7 @@ export async function notifyExpensePaid(expense: ExpenseSummary, paymentReferenc
   if (!submitter) return;
 
   const details = detailsBox([
+    ...(expense.expense_number ? [{ label: "Entry #", value: expense.expense_number }] : []),
     { label: "Vendor", value: expense.vendor_name_raw ?? "—" },
     { label: "Total", value: money(expense.total) },
     ...(paymentReference ? [{ label: "Reference", value: paymentReference }] : []),
@@ -115,7 +126,7 @@ export async function notifyExpensePaid(expense: ExpenseSummary, paymentReferenc
 
   await sendEmail({
     to: submitter,
-    subject: `Expense reimbursed — ${expense.vendor_name_raw ?? "expense"} (${money(expense.total)})`,
+    subject: `Expense reimbursed — ${expenseRef(expense)} (${money(expense.total)})`,
     html: emailTemplate(`<p style="margin:0 0 8px 0;">Your expense has been paid.</p>${details}`),
   });
 }

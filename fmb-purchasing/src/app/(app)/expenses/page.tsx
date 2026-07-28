@@ -6,7 +6,16 @@ import { getColumnPreference } from "@/lib/column-prefs";
 import { ExpensesTable, type ExpenseRow } from "./expenses-table";
 
 const PAGE_KEY = "all_expenses";
-const DEFAULT_VISIBLE = ["vendor", "submitted_by", "status", "invoice_number", "receipt", "total", "created_at"];
+const DEFAULT_VISIBLE = [
+  "expense_number",
+  "vendor",
+  "submitted_by",
+  "status",
+  "invoice_number",
+  "receipt",
+  "total",
+  "created_at",
+];
 
 export default async function AllExpensesPage() {
   const user = await getCurrentUser();
@@ -17,7 +26,7 @@ export default async function AllExpensesPage() {
   const { data: expenses } = await admin
     .from("expenses")
     .select(
-      "id, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at"
+      "id, expense_number, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at"
     )
     .order("created_at", { ascending: false });
 
@@ -37,6 +46,7 @@ export default async function AllExpensesPage() {
 
   const rows: ExpenseRow[] = (expenses ?? []).map((e) => ({
     id: e.id,
+    expenseNumber: e.expense_number,
     vendor_name_raw: e.vendor_name_raw,
     vendorNumber: e.vendor_id ? (vendorNumberById.get(e.vendor_id) ?? null) : null,
     submittedByName: nameById.get(e.submitted_by) ?? "—",

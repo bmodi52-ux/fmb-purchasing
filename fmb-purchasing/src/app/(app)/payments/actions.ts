@@ -16,7 +16,7 @@ async function markOnePaid(
 ) {
   const { data: expense } = await admin
     .from("expenses")
-    .select("id, status, vendor_name_raw, total, submitted_by")
+    .select("id, expense_number, status, vendor_name_raw, total, submitted_by")
     .eq("id", expenseId)
     .maybeSingle();
   if (!expense || expense.status !== "approved") return;

@@ -9,6 +9,7 @@ import type { ExportColumn } from "@/lib/export";
 
 export type SubmissionRow = {
   id: string;
+  expense_number: string | null;
   vendor_name_raw: string | null;
   invoice_number: string | null;
   total: number;
@@ -22,6 +23,7 @@ export type SubmissionRow = {
 };
 
 const EXPORT_COLUMNS: ExportColumn[] = [
+  { key: "expense_number", label: "Entry #" },
   { key: "vendor_name_raw", label: "Vendor" },
   { key: "invoice_number", label: "Invoice #" },
   { key: "total", label: "Total" },
@@ -84,6 +86,7 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                     onChange={() => selection.toggle(e.id)}
                     aria-label="Select submission"
                   />
+                  <span className="font-mono text-xs text-ink/50">{e.expense_number ?? "—"}</span>
                   <span className="font-medium text-ink">{e.vendor_name_raw}</span>
                   <span className="ml-2 text-sm text-ink/50">{formatDate(e.created_at)}</span>
                 </div>
