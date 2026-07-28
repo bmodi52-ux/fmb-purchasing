@@ -27,7 +27,7 @@ export default async function TeamsAdminPage() {
   return (
     <div className="flex flex-col gap-10">
       <div>
-        <h1 className="font-serif text-3xl font-semibold text-ink">Teams & permissions</h1>
+        <h1 className="page-title text-ink">Teams & permissions</h1>
         <p className="mt-1 max-w-xl text-ink/70">
           Create teams, assign members, and grant per-page, per-action access.
           &quot;Member&quot; is the default tier every new account starts in.
@@ -62,7 +62,7 @@ export default async function TeamsAdminPage() {
           return (
             <section key={team.id} className="rounded-lg border border-ink/10 bg-white/60 p-5">
               <div className="mb-4 flex items-center gap-2">
-                <h2 className="font-serif text-xl font-semibold text-ink">{team.name}</h2>
+                <h2 className="section-title text-ink">{team.name}</h2>
                 {team.is_default && (
                   <span className="rounded-full bg-palm/15 px-2 py-0.5 text-xs text-palm">
                     default

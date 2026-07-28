@@ -136,7 +136,7 @@ export default async function ReportsPage({
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-serif text-3xl font-semibold text-ink">Reports</h1>
+          <h1 className="page-title text-ink">Reports</h1>
           <p className="mt-1 text-ink/70">
             Fiscal year runs Shawwal → the following Ramadan on the Fatimi/Misri Hijri calendar (§8).
           </p>

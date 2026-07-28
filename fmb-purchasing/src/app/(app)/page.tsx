@@ -5,7 +5,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-serif text-3xl font-semibold text-ink">
+      <h1 className="page-title text-ink">
         Welcome, {user?.fullName || user?.username}
       </h1>
       <p className="max-w-xl text-ink/70">

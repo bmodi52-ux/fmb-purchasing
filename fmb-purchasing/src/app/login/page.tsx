@@ -8,7 +8,7 @@ export default function LoginPage() {
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <Image src="/fmb-logo.png" alt="FMB" width={56} height={56} className="rounded" />
           <div>
-            <h1 className="font-serif text-xl font-semibold text-ink">FMB Purchasing</h1>
+            <h1 className="brand-wordmark text-xl font-semibold text-ink">FMB Sydney</h1>
             <p className="text-sm text-ink/60">Sign in to continue</p>
           </div>
         </div>

@@ -35,7 +35,7 @@ export function AddVendorModal() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-serif text-xl font-semibold text-ink">Add vendor</h2>
+              <h2 className="section-title text-ink">Add vendor</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}

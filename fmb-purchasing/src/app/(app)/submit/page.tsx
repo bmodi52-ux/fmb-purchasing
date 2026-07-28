@@ -27,7 +27,7 @@ export default async function SubmitExpensePage({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-serif text-3xl font-semibold text-ink">
+        <h1 className="page-title text-ink">
           {editExpense ? "Edit expense" : "Submit expense"}
         </h1>
         <p className="mt-1 max-w-xl text-ink/70">

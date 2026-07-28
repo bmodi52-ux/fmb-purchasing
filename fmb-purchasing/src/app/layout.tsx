@@ -26,7 +26,7 @@ const amiri = Amiri({
 });
 
 export const metadata: Metadata = {
-  title: "FMB Purchasing",
+  title: "FMB Sydney",
   description: "Expense submission, approval and reporting for FMB.",
 };
 

@@ -194,7 +194,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           ← Pricelist
         </Link>
         <div className="mt-1 flex items-center gap-3">
-          <h1 className="font-serif text-3xl font-semibold text-ink">{item.name}</h1>
+          <h1 className="page-title text-ink">{item.name}</h1>
           <span className="font-mono text-sm text-ink/50">{item.item_number}</span>
         </div>
         <p className="mt-1 text-sm text-ink/50">
@@ -205,7 +205,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
       </div>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-4 font-serif text-lg font-semibold text-ink">Details</h2>
+        <h2 className="mb-4 section-title text-ink">Details</h2>
         <form action={updateItem} className="grid gap-4 sm:grid-cols-2">
           <input type="hidden" name="item_id" value={item.id} />
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
@@ -252,7 +252,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
       </section>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-1 font-serif text-lg font-semibold text-ink">What we&apos;ve actually paid</h2>
+        <h2 className="mb-1 section-title text-ink">What we&apos;ve actually paid</h2>
         <p className="mb-4 text-sm text-ink/50">
           Derived from submitted receipts rather than quoted pricelist prices — this is the figure that will cost a
           Thaali.
@@ -286,7 +286,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
       </section>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-4 font-serif text-lg font-semibold text-ink">Pack sizes &amp; vendor offers</h2>
+        <h2 className="mb-4 section-title text-ink">Pack sizes &amp; vendor offers</h2>
         <div className="flex flex-col gap-5">
           {(packSizes ?? []).map((p) => {
             const packOffers = offersByPackSize.get(p.id) ?? [];
@@ -506,7 +506,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
 
       {canEdit && (
         <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-          <h2 className="mb-1 font-serif text-lg font-semibold text-ink">Duplicates</h2>
+          <h2 className="mb-1 section-title text-ink">Duplicates</h2>
           <p className="mb-4 text-sm text-ink/50">
             Receipts create a new item whenever the wording differs, so the same product can end up recorded twice with
             its price history split between them.
@@ -524,7 +524,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
       )}
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-4 font-serif text-lg font-semibold text-ink">Item change history</h2>
+        <h2 className="mb-4 section-title text-ink">Item change history</h2>
         {(itemHistory ?? []).length === 0 ? (
           <p className="text-sm text-ink/50">No changes recorded yet.</p>
         ) : (

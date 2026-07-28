@@ -149,7 +149,7 @@ export default async function PricelistPage() {
     <div className="flex flex-col gap-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-serif text-3xl font-semibold text-ink">Pricelist</h1>
+          <h1 className="page-title text-ink">Pricelist</h1>
           <p className="mt-1 max-w-xl text-ink/70">
             Each item can have several pack sizes, and each pack size several
             vendor offers. Click an item for the full breakdown, its pack
@@ -204,13 +204,13 @@ export default async function PricelistPage() {
 
       {pending.length > 0 && (
         <section>
-          <h2 className="mb-2 font-serif text-lg font-semibold text-ink">Pending review ({pending.length})</h2>
+          <h2 className="mb-2 section-title text-ink">Pending review ({pending.length})</h2>
           <ItemsTable rows={pending} allOffers={rows} canApprove={canApprove} initialVisible={visibleColumns} />
         </section>
       )}
 
       <section>
-        <h2 className="mb-2 font-serif text-lg font-semibold text-ink">All offers</h2>
+        <h2 className="mb-2 section-title text-ink">All offers</h2>
         <ItemsTable rows={rest} allOffers={rows} canApprove={canApprove} initialVisible={visibleColumns} emptyLabel="None." />
       </section>
     </div>

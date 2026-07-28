@@ -138,7 +138,7 @@ export function SubmitForm({
         <form action={extractAction} className="flex flex-col gap-3 rounded-lg border-2 border-dashed border-ink/20 bg-white/50 p-8 text-center">
           <label className="cursor-pointer">
             <input type="file" name="file" accept="image/*,application/pdf" required className="hidden" onChange={(e) => e.target.form?.requestSubmit()} />
-            <span className="font-serif text-lg text-ink">Upload or scan a receipt</span>
+            <span className="section-title text-ink">Upload or scan a receipt</span>
             <p className="mt-1 text-sm text-ink/60">JPG, PNG, WebP, or PDF. Tap to choose a file.</p>
           </label>
           {extracting && <p className="font-mono text-sm text-ink/60">Reading receipt…</p>}
@@ -308,7 +308,7 @@ function ReviewForm(props: {
 
   return (
     <div className="rounded-lg border border-ink/10 bg-white/60 p-6">
-      <h2 className="font-serif text-xl font-semibold text-ink">Review details</h2>
+      <h2 className="section-title text-ink">Review details</h2>
       <p className="mb-5 text-sm text-ink/60">Check and correct anything before submitting.</p>
 
       {props.extractionNote && (

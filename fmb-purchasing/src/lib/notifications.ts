@@ -8,38 +8,50 @@ export const SITE_URL = "https://www.fmbpurchasing.com.au";
  * <style> blocks and don't support flexbox/grid — this is the standard,
  * lowest-common-denominator approach for HTML email.
  */
+/** Sans stack that resolves to the host OS UI face — the closest an email can
+ *  get to the Inter used in the app, since webfonts are unreliable in mail. */
+const EMAIL_FONT =
+  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+
 export function emailTemplate(bodyHtml: string): string {
   return `
 <!doctype html>
 <html>
-  <body style="margin:0; padding:0; background-color:#F5EEDE; font-family:Georgia,'Times New Roman',serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F5EEDE; padding:32px 16px;">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+  </head>
+  <body style="margin:0; padding:0; background-color:#FFFFFF; font-family:${EMAIL_FONT};">
+    <!-- A narrow card floating in a wide field of brand colour looks stranded on
+         a desktop client. Neutral surround, left-aligned card, and a modest
+         600px measure so it reads as a letter rather than a coloured slab. -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF; padding:24px 16px;">
       <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background-color:#FBF6EC; border-radius:8px; overflow:hidden;">
+        <td align="left">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px; border:1px solid #EFE7D8; border-radius:10px; overflow:hidden;">
             <tr>
-              <td style="padding:24px 32px 16px 32px; border-bottom:2px solid #D89C24;">
+              <td style="padding:18px 24px; background-color:#FBF6EC; border-bottom:1px solid #EFE7D8;">
                 <table role="presentation" cellpadding="0" cellspacing="0">
                   <tr>
-                    <td style="padding-right:12px;">
-                      <img src="${SITE_URL}/fmb-logo.png" width="40" height="40" alt="FMB" style="display:block; border-radius:4px;" />
+                    <td style="padding-right:10px; vertical-align:middle;">
+                      <img src="${SITE_URL}/fmb-logo.png" width="32" height="32" alt="FMB" style="display:block; border-radius:4px;" />
                     </td>
-                    <td>
-                      <p style="margin:0; font-size:18px; font-weight:bold; color:#2B211C;">FMB Purchasing</p>
-                      <p style="margin:0; font-size:12px; color:#6E5F52;">Faiz ul Mawaid il Burhaniyah</p>
+                    <td style="vertical-align:middle;">
+                      <p style="margin:0; font-family:Georgia,'Times New Roman',serif; font-size:16px; font-weight:bold; color:#2B211C; letter-spacing:-0.01em;">FMB Sydney</p>
+                      <p style="margin:1px 0 0 0; font-size:11px; color:#8A7B6C;">Faiz ul Mawaid il Burhaniyah</p>
                     </td>
                   </tr>
                 </table>
               </td>
             </tr>
             <tr>
-              <td style="padding:24px 32px; font-family:Georgia,'Times New Roman',serif; font-size:14px; line-height:1.6; color:#2B211C;">
+              <td style="padding:22px 24px; font-family:${EMAIL_FONT}; font-size:15px; line-height:1.55; color:#2B211C;">
                 ${bodyHtml}
               </td>
             </tr>
             <tr>
-              <td style="padding:16px 32px 24px 32px; border-top:1px solid #E7DCC5;">
-                <p style="margin:0; font-size:11px; color:#948572;">This is an automated message from FMB Purchasing. Please don't reply directly to this email.</p>
+              <td style="padding:14px 24px; border-top:1px solid #EFE7D8; background-color:#FCFAF5;">
+                <p style="margin:0; font-family:${EMAIL_FONT}; font-size:11px; line-height:1.5; color:#9A8B7B;">Automated message from FMB Sydney — please don&rsquo;t reply to this address.</p>
               </td>
             </tr>
           </table>
@@ -56,13 +68,13 @@ export function detailsBox(rows: { label: string; value: string }[]): string {
     .map(
       ({ label, value }) => `
       <tr>
-        <td style="padding:4px 0; color:#6E5F52; font-size:13px;">${label}</td>
-        <td style="padding:4px 0; color:#2B211C; font-size:13px; text-align:right; font-weight:bold;">${value}</td>
+        <td style="padding:5px 0; font-family:${EMAIL_FONT}; color:#7A6B5C; font-size:13px;">${label}</td>
+        <td style="padding:5px 0; font-family:${EMAIL_FONT}; color:#2B211C; font-size:13px; text-align:right; font-weight:600;">${value}</td>
       </tr>`
     )
     .join("");
   return `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF; border:1px solid #E7DCC5; border-radius:6px; padding:12px 16px; margin:16px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FCFAF5; border:1px solid #EFE7D8; border-radius:8px; padding:10px 14px; margin:14px 0;">
       ${rowsHtml}
     </table>`;
 }
@@ -88,7 +100,7 @@ export async function sendEmail({
     return;
   }
 
-  const from = process.env.RESEND_FROM_EMAIL || "FMB Purchasing <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM_EMAIL || "FMB Sydney <onboarding@resend.dev>";
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
