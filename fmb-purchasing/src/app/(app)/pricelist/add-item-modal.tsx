@@ -32,7 +32,7 @@ export function AddItemModal({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-md bg-gold px-4 py-2 font-medium text-ink transition-colors hover:bg-gold-deep"
+        className="self-start whitespace-nowrap rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-gold-deep"
       >
         + Add item
       </button>

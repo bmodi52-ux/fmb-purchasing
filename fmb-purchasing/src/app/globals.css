@@ -24,17 +24,14 @@
   --font-arabic: var(--font-amiri);
 }
 
-/* Base size drives every rem in Tailwind — text *and* spacing — so setting it
-   here scales the whole interface proportionally rather than only the type.
-   14px on phones, 15px from small tablets up; the old 16px default read as
-   oversized for a dense data application. */
+/* Base size drives every rem in Tailwind — text *and* spacing — so it scales
+   the whole interface, not only the type. 15px reads tighter than the 16px
+   default without dragging the small end down: at 14px the text-xs used for
+   table meta fell to 10.5px, which is too small to read on a phone. Mobile
+   proportion is handled by the clamps below and by hierarchy, not by
+   shrinking everything further. */
 html {
-  font-size: 14px;
-}
-@media (min-width: 640px) {
-  html {
-    font-size: 15px;
-  }
+  font-size: 15px;
 }
 
 body {
@@ -52,19 +49,30 @@ h1, h2, h3, h4 {
 }
 
 /* Fluid between phone and desktop, so titles stay proportional to the viewport
-   without a stack of responsive utility classes on every heading. */
+   without a stack of responsive utility classes on every heading.
+   The lower bounds matter as much as the upper: a section title that lands
+   within a pixel of body text gives a page no hierarchy at all, which is what
+   happened on phones before these were raised. */
 .page-title {
-  font-size: clamp(1.3rem, 1.05rem + 1vw, 1.65rem);
+  font-size: clamp(1.25rem, 1.05rem + 0.9vw, 1.6rem);
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.021em;
 }
 
 .section-title {
-  font-size: clamp(0.98rem, 0.94rem + 0.28vw, 1.1rem);
+  font-size: clamp(1.1rem, 1.05rem + 0.3vw, 1.2rem);
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.014em;
+}
+
+/* Standfirst under a page title. Explicitly secondary so prose stops
+   competing with the brand and the heading above it. */
+.page-description {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: rgb(43 33 28 / 0.68);
 }
 
 /* The wordmark keeps the serif, so the brand still has a distinctive mark. */

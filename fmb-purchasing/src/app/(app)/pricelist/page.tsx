@@ -147,10 +147,12 @@ export default async function PricelistPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex items-start justify-between gap-4">
+      {/* Stacked on phones: side by side, the action button gets squeezed to
+          roughly its own width and wraps mid-label. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div>
           <h1 className="page-title text-ink">Pricelist</h1>
-          <p className="mt-1 max-w-xl text-ink/70">
+          <p className="page-description mt-1 max-w-xl">
             Each item can have several pack sizes, and each pack size several
             vendor offers. Click an item for the full breakdown, its pack
             sizes and offers, and change history.

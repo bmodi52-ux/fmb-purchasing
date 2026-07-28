@@ -28,7 +28,7 @@ export default async function TeamsAdminPage() {
     <div className="flex flex-col gap-10">
       <div>
         <h1 className="page-title text-ink">Teams & permissions</h1>
-        <p className="mt-1 max-w-xl text-ink/70">
+        <p className="page-description mt-1 max-w-xl">
           Create teams, assign members, and grant per-page, per-action access.
           &quot;Member&quot; is the default tier every new account starts in.
         </p>

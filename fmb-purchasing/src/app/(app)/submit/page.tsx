@@ -30,7 +30,7 @@ export default async function SubmitExpensePage({
         <h1 className="page-title text-ink">
           {editExpense ? "Edit expense" : "Submit expense"}
         </h1>
-        <p className="mt-1 max-w-xl text-ink/70">
+        <p className="page-description mt-1 max-w-xl">
           {editExpense
             ? "You can edit this until it's approved or declined."
             : "Upload a receipt for AI extraction, or enter the details manually. A receipt is never required."}

@@ -73,7 +73,7 @@ export default async function ApprovalsPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="page-title text-ink">Approvals</h1>
-        <p className="mt-1 text-ink/70">{expenses.length} expense(s) waiting for review.</p>
+        <p className="page-description mt-1">{expenses.length} expense(s) waiting for review.</p>
       </div>
 
       <ApprovalsList expenses={rows} />

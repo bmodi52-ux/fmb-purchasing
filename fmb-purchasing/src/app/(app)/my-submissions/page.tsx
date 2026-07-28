@@ -24,7 +24,7 @@ export default async function MySubmissionsPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="page-title text-ink">My submissions</h1>
-        <p className="mt-1 text-ink/70">Track the status of expenses you&apos;ve submitted.</p>
+        <p className="page-description mt-1">Track the status of expenses you&apos;ve submitted.</p>
       </div>
 
       <SubmissionsList expenses={rows} />

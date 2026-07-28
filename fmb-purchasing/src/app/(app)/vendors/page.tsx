@@ -60,10 +60,12 @@ export default async function VendorsPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex items-start justify-between gap-4">
+      {/* Stacked on phones: side by side, the action button gets squeezed to
+          roughly its own width and wraps mid-label. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div>
           <h1 className="page-title text-ink">Vendors</h1>
-          <p className="mt-1 max-w-xl text-ink/70">
+          <p className="page-description mt-1 max-w-xl">
             Vendors typed or extracted on the submit form appear here as
             pending until reviewed — that never blocks the expense they came
             from. Click a vendor for billing address, collection addresses,
