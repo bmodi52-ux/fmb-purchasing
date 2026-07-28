@@ -7,6 +7,7 @@ import { formatFiscalYear } from "@/lib/fiscal-year";
 
 export type ExpenseRow = {
   id: string;
+  expenseNumber: string | null;
   vendor_name_raw: string | null;
   vendorNumber: string | null;
   submittedByName: string;
@@ -26,6 +27,12 @@ export type ExpenseRow = {
 };
 
 const ALL_COLUMNS: ColumnDef<ExpenseRow>[] = [
+  {
+    key: "expense_number",
+    label: "Entry #",
+    render: (r) => <span className="font-mono text-ink/70">{r.expenseNumber ?? "—"}</span>,
+    exportValue: (r) => r.expenseNumber ?? "",
+  },
   { key: "vendor", label: "Vendor", render: (r) => r.vendor_name_raw ?? "—", exportValue: (r) => r.vendor_name_raw ?? "" },
   {
     key: "vendor_number",

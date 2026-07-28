@@ -13,7 +13,7 @@ export default async function ApprovalsPage() {
   const admin = createAdminClient();
   const { data: expenses } = await admin
     .from("expenses")
-    .select("id, vendor_name_raw, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, submitted_by, created_at")
+    .select("id, expense_number, vendor_name_raw, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, submitted_by, created_at")
     .eq("status", "submitted")
     .order("created_at");
 
@@ -50,6 +50,7 @@ export default async function ApprovalsPage() {
 
   const rows: ApprovalRow[] = expenses.map((e) => ({
     id: e.id,
+    expense_number: e.expense_number,
     vendor_name_raw: e.vendor_name_raw,
     invoice_number: e.invoice_number,
     receipt_date: e.receipt_date,

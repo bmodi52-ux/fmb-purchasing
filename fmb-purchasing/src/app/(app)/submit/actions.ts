@@ -266,7 +266,7 @@ export async function createExpense(
       status: "submitted",
       fiscal_year_hijri: fiscalYear,
     })
-    .select("id")
+    .select("id, expense_number")
     .single();
 
   if (expenseError || !expense) {
@@ -313,6 +313,7 @@ export async function createExpense(
 
   await notifyExpenseSubmitted({
     id: expense.id,
+    expense_number: expense.expense_number,
     vendor_name_raw: input.vendorName,
     total: input.total,
     submitted_by: user.id,

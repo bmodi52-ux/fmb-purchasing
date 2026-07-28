@@ -9,6 +9,7 @@ import type { ExportColumn } from "@/lib/export";
 
 export type PaymentRow = {
   id: string;
+  expense_number: string | null;
   vendor_name_raw: string | null;
   invoice_number: string | null;
   total: number;
@@ -18,6 +19,7 @@ export type PaymentRow = {
 };
 
 const EXPORT_COLUMNS: ExportColumn[] = [
+  { key: "expense_number", label: "Entry #" },
   { key: "vendor_name_raw", label: "Vendor" },
   { key: "submittedByName", label: "Submitted by" },
   { key: "invoice_number", label: "Invoice" },
@@ -107,6 +109,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                     <th className="p-2">
                       <span className="sr-only">Select</span>
                     </th>
+                    <th className="p-2">Entry #</th>
                     <th className="p-2">Vendor</th>
                     <th className="p-2">Submitted by</th>
                     <th className="p-2">Invoice</th>
@@ -129,6 +132,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                           aria-label="Select expense"
                         />
                       </td>
+                      <td className="p-2 font-mono text-xs text-ink/60">{e.expense_number ?? "—"}</td>
                       <td className="p-2">{e.vendor_name_raw}</td>
                       <td className="p-2 text-ink/70">{e.submittedByName}</td>
                       <td className="p-2 text-ink/70">{e.invoice_number || "—"}</td>

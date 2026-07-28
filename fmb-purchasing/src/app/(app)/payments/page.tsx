@@ -12,7 +12,7 @@ export default async function PaymentsPage() {
   const admin = createAdminClient();
   const { data: expenses } = await admin
     .from("expenses")
-    .select("id, vendor_name_raw, invoice_number, total, decided_at, submitted_by, receipt_file_path")
+    .select("id, expense_number, vendor_name_raw, invoice_number, total, decided_at, submitted_by, receipt_file_path")
     .eq("status", "approved")
     .order("decided_at");
 
@@ -24,6 +24,7 @@ export default async function PaymentsPage() {
 
   const rows: PaymentRow[] = (expenses ?? []).map((e) => ({
     id: e.id,
+    expense_number: e.expense_number,
     vendor_name_raw: e.vendor_name_raw,
     invoice_number: e.invoice_number,
     total: e.total,

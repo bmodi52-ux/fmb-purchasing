@@ -16,6 +16,7 @@ export type ApprovalLineItem = {
 
 export type ApprovalRow = {
   id: string;
+  expense_number: string | null;
   vendor_name_raw: string | null;
   invoice_number: string | null;
   receipt_date: string | null;
@@ -29,6 +30,7 @@ export type ApprovalRow = {
 };
 
 const EXPORT_COLUMNS: ExportColumn[] = [
+  { key: "expense_number", label: "Entry #" },
   { key: "vendor_name_raw", label: "Vendor" },
   { key: "submittedByName", label: "Submitted by" },
   { key: "invoice_number", label: "Invoice #" },
@@ -89,6 +91,7 @@ export function ApprovalsList({ expenses }: { expenses: ApprovalRow[] }) {
               <details className="flex-1 rounded-lg border border-ink/10 bg-white/60 p-4">
               <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3">
                 <div>
+                  <span className="mr-2 font-mono text-xs text-ink/50">{e.expense_number ?? "—"}</span>
                   <span className="font-medium text-ink">{e.vendor_name_raw}</span>
                   <span className="ml-2 text-sm text-ink/50">
                     {e.submittedByName} · {formatDate(e.created_at)}
