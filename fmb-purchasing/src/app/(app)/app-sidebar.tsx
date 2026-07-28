@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { NavLink } from "./nav-link";
@@ -17,9 +17,20 @@ export function AppSidebar({
   signOutAction: (formData: FormData) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Which link is mid-navigation, tracked by href so a link going idle can't
+  // clear a bar that a different link now owns.
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  const handlePendingChange = useCallback((href: string, pending: boolean) => {
+    setPendingHref((current) => (pending ? href : current === href ? null : current));
+  }, []);
 
   return (
     <div className="relative md:contents">
+      {/* Deliberately outside the <aside>: tapping a link closes the mobile
+          menu, and a display:none ancestor would stop this rendering. */}
+      {pendingHref && <span className="route-progress" aria-hidden />}
+
       {/* Mobile-only top bar: unaffected by md: below, invisible on desktop */}
       <div className="flex items-center justify-between border-b border-gold/20 bg-cream px-4 py-3 md:hidden">
         <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
@@ -64,7 +75,13 @@ export function AppSidebar({
 
         <nav className="flex flex-1 flex-col gap-1 text-sm">
           {navItems.map((item) => (
-            <NavLink key={item.key} href={item.href} label={item.label} onNavigate={() => setOpen(false)} />
+            <NavLink
+              key={item.key}
+              href={item.href}
+              label={item.label}
+              onNavigate={() => setOpen(false)}
+              onPendingChange={handlePendingChange}
+            />
           ))}
         </nav>
 
