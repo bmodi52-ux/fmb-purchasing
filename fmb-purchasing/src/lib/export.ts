@@ -118,7 +118,7 @@ export async function exportPdf(filename: string, title: string, columns: Export
     doc.setFont("times", "bold");
     doc.setFontSize(15);
     doc.setTextColor(...FMB_INK);
-    doc.text("FMB Purchasing", titleX, 16);
+    doc.text("FMB Sydney", titleX, 16);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
@@ -159,7 +159,7 @@ export async function exportPdf(filename: string, title: string, columns: Export
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(150, 138, 122);
-    doc.text(`FMB Purchasing · Page ${i} of ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: "center" });
+    doc.text(`FMB Sydney · Page ${i} of ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: "center" });
   }
 
   doc.save(filename);

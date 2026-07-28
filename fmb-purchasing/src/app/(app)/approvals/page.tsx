@@ -20,7 +20,7 @@ export default async function ApprovalsPage() {
   if (!expenses || expenses.length === 0) {
     return (
       <div className="flex flex-col gap-3">
-        <h1 className="font-serif text-3xl font-semibold text-ink">Approvals</h1>
+        <h1 className="page-title text-ink">Approvals</h1>
         <p className="text-sm text-ink/50">Nothing waiting for review.</p>
       </div>
     );
@@ -72,7 +72,7 @@ export default async function ApprovalsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-serif text-3xl font-semibold text-ink">Approvals</h1>
+        <h1 className="page-title text-ink">Approvals</h1>
         <p className="mt-1 text-ink/70">{expenses.length} expense(s) waiting for review.</p>
       </div>
 

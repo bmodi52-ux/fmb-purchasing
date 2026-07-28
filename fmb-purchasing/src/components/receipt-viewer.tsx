@@ -48,7 +48,7 @@ export function ReceiptViewer({ expenseId, label = "View receipt" }: { expenseId
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-ink/10 px-4 py-2">
-              <span className="font-serif text-sm text-ink">Receipt</span>
+              <span className="section-title text-ink">Receipt</span>
               <div className="flex items-center gap-3">
                 {url && (
                   <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-ink/60 underline">

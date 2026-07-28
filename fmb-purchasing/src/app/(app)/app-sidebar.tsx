@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { NavLink } from "./nav-link";
 
 type NavItem = { key: string; href: string; label: string };
 
@@ -23,7 +24,7 @@ export function AppSidebar({
       <div className="flex items-center justify-between border-b border-gold/20 bg-cream px-4 py-3 md:hidden">
         <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
           <Image src="/fmb-logo.png" alt="FMB" width={28} height={28} className="rounded" />
-          <span className="font-serif text-base font-semibold text-ink">FMB Purchasing</span>
+          <span className="brand-wordmark text-base font-semibold text-ink">FMB Sydney</span>
         </Link>
         <button
           type="button"
@@ -52,7 +53,7 @@ export function AppSidebar({
         <Link href="/" className="hidden items-center gap-3 md:flex">
           <Image src="/fmb-logo.png" alt="FMB" width={40} height={40} className="rounded" />
           <div>
-            <p className="font-serif text-lg font-semibold leading-tight text-ink">FMB Purchasing</p>
+            <p className="brand-wordmark text-lg font-semibold leading-tight text-ink">FMB Sydney</p>
             <p className="text-xs text-ink/60">Faiz ul Mawaid il Burhaniyah</p>
           </div>
         </Link>
@@ -63,15 +64,7 @@ export function AppSidebar({
 
         <nav className="flex flex-1 flex-col gap-1 text-sm">
           {navItems.map((item) => (
-            <Link
-              key={item.key}
-              href={item.href}
-              prefetch={false}
-              onClick={() => setOpen(false)}
-              className="rounded-md px-3 py-2 text-ink/70 transition-colors hover:bg-gold/15 hover:text-ink"
-            >
-              {item.label}
-            </Link>
+            <NavLink key={item.key} href={item.href} label={item.label} onNavigate={() => setOpen(false)} />
           ))}
         </nav>
 

@@ -24,13 +24,53 @@
   --font-arabic: var(--font-amiri);
 }
 
+/* Base size drives every rem in Tailwind — text *and* spacing — so setting it
+   here scales the whole interface proportionally rather than only the type.
+   14px on phones, 15px from small tablets up; the old 16px default read as
+   oversized for a dense data application. */
+html {
+  font-size: 14px;
+}
+@media (min-width: 640px) {
+  html {
+    font-size: 15px;
+  }
+}
+
 body {
   background: var(--color-cream);
   color: var(--color-ink);
 }
 
+/* Fraunces is reserved for the FMB wordmark now. Headings use the same
+   grotesque as the rest of the interface, differentiated by weight and tighter
+   tracking instead of by typeface — which is what makes it read as modern and
+   cohesive rather than two competing voices on one page. */
 h1, h2, h3, h4 {
+  font-family: var(--font-inter);
+  letter-spacing: -0.011em;
+}
+
+/* Fluid between phone and desktop, so titles stay proportional to the viewport
+   without a stack of responsive utility classes on every heading. */
+.page-title {
+  font-size: clamp(1.3rem, 1.05rem + 1vw, 1.65rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.021em;
+}
+
+.section-title {
+  font-size: clamp(0.98rem, 0.94rem + 0.28vw, 1.1rem);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.014em;
+}
+
+/* The wordmark keeps the serif, so the brand still has a distinctive mark. */
+.brand-wordmark {
   font-family: var(--font-fraunces);
+  letter-spacing: -0.01em;
 }
 
 .font-mono,
@@ -84,4 +124,128 @@ select.input:disabled {
 input[type="checkbox"],
 input[type="radio"] {
   accent-color: var(--color-gold-deep);
+}
+
+/* ---------------------------------------------------------------------
+   Navigation feedback
+   ---------------------------------------------------------------------
+   Every nav link sets prefetch={false} (for the reasons in the perf work),
+   and every destination is a dynamic, database-backed page. A tap therefore
+   has a real wait before anything visibly changes, which on a phone reads as
+   the app having ignored you. Three layers of feedback, cheapest first:
+   :active fires instantly on touch, pending covers the wait, and aria-current
+   marks where you ended up. */
+
+.nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  color: rgb(43 33 28 / 0.7);
+  transition: background-color 120ms ease, color 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-link:hover {
+  background-color: rgb(216 156 36 / 0.15);
+  color: var(--color-ink);
+}
+
+/* Instant, no JavaScript involved — the finger is still down. */
+.nav-link:active {
+  background-color: rgb(216 156 36 / 0.28);
+  color: var(--color-ink);
+}
+
+.nav-link[data-pending="true"] {
+  background-color: rgb(216 156 36 / 0.18);
+  color: var(--color-ink);
+}
+
+.nav-link[aria-current="page"] {
+  background-color: rgb(216 156 36 / 0.16);
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+/* Left marker on the current page, drawn inside so it can't shift layout. */
+.nav-link[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 2px;
+  border-radius: 1px;
+  background-color: var(--color-gold-deep);
+}
+
+/* Always rendered at a fixed size and revealed with opacity, so appearing
+   mid-navigation can't nudge the label sideways. */
+.nav-spinner {
+  flex: none;
+  width: 0.8em;
+  height: 0.8em;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.nav-spinner[data-pending="true"] {
+  opacity: 0.65;
+  animation: fmb-spin 0.6s linear infinite;
+}
+
+@keyframes fmb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Indeterminate hairline across the top of the viewport while a navigation is
+   in flight — the browser-style cue, at 2px so it informs without shouting. */
+.route-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 2px;
+  z-index: 60;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.route-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-gold) 45%,
+    var(--color-gold-deep) 55%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: fmb-progress 1.05s ease-in-out infinite;
+}
+
+@keyframes fmb-progress {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-spinner[data-pending="true"] {
+    animation: none;
+  }
+  .route-progress::after {
+    animation: none;
+    transform: none;
+    opacity: 0.5;
+  }
 }

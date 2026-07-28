@@ -53,9 +53,9 @@ export async function createUser(
 
   await sendEmail({
     to: contactEmail,
-    subject: "Welcome to FMB Purchasing — your account is ready",
+    subject: "Welcome to FMB Sydney — your account is ready",
     html: emailTemplate(`
-      <p style="margin:0 0 8px 0;">Hi ${fullName}, an account has been created for you on FMB Purchasing.</p>
+      <p style="margin:0 0 8px 0;">Hi ${fullName}, an account has been created for you on FMB Sydney.</p>
       ${detailsBox([
         { label: "Username", value: username },
         { label: "Temporary password", value: password },

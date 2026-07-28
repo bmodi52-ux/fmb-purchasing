@@ -109,12 +109,12 @@ export function ReportsView({
       </div>
 
       <section>
-        <h2 className="mb-2 font-serif text-xl font-semibold text-ink">Status breakdown</h2>
+        <h2 className="mb-2 section-title text-ink">Status breakdown</h2>
         <StackedBar data={statusBreakdown} />
       </section>
 
       <section>
-        <h2 className="mb-2 font-serif text-xl font-semibold text-ink">Spend over time</h2>
+        <h2 className="mb-2 section-title text-ink">Spend over time</h2>
         <LineChart
           series={[{ name: "Spend", points: spendOverTime }]}
           area
@@ -125,7 +125,7 @@ export function ReportsView({
 
       <section>
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="font-serif text-xl font-semibold text-ink">Spend by category</h2>
+          <h2 className="section-title text-ink">Spend by category</h2>
           <button
             type="button"
             onClick={() =>
@@ -170,7 +170,7 @@ export function ReportsView({
 
       <section>
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="font-serif text-xl font-semibold text-ink">Spend by vendor</h2>
+          <h2 className="section-title text-ink">Spend by vendor</h2>
           <button
             type="button"
             onClick={() =>
@@ -216,7 +216,7 @@ export function ReportsView({
       <section>
         <div className="mb-2 flex items-center justify-between">
           <div>
-            <h2 className="font-serif text-xl font-semibold text-ink">Per-unit cost trends</h2>
+            <h2 className="section-title text-ink">Per-unit cost trends</h2>
             <p className="text-sm text-ink/60">
               $/unit over time per item, grouped across vendors and spelling variants. Compare vendors within a group.
             </p>

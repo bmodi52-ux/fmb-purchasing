@@ -36,7 +36,7 @@ export default async function PaymentsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-serif text-3xl font-semibold text-ink">Payments</h1>
+        <h1 className="page-title text-ink">Payments</h1>
         <p className="mt-1 text-ink/70">
           Approved expenses ready for reimbursement. Mark paid once the bank transfer is complete — this is a
           record-keeping step only, no payment is processed here.

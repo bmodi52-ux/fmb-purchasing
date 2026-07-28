@@ -62,7 +62,7 @@ export default async function VendorsPage() {
     <div className="flex flex-col gap-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-serif text-3xl font-semibold text-ink">Vendors</h1>
+          <h1 className="page-title text-ink">Vendors</h1>
           <p className="mt-1 max-w-xl text-ink/70">
             Vendors typed or extracted on the submit form appear here as
             pending until reviewed — that never blocks the expense they came
@@ -75,13 +75,13 @@ export default async function VendorsPage() {
 
       {pending.length > 0 && (
         <section>
-          <h2 className="mb-2 font-serif text-lg font-semibold text-ink">Pending review ({pending.length})</h2>
+          <h2 className="mb-2 section-title text-ink">Pending review ({pending.length})</h2>
           <VendorsTable vendors={pending} canApprove={canApprove} initialVisible={visibleColumns} />
         </section>
       )}
 
       <section>
-        <h2 className="mb-2 font-serif text-lg font-semibold text-ink">All vendors</h2>
+        <h2 className="mb-2 section-title text-ink">All vendors</h2>
         <VendorsTable vendors={rest} canApprove={canApprove} initialVisible={visibleColumns} emptyLabel="None." />
       </section>
     </div>

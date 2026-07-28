@@ -43,7 +43,7 @@ export default async function UsersAdminPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="font-serif text-3xl font-semibold text-ink">Users</h1>
+        <h1 className="page-title text-ink">Users</h1>
         <p className="mt-1 max-w-xl text-ink/70">
           Manual username/password accounts. Every new account starts in the
           default &quot;Member&quot; team; assign additional teams from{" "}

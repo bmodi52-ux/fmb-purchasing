@@ -38,13 +38,13 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
           ← Vendors
         </Link>
         <div className="mt-1 flex items-center gap-3">
-          <h1 className="font-serif text-3xl font-semibold text-ink">{vendor.name}</h1>
+          <h1 className="page-title text-ink">{vendor.name}</h1>
           <span className="font-mono text-sm text-ink/50">{vendor.vendor_number}</span>
         </div>
       </div>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-4 font-serif text-lg font-semibold text-ink">Details</h2>
+        <h2 className="mb-4 section-title text-ink">Details</h2>
         <form action={updateVendorDetails} className="grid gap-4 sm:grid-cols-2">
           <input type="hidden" name="vendor_id" value={vendor.id} />
           <Field label="Vendor name">
@@ -75,7 +75,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
       </section>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-4 font-serif text-lg font-semibold text-ink">Collection addresses</h2>
+        <h2 className="mb-4 section-title text-ink">Collection addresses</h2>
         <ul className="mb-4 flex flex-col gap-3">
           {(addresses ?? []).map((a) => (
             <li key={a.id} className="flex items-start justify-between rounded-md border border-ink/10 bg-white p-3 text-sm">
@@ -117,7 +117,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
       </section>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-4 font-serif text-lg font-semibold text-ink">Contact persons</h2>
+        <h2 className="mb-4 section-title text-ink">Contact persons</h2>
         <ul className="mb-4 flex flex-col gap-2">
           {(contacts ?? []).map((c) => (
             <li key={c.id} className="flex items-center justify-between rounded-md border border-ink/10 bg-white p-3 text-sm">

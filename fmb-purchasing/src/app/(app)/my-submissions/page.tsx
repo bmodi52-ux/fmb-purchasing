@@ -23,7 +23,7 @@ export default async function MySubmissionsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-serif text-3xl font-semibold text-ink">My submissions</h1>
+        <h1 className="page-title text-ink">My submissions</h1>
         <p className="mt-1 text-ink/70">Track the status of expenses you&apos;ve submitted.</p>
       </div>
 
