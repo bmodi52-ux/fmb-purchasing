@@ -11,9 +11,10 @@ export function LoginForm() {
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1 text-sm">
-        <span className="text-ink/70">Username</span>
+        <span className="text-ink/70">Email address</span>
         <input
-          name="username"
+          name="email"
+          type="email"
           autoComplete="username"
           required
           className="rounded-md border border-ink/15 bg-white px-3 py-2 text-ink outline-none focus:border-gold focus:ring-1 focus:ring-gold"
@@ -39,6 +40,10 @@ export function LoginForm() {
       >
         {pending ? "Signing in…" : "Sign in"}
       </button>
+
+      <a href="/forgot-password" className="text-center text-sm text-ink/60 underline hover:text-ink">
+        Forgot your password?
+      </a>
     </form>
   );
 }

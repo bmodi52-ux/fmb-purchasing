@@ -82,6 +82,13 @@ export function AppSidebar({
 
         <div className="flex flex-col gap-1 border-t border-ink/10 pt-4 text-sm">
           <p className="px-3 text-ink/60">{userName}</p>
+          <Link
+            href="/change-password"
+            onClick={() => setOpen(false)}
+            className="rounded-md px-3 py-2 text-ink/70 transition-colors hover:bg-gold/15 hover:text-ink"
+          >
+            Change password
+          </Link>
           <form action={signOutAction}>
             <SubmitButton className="w-full rounded-md px-3 py-2 text-left text-ink/70 transition-colors hover:bg-maroon/10 hover:text-maroon">
               Sign out

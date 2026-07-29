@@ -17,7 +17,7 @@ export default async function TeamsAdminPage() {
       admin.from("app_pages").select("key, label, sort_order").order("sort_order"),
       admin.from("app_actions").select("key, label"),
       admin.from("team_permissions").select("team_id, page_key, action_key"),
-      admin.from("profiles").select("id, username, full_name").order("username"),
+      admin.from("profiles").select("id, email, full_name").order("full_name"),
       admin.from("team_members").select("team_id, user_id"),
     ]);
 
@@ -77,7 +77,7 @@ export default async function TeamsAdminPage() {
                       if (!p) return null;
                       return (
                         <li key={userId} className="flex items-center justify-between text-sm">
-                          <span>{p.full_name || p.username}</span>
+                          <span>{p.full_name || p.email}</span>
                           <form action={removeTeamMember}>
                             <input type="hidden" name="team_id" value={team.id} />
                             <input type="hidden" name="user_id" value={userId} />
@@ -103,7 +103,7 @@ export default async function TeamsAdminPage() {
                       >
                         {nonMembers.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.full_name || p.username}
+                            {p.full_name || p.email}
                           </option>
                         ))}
                       </select>

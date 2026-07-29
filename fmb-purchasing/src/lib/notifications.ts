@@ -1,6 +1,10 @@
 // Email clients need a real, publicly-reachable URL for images — can't
 // reference localhost or a relative path. Update this if the domain changes.
-export const SITE_URL = "https://www.fmbpurchasing.com.au";
+//
+// Overridable so a local build can send itself a working password-reset link;
+// unset (as in production) it stays the live domain.
+export const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://www.fmbpurchasing.com.au";
 
 /**
  * Wraps a notification's body HTML in the FMB branded header/footer.
@@ -62,7 +66,7 @@ export function emailTemplate(bodyHtml: string): string {
 </html>`;
 }
 
-/** A bordered white key/value box for a handful of rows — vendor/total, username/password, etc. */
+/** A bordered white key/value box for a handful of rows — vendor/total, email/password, etc. */
 export function detailsBox(rows: { label: string; value: string }[]): string {
   const rowsHtml = rows
     .map(
@@ -83,12 +87,16 @@ export function detailsBox(rows: { label: string; value: string }[]): string {
  * Email via Resend. Degrades gracefully — if RESEND_API_KEY isn't set, sends
  * are skipped (logged) rather than failing.
  *
- * As of the in-app notifications work this has exactly one caller: the
- * welcome email that gives a new account its username and temporary
- * password. Expense submissions, decisions and payments no longer send mail;
- * they write notifications the user reads in the app instead. The welcome
- * message is the one thing that cannot move in-app, since its whole purpose
- * is to reach someone who cannot sign in yet.
+ * As of the in-app notifications work the only callers are the account
+ * messages in lib/auth/emails.ts: a welcome, an admin-issued temporary
+ * password, and a password-reset link. Expense submissions, decisions and
+ * payments no longer send mail; they write notifications the user reads in
+ * the app instead. These three can't move in-app, since their whole purpose
+ * is to reach someone who can't sign in yet.
+ *
+ * Returns whether the message was actually accepted, because a caller that
+ * has just minted a temporary password needs to know if that password
+ * reached anyone — it isn't recoverable afterwards.
  */
 export async function sendEmail({
   to,
@@ -98,12 +106,12 @@ export async function sendEmail({
   to: string | string[];
   subject: string;
   html: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   const recipients = Array.isArray(to) ? to : [to];
   if (!apiKey || recipients.length === 0) {
     console.log(`[notifications] skipped "${subject}" to ${recipients.join(", ") || "(none)"} (RESEND_API_KEY not set)`);
-    return;
+    return false;
   }
 
   const from = process.env.RESEND_FROM_EMAIL || "FMB Sydney <onboarding@resend.dev>";
@@ -119,8 +127,11 @@ export async function sendEmail({
     });
     if (!res.ok) {
       console.error(`[notifications] Resend send failed (${res.status}):`, await res.text());
+      return false;
     }
+    return true;
   } catch (err) {
     console.error("[notifications] Resend send threw:", err);
+    return false;
   }
 }

@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { usernameToAuthEmail } from "@/lib/auth/username";
+import { normalizeEmail } from "@/lib/auth/password";
 
 export type SignInState = { error: string | null };
 
@@ -10,21 +10,20 @@ export async function signIn(
   _prevState: SignInState,
   formData: FormData
 ): Promise<SignInState> {
-  const username = String(formData.get("username") ?? "").trim();
+  const email = normalizeEmail(String(formData.get("email") ?? ""));
   const password = String(formData.get("password") ?? "");
 
-  if (!username || !password) {
-    return { error: "Enter your username and password." };
+  if (!email || !password) {
+    return { error: "Enter your email address and password." };
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    email: usernameToAuthEmail(username),
-    password,
-  });
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    return { error: "Incorrect username or password." };
+    // Deliberately doesn't distinguish an unknown address from a wrong
+    // password — the difference tells an outsider which accounts exist.
+    return { error: "Incorrect email address or password." };
   }
 
   redirect("/");

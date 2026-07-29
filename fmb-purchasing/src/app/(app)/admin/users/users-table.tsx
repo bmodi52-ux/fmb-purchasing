@@ -3,43 +3,54 @@
 import { SubmitButton } from "@/components/submit-button";
 import { ColumnsDataTable, type ColumnDef, type BulkAction } from "@/components/columns-data-table";
 import { setUserActive, bulkSetUserActive } from "./actions";
+import { ResetPasswordButton } from "./reset-password-button";
 
 export type UserRow = {
   id: string;
-  username: string;
   full_name: string;
-  email: string | null;
+  email: string;
   teamNames: string;
   is_active: boolean;
+  must_change_password: boolean;
 };
 
 const COLUMNS: ColumnDef<UserRow>[] = [
-  {
-    key: "username",
-    label: "Username",
-    render: (u) => <span className="font-mono">{u.username}</span>,
-    exportValue: (u) => u.username,
-  },
   { key: "full_name", label: "Full name", render: (u) => u.full_name, exportValue: (u) => u.full_name },
-  { key: "email", label: "Contact email", render: (u) => u.email ?? "—", exportValue: (u) => u.email ?? "" },
+  {
+    key: "email",
+    label: "Email address",
+    render: (u) => <span className="font-mono">{u.email}</span>,
+    exportValue: (u) => u.email,
+  },
   { key: "teams", label: "Teams", render: (u) => u.teamNames || "—", exportValue: (u) => u.teamNames },
   {
     key: "status",
     label: "Status",
-    render: (u) => <span className={u.is_active ? "text-palm" : "text-maroon/70"}>{u.is_active ? "Active" : "Disabled"}</span>,
-    exportValue: (u) => (u.is_active ? "Active" : "Disabled"),
+    render: (u) =>
+      !u.is_active ? (
+        <span className="text-maroon/70">Disabled</span>
+      ) : u.must_change_password ? (
+        <span className="text-ink/60">Password not set</span>
+      ) : (
+        <span className="text-palm">Active</span>
+      ),
+    exportValue: (u) =>
+      !u.is_active ? "Disabled" : u.must_change_password ? "Password not set" : "Active",
   },
   {
     key: "actions",
     label: "",
     render: (u) => (
-      <form action={setUserActive}>
-        <input type="hidden" name="user_id" value={u.id} />
-        <input type="hidden" name="active" value={String(u.is_active)} />
-        <SubmitButton className="text-xs text-ink/60 hover:text-ink">
-          {u.is_active ? "Disable" : "Enable"}
-        </SubmitButton>
-      </form>
+      <div className="flex items-center gap-3 whitespace-nowrap">
+        <ResetPasswordButton userId={u.id} fullName={u.full_name} />
+        <form action={setUserActive}>
+          <input type="hidden" name="user_id" value={u.id} />
+          <input type="hidden" name="active" value={String(u.is_active)} />
+          <SubmitButton className="text-xs text-ink/60 hover:text-ink">
+            {u.is_active ? "Disable" : "Enable"}
+          </SubmitButton>
+        </form>
+      </div>
     ),
     exportValue: () => "",
   },
