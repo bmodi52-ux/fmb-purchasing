@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
-import { userCan } from "@/lib/permissions";
+import { canViewExpense } from "@/lib/expense-access";
 
 /**
  * Signs a receipt URL on demand rather than eagerly for every row on a list
@@ -23,14 +23,7 @@ export async function getExpenseReceiptUrl(expenseId: string): Promise<string | 
     .maybeSingle();
   if (!expense?.receipt_file_path) return null;
 
-  // Covers every page that links to a receipt today: My submissions (own),
-  // All expenses, Approvals, and Payments.
-  const canView =
-    expense.submitted_by === user.id ||
-    (await userCan(user, "all_expenses", "view")) ||
-    (await userCan(user, "approvals", "approve")) ||
-    (await userCan(user, "payments", "mark_paid"));
-  if (!canView) return null;
+  if (!(await canViewExpense(user, expense.submitted_by))) return null;
 
   const { data } = await admin.storage.from("receipts").createSignedUrl(expense.receipt_file_path, 3600);
   return data?.signedUrl ?? null;

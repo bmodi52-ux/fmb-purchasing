@@ -87,7 +87,7 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                     onChange={() => selection.toggle(e.id)}
                     aria-label="Select submission"
                   />
-                  <span className="font-mono text-xs text-ink/50">{e.expense_number ?? "—"}</span>
+                  <Link href={`/expenses/${e.id}`} className="font-mono text-xs text-ink/70 underline">{e.expense_number ?? "View"}</Link>
                   <span className="font-medium text-ink">{e.vendor_name_raw}</span>
                   <span className="ml-2 text-sm text-ink/50">{formatDate(e.created_at)}</span>
                 </div>
