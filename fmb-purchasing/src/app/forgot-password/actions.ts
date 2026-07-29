@@ -6,6 +6,7 @@ import { normalizeEmail, isValidEmail } from "@/lib/auth/password";
 import { sendPasswordResetEmail } from "@/lib/auth/emails";
 import { SITE_URL } from "@/lib/notifications";
 import { clientIp, isResetRateLimited, pruneResetAttempts } from "@/lib/auth/reset-throttle";
+import { reportError } from "@/lib/errors";
 
 export type ForgotPasswordState = { error: string | null; sent: boolean };
 
@@ -65,7 +66,14 @@ export async function requestPasswordReset(
         });
 
         if (error) {
-          console.error("[auth] generateLink failed:", error.message);
+          // Nobody can tell us this is broken: the page says the same thing
+          // either way, so a person who never receives the link assumes they
+          // typed the wrong address.
+          await reportError({
+            source: "password-reset",
+            error: `generateLink failed: ${error.message}`,
+            userId: profile.id,
+          });
         } else {
           await sendPasswordResetEmail({
             to: profile.email,
@@ -81,7 +89,7 @@ export async function requestPasswordReset(
     } catch (err) {
       // Nothing here can reach the user — the response is long gone — so a
       // failure must at least be recorded rather than vanishing.
-      console.error("[auth] password reset request failed:", err);
+      await reportError({ source: "password-reset", error: err });
     }
   });
 

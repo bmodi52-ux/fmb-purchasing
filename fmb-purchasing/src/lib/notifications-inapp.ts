@@ -6,7 +6,8 @@ export type NotificationKind =
   | "expense_to_review"
   | "expense_approved"
   | "expense_declined"
-  | "expense_paid";
+  | "expense_paid"
+  | "system_error";
 
 export type NotificationRow = {
   id: string;
@@ -49,6 +50,9 @@ export async function notify(
     }))
   );
 
+  // Deliberately console.error and not reportError: reporting an error
+  // notifies admins, which calls straight back into here. If writing
+  // notifications is what's broken, that recurses until something gives.
   if (error) console.error("[notifications] could not record:", error.message);
 }
 

@@ -126,12 +126,20 @@ export async function sendEmail({
       body: JSON.stringify({ from, to: recipients, subject, html }),
     });
     if (!res.ok) {
-      console.error(`[notifications] Resend send failed (${res.status}):`, await res.text());
+      // Imported lazily: lib/errors imports the notification helpers, and a
+      // top-level import here would close that cycle.
+      const { reportError } = await import("@/lib/errors");
+      await reportError({
+        source: "email-send",
+        error: `Resend returned ${res.status}: ${await res.text()}`,
+        detail: `subject: ${subject}`,
+      });
       return false;
     }
     return true;
   } catch (err) {
-    console.error("[notifications] Resend send threw:", err);
+    const { reportError } = await import("@/lib/errors");
+    await reportError({ source: "email-send", error: err, detail: `subject: ${subject}` });
     return false;
   }
 }

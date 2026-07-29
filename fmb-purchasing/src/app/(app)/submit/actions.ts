@@ -11,6 +11,7 @@ import { matchOrCreateVendor, matchOrCreateOffer } from "@/lib/expense-matching"
 import { fiscalYearHijri } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
 import { leafCategories } from "@/lib/categories";
+import { reportError } from "@/lib/errors";
 
 export type ExtractState = {
   data: ExtractedReceipt | null;
@@ -44,6 +45,12 @@ export async function extractReceiptAction(
     contentType: file.type,
   });
   if (uploadError) {
+    await reportError({
+      source: "receipt-upload",
+      error: uploadError,
+      detail: `${file.type}, ${file.size} bytes`,
+      userId: user.id,
+    });
     return { data: null, receiptPath: null, error: `Could not save the receipt file: ${uploadError.message}` };
   }
 
@@ -55,6 +62,15 @@ export async function extractReceiptAction(
     const extracted = await extractReceipt(base64, file.type, categoryNames);
     return { data: extracted, receiptPath: path, error: null };
   } catch (err) {
+    // The submitter is told to carry on manually, so without this the
+    // failure is invisible — extraction could break for one vendor's PDF
+    // layout and the only signal would be people quietly typing more.
+    await reportError({
+      source: "receipt-extraction",
+      error: err,
+      detail: `${file.type}, ${file.size} bytes`,
+      userId: user.id,
+    });
     return {
       data: null,
       receiptPath: path,
