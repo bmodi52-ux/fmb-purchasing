@@ -18,6 +18,7 @@ import {
 import type { ExtractedReceipt } from "@/lib/receipt-extraction";
 import { VendorLookupFields } from "./vendor-lookup-fields";
 import { ItemLookupCells } from "./item-lookup-cells";
+import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image-resize";
 
 const initialExtractState: ExtractState = { data: null, receiptPath: null, error: null };
 const initialUploadState: UploadFileState = { path: null, fileName: null, error: null };
@@ -71,6 +72,8 @@ export function SubmitForm({
     initialExtractState
   );
   const [mode, setMode] = useState<"start" | "review">(editExpense ? "review" : "start");
+  const [preparing, setPreparing] = useState(false);
+  const [sizeError, setSizeError] = useState<string | null>(null);
   const [receiptPath, setReceiptPath] = useState<string | null>(editExpense?.receiptPath ?? null);
   const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
 
@@ -118,6 +121,43 @@ export function SubmitForm({
     }
   }, [extractState]);
 
+  /**
+   * Phone photos are far larger than the Server Action body limit, so they're
+   * downscaled here before the form is submitted. Anything still too large
+   * (a big multi-page PDF, which can't be shrunk client-side) is reported
+   * plainly instead of being sent and coming back as a server error.
+   */
+  async function handleReceiptChosen(event: React.ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const form = input.form;
+    const chosen = input.files?.[0];
+    if (!chosen || !form) return;
+
+    setSizeError(null);
+    setPreparing(true);
+    try {
+      const prepared = await shrinkImageForUpload(chosen);
+
+      if (prepared.size > MAX_UPLOAD_BYTES) {
+        setSizeError(
+          `That file is ${formatBytes(prepared.size)}, which is too large to upload. ` +
+            `Please use a photo instead of a scan, or split the PDF.`
+        );
+        input.value = "";
+        return;
+      }
+
+      if (prepared !== chosen) {
+        const transfer = new DataTransfer();
+        transfer.items.add(prepared);
+        input.files = transfer.files;
+      }
+      form.requestSubmit();
+    } finally {
+      setPreparing(false);
+    }
+  }
+
   function startManual() {
     setVendorName("");
     setVendorNumber("");
@@ -138,11 +178,20 @@ export function SubmitForm({
       <div className="flex flex-col gap-4">
         <form action={extractAction} className="flex flex-col gap-3 rounded-lg border-2 border-dashed border-ink/20 bg-white/50 p-8 text-center">
           <label className="cursor-pointer">
-            <input type="file" name="file" accept="image/*,application/pdf" required className="hidden" onChange={(e) => e.target.form?.requestSubmit()} />
+            <input
+              type="file"
+              name="file"
+              accept="image/*,application/pdf"
+              required
+              className="hidden"
+              onChange={handleReceiptChosen}
+            />
             <span className="section-title text-ink">Upload or scan a receipt</span>
             <p className="mt-1 text-sm text-ink/60">JPG, PNG, WebP, or PDF. Tap to choose a file.</p>
           </label>
+          {preparing && <p className="font-mono text-sm text-ink/60">Preparing photo…</p>}
           {extracting && <p className="font-mono text-sm text-ink/60">Reading receipt…</p>}
+          {sizeError && !extracting && <p className="text-sm text-red-700">{sizeError}</p>}
           {extractState.error && !extracting && (
             <p className="text-sm text-red-700">{extractState.error}</p>
           )}
@@ -232,6 +281,7 @@ function ReviewForm(props: {
   const [lookingUpAbn, startAbnLookup] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [uploadState, uploadAction, uploading] = useActionState(uploadReceiptFileAction, initialUploadState);
+  const [attachError, setAttachError] = useState<string | null>(null);
 
   useEffect(() => {
     if (uploadState.path) {
@@ -334,13 +384,38 @@ function ReviewForm(props: {
           </>
         ) : (
           <form action={uploadAction} className="flex flex-wrap items-center gap-2">
-            <input type="file" name="file" accept="image/*,application/pdf" className="min-w-0 max-w-full text-xs" />
+            <input
+              type="file"
+              name="file"
+              accept="image/*,application/pdf"
+              className="min-w-0 max-w-full text-xs"
+              // same downscale as the main upload — this path hits the identical
+              // Server Action body limit
+              onChange={async (e) => {
+                const input = e.currentTarget;
+                const chosen = input.files?.[0];
+                if (!chosen) return;
+                setAttachError(null);
+                const prepared = await shrinkImageForUpload(chosen);
+                if (prepared.size > MAX_UPLOAD_BYTES) {
+                  setAttachError(`Too large (${formatBytes(prepared.size)}).`);
+                  input.value = "";
+                  return;
+                }
+                if (prepared !== chosen) {
+                  const transfer = new DataTransfer();
+                  transfer.items.add(prepared);
+                  input.files = transfer.files;
+                }
+              }}
+            />
             <SubmitButton disabled={uploading} className="rounded-md border border-ink/15 px-3 py-1 text-xs hover:border-ink/30 disabled:opacity-60">
               {uploading ? "Attaching…" : "Attach"}
             </SubmitButton>
           </form>
         )}
         {!props.receiptPath && <span className="text-xs text-ink/40">Optional — never required.</span>}
+        {attachError && <span className="text-xs text-red-700">{attachError}</span>}
         {uploadState.error && <span className="text-xs text-red-700">{uploadState.error}</span>}
       </div>
 
