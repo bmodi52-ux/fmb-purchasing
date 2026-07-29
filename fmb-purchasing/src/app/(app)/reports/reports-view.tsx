@@ -3,10 +3,30 @@
 import { useMemo, useState } from "react";
 import { gregorianToHijri, formatHijri } from "@/lib/hijri/hijri.js";
 import { formatDate } from "@/lib/format";
-import { BarChart, LineChart, StackedBar, type LineSeriesData } from "./charts";
+import { ReportFilters, type FilterOption } from "./report-filters";
+import {
+  totals,
+  percentChange,
+  byMonth,
+  byCategory,
+  byVendor,
+  byItem,
+  byStatus,
+  insights,
+  type Slice,
+} from "./aggregate";
+import {
+  HeroFigure,
+  StatTile,
+  ColumnChart,
+  BarChart,
+  LineChart,
+  StackedBar,
+  formatMoney,
+  formatCompact,
+  type LineSeriesData,
+} from "./charts";
 
-export type CategorySpend = { categoryName: string; total: number; count: number };
-export type VendorSpend = { vendorName: string; total: number; count: number };
 export type PerUnitRow = {
   groupName: string;
   vendorName: string;
@@ -14,6 +34,14 @@ export type PerUnitRow = {
   normalizedQuantity: number;
   normalizedUnit: string;
   perUnit: number;
+};
+
+/** Palette slot per stage, fixed so colour follows the stage and not its rank. */
+const STATUS_SLOT: Record<string, number> = {
+  submitted: 0,
+  approved: 1,
+  paid: 2,
+  declined: 3,
 };
 
 function downloadCsv(filename: string, rows: Record<string, string | number>[]) {
@@ -38,248 +66,470 @@ function DateCell({ date, calendar }: { date: string | null; calendar: "gregoria
   return <>{formatHijri(gregorianToHijri(new Date(date)))}</>;
 }
 
-function formatMonth(ym: string): string {
-  const d = new Date(`${ym}-01T00:00:00`);
-  return d.toLocaleDateString("en-AU", { month: "short", year: "2-digit" });
-}
-
-/** One line per vendor within an item group, dated points only (chart needs a valid x). */
+/** One line per vendor within an item group, dated points only. */
 function perUnitVendorSeries(rows: PerUnitRow[]): LineSeriesData[] {
-  const byVendor = new Map<string, PerUnitRow[]>();
+  const byVendorName = new Map<string, PerUnitRow[]>();
   for (const r of rows) {
     if (!r.receiptDate) continue;
-    const list = byVendor.get(r.vendorName) ?? [];
-    list.push(r);
-    byVendor.set(r.vendorName, list);
+    byVendorName.set(r.vendorName, [...(byVendorName.get(r.vendorName) ?? []), r]);
   }
-  return [...byVendor.entries()].map(([vendorName, vendorRows]) => ({
-    name: vendorName,
+  return [...byVendorName.entries()].map(([name, vendorRows]) => ({
+    name,
     points: [...vendorRows]
       .sort((a, b) => (a.receiptDate ?? "").localeCompare(b.receiptDate ?? ""))
       .map((r) => ({ x: r.receiptDate!, y: r.perUnit })),
   }));
 }
 
-export type SpendOverTimePoint = { x: string; y: number };
-export type StatusBreakdownDatum = { label: string; value: number };
-
 export function ReportsView({
-  categorySpend,
-  vendorSpend,
+  fiscalYears,
+  currentFy,
+  selectedFy,
+  months,
+  selectedMonth,
+  vendors,
+  selectedVendor,
+  categories,
+  selectedCategory,
+  items,
+  selectedItem,
+  current,
+  previous,
+  periodLabel,
+  previousLabel,
   perUnitRows,
-  spendOverTime,
-  statusBreakdown,
+  hasCategoryOrItemFilter,
 }: {
-  categorySpend: CategorySpend[];
-  vendorSpend: VendorSpend[];
+  fiscalYears: number[];
+  currentFy: number;
+  selectedFy: number;
+  months: string[];
+  selectedMonth: string;
+  vendors: FilterOption[];
+  selectedVendor: string;
+  categories: FilterOption[];
+  selectedCategory: string;
+  items: FilterOption[];
+  selectedItem: string;
+  current: Slice;
+  previous: Slice | null;
+  periodLabel: string;
+  previousLabel: string;
   perUnitRows: PerUnitRow[];
-  spendOverTime: SpendOverTimePoint[];
-  statusBreakdown: StatusBreakdownDatum[];
+  hasCategoryOrItemFilter: boolean;
 }) {
   const [calendar, setCalendar] = useState<"gregorian" | "hijri">("gregorian");
+
+  const now = useMemo(() => totals(current), [current]);
+  const before = useMemo(() => (previous ? totals(previous) : null), [previous]);
+  const monthly = useMemo(() => byMonth(current), [current]);
+  const categorySpend = useMemo(() => byCategory(current), [current]);
+  const vendorSpend = useMemo(() => byVendor(current), [current]);
+  const itemSpend = useMemo(() => byItem(current), [current]);
+  const statusMix = useMemo(() => byStatus(current), [current]);
+  const found = useMemo(
+    () => insights(current, previous, periodLabel, previousLabel),
+    [current, previous, periodLabel, previousLabel]
+  );
+
+  const spendDelta = before ? percentChange(now.spend, before.spend) : null;
+  const countDelta = before ? percentChange(now.expenseCount, before.expenseCount) : null;
 
   const groupedPerUnit = useMemo(() => {
     const groups = new Map<string, PerUnitRow[]>();
     for (const row of perUnitRows) {
-      const list = groups.get(row.groupName) ?? [];
-      list.push(row);
-      groups.set(row.groupName, list);
+      groups.set(row.groupName, [...(groups.get(row.groupName) ?? []), row]);
     }
     return [...groups.entries()];
   }, [perUnitRows]);
 
+  const isFiltered = !!(selectedMonth || selectedVendor || selectedCategory || selectedItem);
+  const empty = now.expenseCount === 0;
+
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-ink/60">Calendar:</span>
-        <button
-          type="button"
-          onClick={() => setCalendar("gregorian")}
-          className={`rounded-md px-2 py-1 ${calendar === "gregorian" ? "bg-gold/20 text-ink" : "text-ink/50"}`}
-        >
-          Gregorian
-        </button>
-        <button
-          type="button"
-          onClick={() => setCalendar("hijri")}
-          className={`rounded-md px-2 py-1 ${calendar === "hijri" ? "bg-gold/20 text-ink" : "text-ink/50"}`}
-        >
-          Hijri (Misri)
-        </button>
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="page-title text-ink">Reports</h1>
+        <p className="page-description mt-1">
+          Fiscal year runs Shawwal → the following Ramadan on the Fatimi/Misri Hijri calendar.
+        </p>
       </div>
 
-      <section>
-        <h2 className="mb-2 section-title text-ink">Status breakdown</h2>
-        <StackedBar data={statusBreakdown} />
-      </section>
+      <ReportFilters
+        fiscalYears={fiscalYears}
+        currentFy={currentFy}
+        selectedFy={selectedFy}
+        months={months}
+        selectedMonth={selectedMonth}
+        vendors={vendors}
+        selectedVendor={selectedVendor}
+        categories={categories}
+        selectedCategory={selectedCategory}
+        items={items}
+        selectedItem={selectedItem}
+        isFiltered={isFiltered}
+      />
 
-      <section>
-        <h2 className="mb-2 section-title text-ink">Spend over time</h2>
-        <LineChart
-          series={[{ name: "Spend", points: spendOverTime }]}
-          area
-          xLabel={formatMonth}
-          valueFormat={(v) => `$${v.toFixed(2)}`}
-        />
-      </section>
-
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="section-title text-ink">Spend by category</h2>
-          <button
-            type="button"
-            onClick={() =>
-              downloadCsv(
-                "spend-by-category.csv",
-                categorySpend.map((c) => ({ category: c.categoryName, total: c.total, count: c.count }))
-              )
-            }
-            className="text-xs text-ink/60 underline hover:text-ink"
-          >
-            Download CSV
-          </button>
-        </div>
-        {categorySpend.length === 0 ? (
-          <p className="text-sm text-ink/50">No data for this fiscal year.</p>
-        ) : (
-          <>
-            <div className="mb-4 rounded-lg border border-ink/10 bg-white/60 p-4">
-              <BarChart data={categorySpend.map((c) => ({ label: c.categoryName, value: c.total }))} />
+      {empty ? (
+        <p className="rounded-xl border border-ink/10 bg-white/60 px-4 py-8 text-center text-sm text-ink/55">
+          Nothing recorded for {periodLabel}
+          {isFiltered && " with these filters"}.
+        </p>
+      ) : (
+        <>
+          {/* ---------------- headline ---------------- */}
+          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+            <div className="flex flex-col justify-center rounded-xl border border-gold/30 bg-gold/[0.07] p-5">
+              <HeroFigure
+                label={`Total spend · ${periodLabel}`}
+                value={formatMoney(now.spend)}
+                caption={`${now.expenseCount} ${now.expenseCount === 1 ? "expense" : "expenses"}, ${now.lineCount} ${now.lineCount === 1 ? "line" : "lines"}`}
+              />
+              {spendDelta != null && previousLabel && (
+                <p className="mt-2.5 text-sm text-ink/70">
+                  <span aria-hidden="true">{spendDelta > 0 ? "↑" : spendDelta < 0 ? "↓" : "→"}</span>{" "}
+                  {Math.abs(Math.round(spendDelta * 100))}%{" "}
+                  <span className="text-ink/50">
+                    {spendDelta > 0 ? "more than" : spendDelta < 0 ? "less than" : "vs"} {previousLabel}
+                    {before && ` (${formatMoney(before.spend)})`}
+                  </span>
+                </p>
+              )}
             </div>
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-left text-ink/60">
-                <th className="p-2">Category</th>
-                <th className="p-2">Lines</th>
-                <th className="p-2">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {categorySpend.map((c) => (
-                <tr key={c.categoryName} className="border-t border-ink/10">
-                  <td className="p-2">{c.categoryName}</td>
-                  <td className="p-2 font-mono text-ink/60">{c.count}</td>
-                  <td className="p-2 font-mono">${c.total.toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </>
-        )}
-      </section>
 
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="section-title text-ink">Spend by vendor</h2>
-          <button
-            type="button"
-            onClick={() =>
-              downloadCsv(
-                "spend-by-vendor.csv",
-                vendorSpend.map((v) => ({ vendor: v.vendorName, total: v.total, count: v.count }))
-              )
-            }
-            className="text-xs text-ink/60 underline hover:text-ink"
-          >
-            Download CSV
-          </button>
-        </div>
-        {vendorSpend.length === 0 ? (
-          <p className="text-sm text-ink/50">No data for this fiscal year.</p>
-        ) : (
-          <>
-            <div className="mb-4 rounded-lg border border-ink/10 bg-white/60 p-4">
-              <BarChart data={vendorSpend.map((v) => ({ label: v.vendorName, value: v.total }))} />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <StatTile
+                label="Expenses"
+                value={String(now.expenseCount)}
+                delta={countDelta}
+                deltaLabel={previousLabel}
+                trend={monthly.map((m) => m.count)}
+                hint={previousLabel ? undefined : "No earlier period to compare"}
+              />
+              <StatTile
+                label="Average expense"
+                value={formatMoney(now.averageExpense)}
+                trend={monthly.map((m) => m.spend)}
+              />
+              {hasCategoryOrItemFilter ? (
+                // GST is recorded per expense, not per line, so under a
+                // category or item filter it would describe the whole receipt
+                // and overstate this slice. Show something true instead.
+                <StatTile
+                  label="Lines in this slice"
+                  value={String(now.lineCount)}
+                  hint="GST is recorded per expense, so it isn't shown for a partial receipt"
+                />
+              ) : (
+                <StatTile label="GST" value={formatMoney(now.gst)} hint="Included in total spend" />
+              )}
             </div>
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-ink/60">
-                  <th className="p-2">Vendor</th>
-                  <th className="p-2">Expenses</th>
-                  <th className="p-2">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendorSpend.map((v) => (
-                  <tr key={v.vendorName} className="border-t border-ink/10">
-                    <td className="p-2">{v.vendorName}</td>
-                    <td className="p-2 font-mono text-ink/60">{v.count}</td>
-                    <td className="p-2 font-mono">${v.total.toFixed(2)}</td>
-                  </tr>
+          </section>
+
+          {/* ---------------- insights ---------------- */}
+          {found.length > 0 && (
+            <section className="rounded-xl border border-ink/10 bg-white/60 p-4">
+              <h2 className="text-xs tracking-wide text-ink/45 uppercase">What stands out</h2>
+              <ul className="mt-2.5 flex flex-col gap-1.5">
+                {found.map((insight) => (
+                  <li key={insight.text} className="flex gap-2 text-sm text-ink/85">
+                    <span aria-hidden="true" className="text-ink/30">
+                      {insight.tone === "up" ? "↑" : insight.tone === "down" ? "↓" : "•"}
+                    </span>
+                    {insight.text}
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </>
-        )}
-      </section>
+              </ul>
+            </section>
+          )}
 
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <div>
-            <h2 className="section-title text-ink">Per-unit cost trends</h2>
-            <p className="text-sm text-ink/60">
-              $/unit over time per item, grouped across vendors and spelling variants. Compare vendors within a group.
-            </p>
+          {/* ---------------- spend over time ---------------- */}
+          {!selectedMonth && monthly.length > 1 && (
+            <Panel
+              title="Spend over time"
+              subtitle="By month, using the receipt date where there is one"
+            >
+              <ColumnChart
+                data={monthly.map((m) => ({
+                  key: m.key,
+                  label: m.label,
+                  value: m.spend,
+                  count: m.count,
+                }))}
+                valueFormat={formatMoney}
+              />
+            </Panel>
+          )}
+
+          {/* ---------------- breakdowns ---------------- */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel
+              title="Spend by category"
+              onExport={() =>
+                downloadCsv(
+                  "spend-by-category.csv",
+                  categorySpend.map((c) => ({ category: c.label, lines: c.count, total: c.spend }))
+                )
+              }
+            >
+              <BarChart
+                data={categorySpend.map((c) => ({ label: c.label, value: c.spend, count: c.count }))}
+                valueFormat={formatCompact}
+              />
+            </Panel>
+
+            <Panel
+              title="Spend by vendor"
+              onExport={() =>
+                downloadCsv(
+                  "spend-by-vendor.csv",
+                  vendorSpend.map((v) => ({ vendor: v.label, expenses: v.count, total: v.spend }))
+                )
+              }
+            >
+              <BarChart
+                data={vendorSpend.map((v) => ({ label: v.label, value: v.spend, count: v.count }))}
+                valueFormat={formatCompact}
+              />
+            </Panel>
+
+            <Panel
+              title="Top items"
+              subtitle="Across every vendor in this slice"
+              onExport={() =>
+                downloadCsv(
+                  "spend-by-item.csv",
+                  itemSpend.map((i) => ({ item: i.label, lines: i.count, total: i.spend }))
+                )
+              }
+            >
+              <BarChart
+                data={itemSpend.map((i) => ({ label: i.label, value: i.spend, count: i.count }))}
+                valueFormat={formatCompact}
+              />
+            </Panel>
+
+            <Panel title="Where it sits" subtitle="Expenses by stage, excluding declined">
+              <StackedBar
+                data={statusMix.map((s) => ({
+                  label: s.label,
+                  value: s.spend,
+                  detail: formatCompact(s.spend),
+                  // Fixed per stage, so a filter that empties one doesn't
+                  // repaint the others.
+                  slot: STATUS_SLOT[s.key] ?? 0,
+                }))}
+              />
+            </Panel>
           </div>
-          <button
-            type="button"
-            onClick={() =>
-              downloadCsv(
-                "per-unit-cost-trends.csv",
-                perUnitRows.map((r) => ({
-                  item: r.groupName,
-                  vendor: r.vendorName,
-                  date: r.receiptDate ?? "",
-                  quantity: r.normalizedQuantity,
-                  unit: r.normalizedUnit,
-                  per_unit_cost: r.perUnit,
-                }))
-              )
-            }
-            className="text-xs text-ink/60 underline hover:text-ink"
+
+          {/* ---------------- the table view ---------------- */}
+          <Panel
+            title="The numbers"
+            subtitle="Every figure above, in full — the chart colours are a guide, this is the record"
           >
-            Download CSV
-          </button>
-        </div>
-        {groupedPerUnit.length === 0 ? (
-          <p className="text-sm text-ink/50">No per-unit data for this fiscal year yet.</p>
-        ) : (
-          <div className="flex flex-col gap-5">
-            {groupedPerUnit.map(([groupName, rows]) => (
-              <div key={groupName} className="rounded-lg border border-ink/10 bg-white/60 p-4">
-                <h3 className="mb-2 font-medium text-ink">{groupName}</h3>
-                <div className="mb-3">
-                  <LineChart series={perUnitVendorSeries(rows)} valueFormat={(v) => `$${v.toFixed(4)}`} height={160} />
-                </div>
+            {/* The monthly figures live only in the column chart's hover
+                otherwise, and a value reachable only by hovering is not
+                reachable at all for a keyboard or screen-reader user. */}
+            {monthly.length > 1 && !selectedMonth && (
+              <div className="mb-5 overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="text-left text-xs text-ink/50">
-                      <th className="p-1">Vendor</th>
-                      <th className="p-1">Date</th>
-                      <th className="p-1">Qty</th>
-                      <th className="p-1">$/unit</th>
+                    <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
+                      <th className="py-2 pr-4 font-medium">Month</th>
+                      <th className="py-2 pr-4 text-right font-medium">Expenses</th>
+                      <th className="py-2 pr-4 text-right font-medium">Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r, i) => (
-                      <tr key={i} className="border-t border-ink/5">
-                        <td className="p-1">{r.vendorName}</td>
-                        <td className="p-1 font-mono text-ink/60">
-                          <DateCell date={r.receiptDate} calendar={calendar} />
+                    {monthly.map((m) => (
+                      <tr key={m.key} className="border-b border-ink/5 last:border-0">
+                        <td className="py-1.5 pr-4">{m.label}</td>
+                        <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
+                          {m.count}
                         </td>
-                        <td className="p-1 font-mono text-ink/60">
-                          {r.normalizedQuantity} {r.normalizedUnit}
+                        <td className="py-1.5 pr-4 text-right font-mono tabular-nums">
+                          {formatMoney(m.spend)}
                         </td>
-                        <td className="p-1 font-mono">${r.perUnit.toFixed(4)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
+                    <th className="py-2 pr-4 font-medium">Category</th>
+                    <th className="py-2 pr-4 text-right font-medium">Lines</th>
+                    <th className="py-2 pr-4 text-right font-medium">Total</th>
+                    <th className="py-2 pr-4 text-right font-medium">Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categorySpend.map((c) => (
+                    <tr key={c.key} className="border-b border-ink/5 last:border-0">
+                      <td className="py-1.5 pr-4">{c.label}</td>
+                      <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">{c.count}</td>
+                      <td className="py-1.5 pr-4 text-right font-mono tabular-nums">{formatMoney(c.spend)}</td>
+                      <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
+                        {now.spend > 0 ? `${Math.round((c.spend / now.spend) * 100)}%` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-ink/15 font-medium">
+                    <td className="py-2 pr-4">Total</td>
+                    <td className="py-2 pr-4 text-right font-mono tabular-nums">{now.lineCount}</td>
+                    <td className="py-2 pr-4 text-right font-mono tabular-nums">{formatMoney(now.spend)}</td>
+                    <td className="py-2 pr-4 text-right font-mono tabular-nums">100%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+
+          {/* ---------------- per-unit trends ---------------- */}
+          <Panel
+            title="Per-unit cost trends"
+            subtitle="What we actually pay per kilo, litre or each — compare vendors within an item"
+            onExport={
+              perUnitRows.length > 0
+                ? () =>
+                    downloadCsv(
+                      "per-unit-cost-trends.csv",
+                      perUnitRows.map((r) => ({
+                        item: r.groupName,
+                        vendor: r.vendorName,
+                        date: r.receiptDate ?? "",
+                        quantity: r.normalizedQuantity,
+                        unit: r.normalizedUnit,
+                        per_unit_cost: r.perUnit,
+                      }))
+                    )
+                : undefined
+            }
+            action={
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-ink/45">Dates:</span>
+                {(["gregorian", "hijri"] as const).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setCalendar(c)}
+                    aria-pressed={calendar === c}
+                    className={`rounded px-1.5 py-0.5 ${
+                      calendar === c ? "bg-gold/20 text-ink" : "text-ink/50 hover:text-ink"
+                    }`}
+                  >
+                    {c === "gregorian" ? "Gregorian" : "Hijri"}
+                  </button>
+                ))}
+              </div>
+            }
+          >
+            {groupedPerUnit.length === 0 ? (
+              <p className="text-sm text-ink/50">
+                No per-unit data here yet. It appears once a receipt line is matched to a pricelist
+                item with confirmed pack contents.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-5">
+                {groupedPerUnit.map(([groupName, rows]) => {
+                  const series = perUnitVendorSeries(rows);
+                  const datedPoints = series.reduce((n, s) => n + s.points.length, 0);
+                  return (
+                  <div key={groupName}>
+                    <h3 className="mb-2 text-sm font-medium text-ink">{groupName}</h3>
+                    {datedPoints >= 2 ? (
+                      <LineChart
+                        series={series}
+                        valueFormat={(v) => `$${v.toFixed(4)}`}
+                        height={150}
+                      />
+                    ) : (
+                      // A line through one point is not a trend. Say what the
+                      // single figure is and wait for a second purchase.
+                      <p className="text-xs text-ink/50">
+                        One purchase so far — a trend appears once there is something to compare it
+                        against.
+                      </p>
+                    )}
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead>
+                          <tr className="text-left text-ink/45">
+                            <th className="py-1 pr-3 font-medium">Vendor</th>
+                            <th className="py-1 pr-3 font-medium">Date</th>
+                            <th className="py-1 pr-3 text-right font-medium">Quantity</th>
+                            <th className="py-1 text-right font-medium">Per unit</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((r, i) => (
+                            <tr key={i} className="border-t border-ink/5">
+                              <td className="py-1 pr-3">{r.vendorName}</td>
+                              <td className="py-1 pr-3 font-mono text-ink/60">
+                                <DateCell date={r.receiptDate} calendar={calendar} />
+                              </td>
+                              <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
+                                {r.normalizedQuantity} {r.normalizedUnit}
+                              </td>
+                              <td className="py-1 text-right font-mono tabular-nums">
+                                ${r.perUnit.toFixed(4)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
+            )}
+          </Panel>
+        </>
+      )}
     </div>
+  );
+}
+
+function Panel({
+  title,
+  subtitle,
+  onExport,
+  action,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  onExport?: () => void;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-ink/10 bg-white/60 p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+        <div className="min-w-0">
+          <h2 className="section-title text-ink">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-xs text-ink/50">{subtitle}</p>}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          {action}
+          {onExport && (
+            <button
+              type="button"
+              onClick={onExport}
+              className="text-xs text-ink/50 underline hover:text-ink"
+            >
+              CSV
+            </button>
+          )}
+        </div>
+      </div>
+      {children}
+    </section>
   );
 }

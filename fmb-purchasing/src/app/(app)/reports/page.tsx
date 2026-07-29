@@ -2,60 +2,71 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fiscalYearHijri } from "@/lib/fiscal-year";
-import { ReportsView, type CategorySpend, type VendorSpend, type PerUnitRow } from "./reports-view";
-import { FiscalYearSelect } from "@/components/fiscal-year-select";
+import { fiscalYearHijri, formatFiscalYear } from "@/lib/fiscal-year";
 import { categoryLabelsById } from "@/lib/categories";
+import {
+  applyFilters,
+  monthKey,
+  expenseDate,
+  formatMonthLabel,
+  type ExpenseRecord,
+  type LineRecord,
+  type Filters,
+  type Slice,
+} from "./aggregate";
+import { ReportsView, type PerUnitRow } from "./reports-view";
 
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ fy?: string }>;
+  searchParams: Promise<{
+    fy?: string;
+    month?: string;
+    vendor?: string;
+    category?: string;
+    item?: string;
+  }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "reports", "view");
 
-  const admin = createAdminClient();
+  const params = await searchParams;
   const currentFy = fiscalYearHijri(new Date());
+  const selectedFy = params.fy ? Number(params.fy) : currentFy;
 
-  // The function runs a long way from the database, so each round trip is
-  // expensive. Everything that doesn't depend on another query's result is
-  // issued together; only the line-item lookups genuinely have to wait (they
-  // need the expense ids). Two round trips instead of seven.
-  const { fy } = await searchParams;
-  const selectedFy = fy ? Number(fy) : currentFy;
+  const admin = createAdminClient();
 
-  const [{ data: fyRows }, { data: categories }, { data: expenses }, { data: statusRows }] = await Promise.all([
-    admin.from("expense_fiscal_years").select("fiscal_year_hijri"),
-    admin.from("categories").select("id, name, parent_category_id"),
-    admin
-      .from("expenses")
-      .select("id, vendor_name_raw, subtotal, gst_amount, total, status, receipt_date")
-      .eq("fiscal_year_hijri", selectedFy)
-      .neq("status", "declined"),
-    admin.from("expenses").select("status").eq("fiscal_year_hijri", selectedFy),
-  ]);
+  // The previous year comes back in the same query so the dashboard can show
+  // change without a second round trip — the function runs a long way from
+  // the database, so each one is expensive.
+  const [{ data: rawExpenses }, { data: fyRows }, { data: categoryRows }, { data: vendorRows }] =
+    await Promise.all([
+      admin
+        .from("expenses")
+        .select(
+          "id, expense_number, vendor_id, vendor_name_raw, status, receipt_date, created_at, total, gst_amount, fiscal_year_hijri"
+        )
+        .in("fiscal_year_hijri", [selectedFy, selectedFy - 1])
+        .neq("status", "declined"),
+      admin.from("expense_fiscal_years").select("fiscal_year_hijri"),
+      admin.from("categories").select("id, name, parent_category_id"),
+      admin.from("vendors").select("id, name"),
+    ]);
 
-  const fiscalYears = [...new Set((fyRows ?? []).map((r) => r.fiscal_year_hijri))].sort((a, b) => b - a);
-  if (!fiscalYears.includes(currentFy)) fiscalYears.unshift(currentFy);
+  const expenseIds = (rawExpenses ?? []).map((e) => e.id);
 
-  const statusCounts = { submitted: 0, approved: 0, paid: 0, declined: 0 };
-  for (const r of statusRows ?? []) {
-    if (r.status in statusCounts) statusCounts[r.status as keyof typeof statusCounts] += 1;
-  }
-
-  const categoryNameById = categoryLabelsById(categories ?? []);
-
-  const expenseIds = (expenses ?? []).map((e) => e.id);
-  const [{ data: lineItems }, { data: paidCosts }] = expenseIds.length
+  const [{ data: rawLines }, { data: paidCosts }] = expenseIds.length
     ? await Promise.all([
+        // The item name is three tables up from a line — line → offer → pack
+        // size → item — so it rides along as a nested embed rather than
+        // costing another wave of queries.
         admin
           .from("expense_line_items")
-          .select("expense_id, category_id, line_total, description_raw, normalized_quantity, normalized_unit, pricelist_item_id")
+          .select(
+            "expense_id, category_id, line_total, quantity, description_raw, pricelist_item_id, pricelist_items ( item_pack_sizes ( items ( id, name ) ) )"
+          )
           .in("expense_id", expenseIds),
-        // item_name comes from the view (0013), so there's no follow-up
-        // query to resolve item ids into names.
         admin
           .from("item_paid_unit_costs")
           .select("item_id, item_name, expense_id, receipt_date, base_quantity, base_unit_code, cost_per_base_unit")
@@ -63,111 +74,170 @@ export default async function ReportsPage({
       ])
     : [{ data: [] }, { data: [] }];
 
-  // Spend by category
-  const categoryTotals = new Map<string, { total: number; count: number }>();
-  for (const li of lineItems ?? []) {
-    const name = li.category_id ? (categoryNameById.get(li.category_id) ?? "Uncategorized") : "Uncategorized";
-    const entry = categoryTotals.get(name) ?? { total: 0, count: 0 };
-    entry.total += li.line_total;
-    entry.count += 1;
-    categoryTotals.set(name, entry);
-  }
-  const categorySpend: CategorySpend[] = [...categoryTotals.entries()]
-    .map(([categoryName, v]) => ({ categoryName, ...v }))
-    .sort((a, b) => b.total - a.total);
+  const categoryNameById = categoryLabelsById(categoryRows ?? []);
+  const vendorNameById = new Map((vendorRows ?? []).map((v) => [v.id, v.name]));
 
-  // Spend by vendor
-  const vendorTotals = new Map<string, { total: number; count: number }>();
-  for (const e of expenses ?? []) {
-    const name = e.vendor_name_raw ?? "—";
-    const entry = vendorTotals.get(name) ?? { total: 0, count: 0 };
-    entry.total += e.total;
-    entry.count += 1;
-    vendorTotals.set(name, entry);
-  }
-  const vendorSpend: VendorSpend[] = [...vendorTotals.entries()]
-    .map(([vendorName, v]) => ({ vendorName, ...v }))
-    .sort((a, b) => b.total - a.total);
+  const allExpenses: ExpenseRecord[] = (rawExpenses ?? []).map((e) => ({
+    id: e.id,
+    expenseNumber: e.expense_number,
+    vendorId: e.vendor_id,
+    vendorName:
+      (e.vendor_id ? vendorNameById.get(e.vendor_id) : null) ?? e.vendor_name_raw ?? "Unrecorded vendor",
+    status: e.status,
+    receiptDate: e.receipt_date,
+    createdAt: e.created_at,
+    total: Number(e.total),
+    gst: Number(e.gst_amount),
+  }));
 
-  // Per-unit cost trends, from the shared item_paid_unit_costs view (0010) so
-  // this page and the future Thaali cost calculator use one definition of
-  // "what we paid per unit" rather than each deriving their own.
-  const expenseById = new Map((expenses ?? []).map((e) => [e.id, e]));
+  const fyOf = new Map((rawExpenses ?? []).map((e) => [e.id, e.fiscal_year_hijri]));
+
+  const allLines: LineRecord[] = (rawLines ?? []).map((l) => {
+    const offer = l.pricelist_items as unknown as
+      | { item_pack_sizes: { items: { id: string; name: string } | null } | null }
+      | null;
+    const item = offer?.item_pack_sizes?.items ?? null;
+    return {
+      expenseId: l.expense_id,
+      categoryId: l.category_id,
+      categoryName: l.category_id
+        ? (categoryNameById.get(l.category_id) ?? "Uncategorised")
+        : "Uncategorised",
+      itemId: item?.id ?? null,
+      // Falls back to what the receipt said, so an unmatched line still shows
+      // up under a name a person recognises rather than vanishing.
+      itemName: item?.name ?? l.description_raw,
+      lineTotal: Number(l.line_total),
+      quantity: l.quantity == null ? null : Number(l.quantity),
+    };
+  });
+
+  const currentExpenses = allExpenses.filter((e) => fyOf.get(e.id) === selectedFy);
+  const previousExpenses = allExpenses.filter((e) => fyOf.get(e.id) === selectedFy - 1);
+
+  /* ---------------- filter options, drawn from the year on screen -------- */
+
+  const monthsInYear = [...new Set(currentExpenses.map((e) => monthKey(expenseDate(e))))].sort();
+
+  // A month is only honoured if it belongs to the selected year — otherwise
+  // switching year while a month is chosen would silently show nothing.
+  const selectedMonth = params.month && monthsInYear.includes(params.month) ? params.month : "";
+
+  const currentIds = new Set(currentExpenses.map((e) => e.id));
+  const currentLines = allLines.filter((l) => currentIds.has(l.expenseId));
+
+  const vendorOptions = [
+    ...new Map(
+      currentExpenses.map((e) => [e.vendorId ?? `raw:${e.vendorName}`, e.vendorName])
+    ).entries(),
+  ]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const categoryOptions = [
+    ...new Map(
+      currentLines.filter((l) => l.categoryId).map((l) => [l.categoryId!, l.categoryName])
+    ).entries(),
+  ]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const itemOptions = [
+    ...new Map(currentLines.filter((l) => l.itemId).map((l) => [l.itemId!, l.itemName])).entries(),
+  ]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const selectedVendor = vendorOptions.some((v) => v.value === params.vendor) ? params.vendor! : "";
+  const selectedCategory = categoryOptions.some((c) => c.value === params.category)
+    ? params.category!
+    : "";
+  const selectedItem = itemOptions.some((i) => i.value === params.item) ? params.item! : "";
+
+  const filters: Filters = {
+    month: selectedMonth || null,
+    vendorId: selectedVendor || null,
+    categoryId: selectedCategory || null,
+    itemId: selectedItem || null,
+  };
+
+  const current = applyFilters(currentExpenses, currentLines, filters);
+
+  /* ---------------- what "before" means for the comparison --------------- */
+
+  const previousIds = new Set(previousExpenses.map((e) => e.id));
+  const previousLines = allLines.filter((l) => previousIds.has(l.expenseId));
+
+  let previous: Slice | null;
+  let previousLabel: string;
+
+  if (selectedMonth) {
+    // Month selected: compare against the previous month with data in it,
+    // staying inside what has already been fetched.
+    const idx = monthsInYear.indexOf(selectedMonth);
+    const priorMonth = idx > 0 ? monthsInYear[idx - 1] : null;
+    previous = priorMonth
+      ? applyFilters(currentExpenses, currentLines, { ...filters, month: priorMonth })
+      : null;
+    previousLabel = priorMonth ? formatMonthLabel(priorMonth) : "";
+  } else {
+    previous = previousExpenses.length
+      ? applyFilters(previousExpenses, previousLines, { ...filters, month: null })
+      : null;
+    previousLabel = formatFiscalYear(selectedFy - 1);
+  }
+
+  /* ---------------- per-unit trends, scoped to the same slice ------------ */
+
+  const visibleExpenseIds = new Set(current.expenses.map((e) => e.id));
+  const visibleItemIds = new Set(current.lines.map((l) => l.itemId).filter(Boolean) as string[]);
+  const vendorNameByExpense = new Map(current.expenses.map((e) => [e.id, e.vendorName]));
 
   const perUnitRows: PerUnitRow[] = (paidCosts ?? [])
-    .map((c) => {
-      const expense = expenseById.get(c.expense_id as string);
-      return {
-        groupName: (c.item_name as string) ?? "—",
-        vendorName: expense?.vendor_name_raw ?? "—",
-        receiptDate: (c.receipt_date as string | null) ?? null,
-        normalizedQuantity: Number(c.base_quantity),
-        normalizedUnit: c.base_unit_code as string,
-        perUnit: Number(c.cost_per_base_unit),
-      };
-    })
-    .sort((a, b) => a.groupName.localeCompare(b.groupName) || (a.receiptDate ?? "").localeCompare(b.receiptDate ?? ""));
+    .filter((c) => visibleExpenseIds.has(c.expense_id as string))
+    // Only items still in the slice: a category or item filter has to narrow
+    // this section too, or it would contradict everything above it.
+    .filter((c) => visibleItemIds.has(c.item_id as string))
+    .map((c) => ({
+      groupName: (c.item_name as string) ?? "—",
+      vendorName: vendorNameByExpense.get(c.expense_id as string) ?? "—",
+      receiptDate: (c.receipt_date as string | null) ?? null,
+      normalizedQuantity: Number(c.base_quantity),
+      normalizedUnit: c.base_unit_code as string,
+      perUnit: Number(c.cost_per_base_unit),
+    }))
+    .sort(
+      (a, b) =>
+        a.groupName.localeCompare(b.groupName) ||
+        (a.receiptDate ?? "").localeCompare(b.receiptDate ?? "")
+    );
 
-  const totalSpend = (expenses ?? []).reduce((s, e) => s + e.total, 0);
-  const totalGst = (expenses ?? []).reduce((s, e) => s + e.gst_amount, 0);
-  const expenseCount = (expenses ?? []).length;
-  const averageExpense = expenseCount > 0 ? totalSpend / expenseCount : 0;
-  const outstanding = (expenses ?? []).filter((e) => e.status === "approved").reduce((s, e) => s + e.total, 0);
-
-  // Spend over time — monthly buckets across the fiscal year
-  const monthTotals = new Map<string, number>();
-  for (const e of expenses ?? []) {
-    if (!e.receipt_date) continue;
-    const month = e.receipt_date.slice(0, 7); // "YYYY-MM"
-    monthTotals.set(month, (monthTotals.get(month) ?? 0) + e.total);
-  }
-  const spendOverTime = [...monthTotals.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, total]) => ({ x: month, y: total }));
-
-  const statusBreakdown = [
-    { label: "Submitted", value: statusCounts.submitted },
-    { label: "Approved", value: statusCounts.approved },
-    { label: "Paid", value: statusCounts.paid },
-    { label: "Declined", value: statusCounts.declined },
-  ];
-
-  return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="page-title text-ink">Reports</h1>
-          <p className="page-description mt-1">
-            Fiscal year runs Shawwal → the following Ramadan on the Fatimi/Misri Hijri calendar (§8).
-          </p>
-        </div>
-        <FiscalYearSelect fiscalYears={fiscalYears} selectedFy={selectedFy} currentFy={currentFy} />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <MetricCard label="Total spend" value={`$${totalSpend.toFixed(2)}`} />
-        <MetricCard label="Total GST" value={`$${totalGst.toFixed(2)}`} />
-        <MetricCard label="Expenses" value={String(expenseCount)} />
-        <MetricCard label="Average expense" value={`$${averageExpense.toFixed(2)}`} />
-        <MetricCard label="Outstanding (unpaid)" value={`$${outstanding.toFixed(2)}`} />
-      </div>
-
-      <ReportsView
-        categorySpend={categorySpend}
-        vendorSpend={vendorSpend}
-        perUnitRows={perUnitRows}
-        spendOverTime={spendOverTime}
-        statusBreakdown={statusBreakdown}
-      />
-    </div>
+  const fiscalYears = [...new Set((fyRows ?? []).map((r) => r.fiscal_year_hijri))].sort(
+    (a, b) => b - a
   );
-}
+  if (!fiscalYears.includes(currentFy)) fiscalYears.unshift(currentFy);
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+  const periodLabel = selectedMonth ? formatMonthLabel(selectedMonth) : formatFiscalYear(selectedFy);
+
   return (
-    <div className="rounded-lg bg-white/60 p-4">
-      <p className="text-xs uppercase tracking-wide text-ink/50">{label}</p>
-      <p className="mt-1 font-mono text-2xl text-ink">{value}</p>
-    </div>
+    <ReportsView
+      fiscalYears={fiscalYears}
+      currentFy={currentFy}
+      selectedFy={selectedFy}
+      months={monthsInYear}
+      selectedMonth={selectedMonth}
+      vendors={vendorOptions}
+      selectedVendor={selectedVendor}
+      categories={categoryOptions}
+      selectedCategory={selectedCategory}
+      items={itemOptions}
+      selectedItem={selectedItem}
+      current={current}
+      previous={previous}
+      periodLabel={periodLabel}
+      previousLabel={previousLabel}
+      perUnitRows={perUnitRows}
+      hasCategoryOrItemFilter={!!(selectedCategory || selectedItem)}
+    />
   );
 }
