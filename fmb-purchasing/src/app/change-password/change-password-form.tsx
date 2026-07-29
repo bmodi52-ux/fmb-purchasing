@@ -12,6 +12,19 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {!forced && (
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-ink/70">Current password</span>
+          <input
+            name="current_password"
+            type="password"
+            autoComplete="current-password"
+            required
+            autoFocus
+            className="rounded-md border border-ink/15 bg-white px-3 py-2 text-ink outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+          />
+        </label>
+      )}
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-ink/70">New password</span>
         <input
@@ -20,7 +33,7 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
           autoComplete="new-password"
           required
           minLength={PASSWORD_MIN_LENGTH}
-          autoFocus
+          autoFocus={forced}
           className="rounded-md border border-ink/15 bg-white px-3 py-2 text-ink outline-none focus:border-gold focus:ring-1 focus:ring-gold"
         />
       </label>
