@@ -18,9 +18,9 @@ export default async function PaymentsPage() {
 
   const submitterIds = [...new Set((expenses ?? []).map((e) => e.submitted_by))];
   const { data: profiles } = submitterIds.length
-    ? await admin.from("profiles").select("id, full_name, username").in("id", submitterIds)
+    ? await admin.from("profiles").select("id, full_name, email").in("id", submitterIds)
     : { data: [] };
-  const submitterNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.username]));
+  const submitterNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
 
   const rows: PaymentRow[] = (expenses ?? []).map((e) => ({
     id: e.id,

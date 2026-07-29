@@ -30,13 +30,13 @@ export default async function ApprovalsPage() {
   const expenseIds = expenses.map((e) => e.id);
 
   const [{ data: profiles }, { data: lineItems }] = await Promise.all([
-    admin.from("profiles").select("id, full_name, username").in("id", submitterIds),
+    admin.from("profiles").select("id, full_name, email").in("id", submitterIds),
     admin
       .from("expense_line_items")
       .select("expense_id, description_raw, quantity, unit_price, line_total, category_id")
       .in("expense_id", expenseIds),
   ]);
-  const submitterNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.username]));
+  const submitterNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
 
   const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
   const categoryNameById = categoryLabelsById(categories ?? []);

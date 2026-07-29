@@ -4,9 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export type CurrentUser = {
   id: string;
-  username: string;
   fullName: string;
+  /** Login identity and notification address — see migration 0017. */
   email: string;
+  mustChangePassword: boolean;
   teamIds: string[];
 };
 
@@ -26,7 +27,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const admin = createAdminClient();
   const { data: profile } = await admin
     .from("profiles")
-    .select("id, username, full_name, email, is_active")
+    .select("id, full_name, email, is_active, must_change_password")
     .eq("id", user.id)
     .single();
 
@@ -39,9 +40,9 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   return {
     id: profile.id,
-    username: profile.username,
     fullName: profile.full_name,
     email: profile.email,
+    mustChangePassword: profile.must_change_password,
     teamIds: (memberships ?? []).map((m) => m.team_id),
   };
 });

@@ -36,12 +36,12 @@ export default async function AllExpensesPage() {
   const vendorIds = [...new Set((expenses ?? []).map((e) => e.vendor_id).filter(Boolean) as string[])];
 
   const [{ data: profiles }, { data: vendors }, visibleColumns] = await Promise.all([
-    userIds.length ? admin.from("profiles").select("id, full_name, username").in("id", userIds) : { data: [] },
+    userIds.length ? admin.from("profiles").select("id, full_name, email").in("id", userIds) : { data: [] },
     vendorIds.length ? admin.from("vendors").select("id, vendor_number").in("id", vendorIds) : { data: [] },
     getColumnPreference(user.id, PAGE_KEY, DEFAULT_VISIBLE),
   ]);
 
-  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.username]));
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
   const vendorNumberById = new Map((vendors ?? []).map((v) => [v.id, v.vendor_number]));
 
   const rows: ExpenseRow[] = (expenses ?? []).map((e) => ({

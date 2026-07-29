@@ -7,7 +7,7 @@ import { CreateUserForm } from "./create-user-form";
 import { UsersTable, type UserRow } from "./users-table";
 
 const PAGE_KEY = "admin_users";
-const DEFAULT_VISIBLE = ["username", "full_name", "email", "teams", "status", "actions"];
+const DEFAULT_VISIBLE = ["full_name", "email", "teams", "status", "actions"];
 
 export default async function UsersAdminPage() {
   const user = await getCurrentUser();
@@ -16,7 +16,10 @@ export default async function UsersAdminPage() {
 
   const admin = createAdminClient();
   const [{ data: profiles }, { data: teams }, { data: members }, visibleColumns] = await Promise.all([
-    admin.from("profiles").select("id, username, full_name, email, is_active").order("username"),
+    admin
+      .from("profiles")
+      .select("id, full_name, email, is_active, must_change_password")
+      .order("full_name"),
     admin.from("teams").select("id, name"),
     admin.from("team_members").select("team_id, user_id"),
     getColumnPreference(user.id, PAGE_KEY, DEFAULT_VISIBLE),
@@ -32,11 +35,11 @@ export default async function UsersAdminPage() {
       .join(", ");
     return {
       id: p.id,
-      username: p.username,
       full_name: p.full_name,
       email: p.email,
       teamNames,
       is_active: p.is_active,
+      must_change_password: p.must_change_password,
     };
   });
 
@@ -45,7 +48,7 @@ export default async function UsersAdminPage() {
       <div>
         <h1 className="page-title text-ink">Users</h1>
         <p className="page-description mt-1 max-w-xl">
-          Manual username/password accounts. Every new account starts in the
+          People sign in with their email address. Every new account starts in the
           default &quot;Member&quot; team; assign additional teams from{" "}
           <a href="/admin/teams" className="underline">
             Teams & permissions

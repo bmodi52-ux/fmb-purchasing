@@ -6,7 +6,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="page-title text-ink">
-        Welcome, {user?.fullName || user?.username}
+        Welcome, {user?.fullName || user?.email}
       </h1>
       <p className="max-w-xl text-ink/70">
         Use the sidebar to submit an expense or, if you have access, review

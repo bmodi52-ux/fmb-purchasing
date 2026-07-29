@@ -15,6 +15,10 @@ export default async function AppLayout({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  // An admin-issued temporary password gets someone in the door and no
+  // further. /change-password sits outside this layout, so this can't loop.
+  if (user.mustChangePassword) redirect("/change-password");
+
   // Both are per-request cached, and the count is a single indexed COUNT, so
   // running it alongside the permission fetch costs one extra round trip.
   const [permissions, unread] = await Promise.all([
@@ -28,7 +32,7 @@ export default async function AppLayout({
       <div className="flex min-h-screen flex-col overflow-x-hidden md:flex-row">
         <AppSidebar
           navItems={visibleNav}
-          userName={user.fullName || user.username}
+          userName={user.fullName || user.email}
           signOutAction={signOut}
           unreadCount={unread}
         />

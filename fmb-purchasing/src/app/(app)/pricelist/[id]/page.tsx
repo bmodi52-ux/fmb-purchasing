@@ -113,9 +113,9 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   ];
   const { data: profiles } =
     changedByIds.length > 0
-      ? await admin.from("profiles").select("id, full_name, username").in("id", changedByIds)
+      ? await admin.from("profiles").select("id, full_name, email").in("id", changedByIds)
       : { data: [] };
-  const profileNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.username]));
+  const profileNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
 
   const vendorNameById = new Map((vendors ?? []).map((v) => [v.id, `${v.vendor_number} — ${v.name}`]));
   const categoryNameById = categoryLabelsById(categories ?? []);
