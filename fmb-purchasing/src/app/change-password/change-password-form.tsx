@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { changePassword, type ChangePasswordState } from "./actions";
-import { PASSWORD_MIN_LENGTH } from "@/lib/auth/password";
+import { PASSWORD_MIN_LENGTH, PASSWORD_REQUIREMENTS } from "@/lib/auth/password";
 
 const initialState: ChangePasswordState = { error: null };
 
@@ -36,7 +36,11 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
         />
       </label>
 
-      <p className="text-xs text-ink/55">At least {PASSWORD_MIN_LENGTH} characters.</p>
+      <ul className="list-disc pl-4 text-xs text-ink/55">
+        {PASSWORD_REQUIREMENTS.map((req) => (
+          <li key={req}>{req}</li>
+        ))}
+      </ul>
 
       {state.error && <p className="text-sm text-red-700">{state.error}</p>}
 

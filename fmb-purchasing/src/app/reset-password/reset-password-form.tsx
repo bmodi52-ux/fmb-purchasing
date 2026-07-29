@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { resetPassword, type ResetPasswordState } from "./actions";
-import { PASSWORD_MIN_LENGTH } from "@/lib/auth/password";
+import { PASSWORD_MIN_LENGTH, PASSWORD_REQUIREMENTS } from "@/lib/auth/password";
 
 const initialState: ResetPasswordState = { error: null };
 
@@ -37,7 +37,11 @@ export function ResetPasswordForm({ token }: { token: string }) {
         />
       </label>
 
-      <p className="text-xs text-ink/55">At least {PASSWORD_MIN_LENGTH} characters.</p>
+      <ul className="list-disc pl-4 text-xs text-ink/55">
+        {PASSWORD_REQUIREMENTS.map((req) => (
+          <li key={req}>{req}</li>
+        ))}
+      </ul>
 
       {state.error && (
         <div className="text-sm text-red-700">
