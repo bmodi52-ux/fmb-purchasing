@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ColumnsDataTable, type ColumnDef } from "@/components/columns-data-table";
 import { ReceiptViewer } from "@/components/receipt-viewer";
 import { formatDate } from "@/lib/format";
@@ -30,7 +31,12 @@ const ALL_COLUMNS: ColumnDef<ExpenseRow>[] = [
   {
     key: "expense_number",
     label: "Entry #",
-    render: (r) => <span className="font-mono text-ink/70">{r.expenseNumber ?? "—"}</span>,
+    // The entry number exists to be followed; make it the way in.
+    render: (r) => (
+      <Link href={`/expenses/${r.id}`} className="font-mono text-ink underline">
+        {r.expenseNumber ?? "View"}
+      </Link>
+    ),
     exportValue: (r) => r.expenseNumber ?? "",
   },
   { key: "vendor", label: "Vendor", render: (r) => r.vendor_name_raw ?? "—", exportValue: (r) => r.vendor_name_raw ?? "" },

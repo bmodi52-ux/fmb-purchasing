@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { SubmitButton } from "@/components/submit-button";
 import { useState } from "react";
 import { markExpensePaid, bulkMarkPaid } from "./actions";
@@ -133,7 +134,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                           aria-label="Select expense"
                         />
                       </td>
-                      <td className="p-2 font-mono text-xs text-ink/60">{e.expense_number ?? "—"}</td>
+                      <td className="p-2 font-mono text-xs"><Link href={`/expenses/${e.id}`} className="text-ink/70 underline">{e.expense_number ?? "View"}</Link></td>
                       <td className="p-2">{e.vendor_name_raw}</td>
                       <td className="p-2 text-ink/70">{e.submittedByName}</td>
                       <td className="p-2 text-ink/70">{e.invoice_number || "—"}</td>

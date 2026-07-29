@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { SubmitButton } from "@/components/submit-button";
 import { reviewExpense, bulkReviewExpenses } from "./actions";
 import { formatDate } from "@/lib/format";
@@ -92,7 +93,7 @@ export function ApprovalsList({ expenses }: { expenses: ApprovalRow[] }) {
               <details className="flex-1 rounded-lg border border-ink/10 bg-white/60 p-4">
               <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3">
                 <div>
-                  <span className="mr-2 font-mono text-xs text-ink/50">{e.expense_number ?? "—"}</span>
+                  <Link href={`/expenses/${e.id}`} className="mr-2 font-mono text-xs text-ink/70 underline">{e.expense_number ?? "View"}</Link>
                   <span className="font-medium text-ink">{e.vendor_name_raw}</span>
                   <span className="ml-2 text-sm text-ink/50">
                     {e.submittedByName} · {formatDate(e.created_at)}
