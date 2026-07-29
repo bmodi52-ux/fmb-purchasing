@@ -269,6 +269,159 @@ export function ColumnChart({
 }
 
 /* ------------------------------------------------------------------ */
+/* Stacked columns — magnitude over time, split by a dimension          */
+/* ------------------------------------------------------------------ */
+
+export type StackedColumnSeries = { key: string; label: string; values: number[] };
+
+/**
+ * Spend per month, split into named parts.
+ *
+ * Categorical here, because the parts *are* the subject — this is the chart
+ * that answers "which items drove that month". Segments are separated by a
+ * 2px surface gap, and the legend carries totals, which is the relief the
+ * palette's contrast WARN requires.
+ */
+export function StackedColumnChart({
+  months,
+  series,
+  height = 220,
+  valueFormat = formatMoney,
+  emptyLabel = "No spend in this period.",
+}: {
+  months: { key: string; label: string }[];
+  series: StackedColumnSeries[];
+  height?: number;
+  valueFormat?: (n: number) => string;
+  emptyLabel?: string;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+
+  if (months.length === 0 || series.length === 0)
+    return <p className="text-sm text-ink/50">{emptyLabel}</p>;
+
+  const width = 600;
+  const pad = { top: 16, right: 8, bottom: 4, left: 8 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+
+  const columnTotals = months.map((_, i) => series.reduce((s, ser) => s + (ser.values[i] ?? 0), 0));
+  const max = Math.max(...columnTotals, 1) * 1.1;
+  const band = plotW / months.length;
+  const barW = Math.min(28, Math.max(8, band - 12));
+  // In user units; the viewBox is unscaled vertically so this is the real gap.
+  const GAP = 2;
+
+  return (
+    <div className="relative">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ height }} role="img">
+        <g transform={`translate(${pad.left},${pad.top})`}>
+          {[0, 0.5, 1].map((t) => (
+            <line key={t} x1={0} x2={plotW} y1={plotH * t} y2={plotH * t} stroke={GRID} strokeWidth={1} />
+          ))}
+
+          {months.map((m, i) => {
+            const x = i * band + (band - barW) / 2;
+            let cursor = plotH;
+            // Bottom-up so the first (largest) series sits at the base and
+            // keeps its position as months change.
+            const segments = series.map((ser, si) => {
+              const raw = ((ser.values[i] ?? 0) / max) * plotH;
+              if (raw <= 0) return null;
+              // Reserve the gap out of the segment, never out of the value.
+              const h = Math.max(raw - GAP, 1);
+              const y = cursor - raw;
+              cursor -= raw;
+              const isTop = series.slice(si + 1).every((s) => (s.values[i] ?? 0) <= 0);
+              return (
+                <path
+                  key={ser.key}
+                  d={
+                    isTop
+                      ? columnPath(x, y, barW, h)
+                      : `M ${x} ${y} L ${x + barW} ${y} L ${x + barW} ${y + h} L ${x} ${y + h} Z`
+                  }
+                  fill={CATEGORICAL[si % CATEGORICAL.length]}
+                  opacity={hover === i ? 1 : 0.9}
+                />
+              );
+            });
+
+            return (
+              <g key={m.key}>
+                {segments}
+                <rect
+                  x={i * band}
+                  y={0}
+                  width={band}
+                  height={plotH}
+                  fill="transparent"
+                  onPointerEnter={() => setHover(i)}
+                  onPointerLeave={() => setHover(null)}
+                />
+              </g>
+            );
+          })}
+        </g>
+      </svg>
+
+      <div className="mt-1 flex">
+        {months.map((m) => (
+          <span
+            key={m.key}
+            className="min-w-0 flex-1 truncate text-center text-[11px] text-ink/50"
+            style={{ flexBasis: `${100 / months.length}%` }}
+          >
+            {m.label}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+        {series.map((s, i) => (
+          <span key={s.key} className="flex items-center gap-1.5 text-ink/70">
+            <span
+              className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+              style={{ background: CATEGORICAL[i % CATEGORICAL.length] }}
+            />
+            {s.label}
+            <span className="font-mono text-ink/45 tabular-nums">
+              {formatCompact(s.values.reduce((a, b) => a + b, 0))}
+            </span>
+          </span>
+        ))}
+      </div>
+
+      {hover != null && (
+        <div
+          className="pointer-events-none absolute top-0 z-10 rounded-md border border-ink/10 bg-white px-2.5 py-1.5 text-xs shadow-md"
+          style={{
+            left: `${(((hover + 0.5) * band + pad.left) / width) * 100}%`,
+            transform: "translateX(-50%)",
+          }}
+        >
+          <p className="mb-1 font-medium text-ink">
+            {months[hover].label} — {valueFormat(columnTotals[hover])}
+          </p>
+          {series.map((s, i) =>
+            (s.values[hover] ?? 0) > 0 ? (
+              <p key={s.key} className="flex items-center gap-1.5 text-ink/70">
+                <span
+                  className="inline-block h-2 w-2 shrink-0 rounded-sm"
+                  style={{ background: CATEGORICAL[i % CATEGORICAL.length] }}
+                />
+                <span className="font-mono tabular-nums">{valueFormat(s.values[hover])}</span>
+                <span className="text-ink/45">{s.label}</span>
+              </p>
+            ) : null
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Bars — ranking by magnitude                                          */
 /* ------------------------------------------------------------------ */
 

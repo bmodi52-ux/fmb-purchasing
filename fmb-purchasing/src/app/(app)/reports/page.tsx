@@ -15,16 +15,20 @@ import {
   type Slice,
 } from "./aggregate";
 import { ReportsView, type PerUnitRow } from "./reports-view";
+import { SECTIONS, type ReportSection, type ReportQuery } from "./report-filters";
 
 export default async function ReportsPage({
   searchParams,
 }: {
+  // category and item repeat, so they arrive as arrays when more than one
+  // is selected and as a bare string when exactly one is.
   searchParams: Promise<{
     fy?: string;
+    section?: string;
     month?: string;
     vendor?: string;
-    category?: string;
-    item?: string;
+    category?: string | string[];
+    item?: string | string[];
   }>;
 }) {
   const user = await getCurrentUser();
@@ -149,16 +153,22 @@ export default async function ReportsPage({
     .sort((a, b) => a.label.localeCompare(b.label));
 
   const selectedVendor = vendorOptions.some((v) => v.value === params.vendor) ? params.vendor! : "";
-  const selectedCategory = categoryOptions.some((c) => c.value === params.category)
-    ? params.category!
-    : "";
-  const selectedItem = itemOptions.some((i) => i.value === params.item) ? params.item! : "";
+
+  // Anything not on offer for this year is dropped rather than carried
+  // silently — otherwise switching year leaves stale ids selecting nothing.
+  const asList = (v: string | string[] | undefined) =>
+    v == null ? [] : Array.isArray(v) ? v : [v];
+
+  const selectedCategories = asList(params.category).filter((c) =>
+    categoryOptions.some((o) => o.value === c)
+  );
+  const selectedItems = asList(params.item).filter((i) => itemOptions.some((o) => o.value === i));
 
   const filters: Filters = {
     month: selectedMonth || null,
     vendorId: selectedVendor || null,
-    categoryId: selectedCategory || null,
-    itemId: selectedItem || null,
+    categoryIds: selectedCategories,
+    itemIds: selectedItems,
   };
 
   const current = applyFilters(currentExpenses, currentLines, filters);
@@ -219,25 +229,34 @@ export default async function ReportsPage({
 
   const periodLabel = selectedMonth ? formatMonthLabel(selectedMonth) : formatFiscalYear(selectedFy);
 
+  const section = (SECTIONS.some((s) => s.key === params.section)
+    ? params.section
+    : "overview") as ReportSection;
+
+  const query: ReportQuery = {
+    fy: selectedFy,
+    section,
+    month: selectedMonth,
+    vendor: selectedVendor,
+    categories: selectedCategories,
+    items: selectedItems,
+  };
+
   return (
     <ReportsView
+      query={query}
       fiscalYears={fiscalYears}
       currentFy={currentFy}
-      selectedFy={selectedFy}
       months={monthsInYear}
-      selectedMonth={selectedMonth}
       vendors={vendorOptions}
-      selectedVendor={selectedVendor}
       categories={categoryOptions}
-      selectedCategory={selectedCategory}
       items={itemOptions}
-      selectedItem={selectedItem}
       current={current}
       previous={previous}
       periodLabel={periodLabel}
       previousLabel={previousLabel}
       perUnitRows={perUnitRows}
-      hasCategoryOrItemFilter={!!(selectedCategory || selectedItem)}
+      hasCategoryOrItemFilter={selectedCategories.length > 0 || selectedItems.length > 0}
     />
   );
 }

@@ -4,6 +4,7 @@ import {
   applyFilters,
   totals,
   byMonth,
+  byMonthBreakdown,
   byCategory,
   byVendor,
   byItem,
@@ -200,13 +201,13 @@ describe("applyFilters", () => {
     // e2 is a $300 receipt with $180 of meat and $120 of bakery. Filtering
     // to meat must report $180 — reporting $300 would double-count that
     // receipt across two categories.
-    const meat = applyFilters(expenses, lines, { ...NO_FILTERS, categoryId: "c-meat" });
+    const meat = applyFilters(expenses, lines, { ...NO_FILTERS, categoryIds: ["c-meat"] });
     assert.equal(totals(meat).spend, 1500);
     assert.deepEqual(meat.expenses.map((e) => e.id), ["e1", "e2"]);
   });
 
   test("category filter drops expenses left with no matching lines", () => {
-    const bakery = applyFilters(expenses, lines, { ...NO_FILTERS, categoryId: "c-bakery" });
+    const bakery = applyFilters(expenses, lines, { ...NO_FILTERS, categoryIds: ["c-bakery"] });
     // e1 is meat only, so it must not appear in a bakery slice at all.
     assert.deepEqual(bakery.expenses.map((e) => e.id), ["e2", "e3"]);
     assert.equal(totals(bakery).expenseCount, 2);
@@ -214,7 +215,7 @@ describe("applyFilters", () => {
   });
 
   test("item filter narrows to one item across vendors", () => {
-    const rolls = applyFilters(expenses, lines, { ...NO_FILTERS, itemId: "i-rolls" });
+    const rolls = applyFilters(expenses, lines, { ...NO_FILTERS, itemIds: ["i-rolls"] });
     assert.equal(totals(rolls).spend, 320);
     assert.equal(totals(rolls).lineCount, 2);
   });
@@ -223,7 +224,7 @@ describe("applyFilters", () => {
     const mayBakery = applyFilters(expenses, lines, {
       ...NO_FILTERS,
       month: "2026-05",
-      categoryId: "c-bakery",
+      categoryIds: ["c-bakery"],
     });
     assert.equal(totals(mayBakery).spend, 120);
     assert.deepEqual(mayBakery.expenses.map((e) => e.id), ["e2"]);
@@ -234,6 +235,115 @@ describe("applyFilters", () => {
     assert.equal(none.expenses.length, 0);
     assert.equal(none.lines.length, 0);
     assert.equal(totals(none).spend, 0);
+  });
+});
+
+describe("multi-select filters", () => {
+  test("several categories OR together", () => {
+    const both = applyFilters(expenses, lines, {
+      ...NO_FILTERS,
+      categoryIds: ["c-meat", "c-bakery"],
+    });
+    // Everything, since between them the two cover every line.
+    assert.equal(totals(both).spend, 1820);
+    assert.equal(totals(both).lineCount, 4);
+  });
+
+  test("several items OR together", () => {
+    const two = applyFilters(expenses, lines, {
+      ...NO_FILTERS,
+      itemIds: ["i-mutton", "i-rolls"],
+    });
+    assert.equal(totals(two).spend, 1640); // 1320 + 120 + 200
+    assert.equal(totals(two).lineCount, 3);
+  });
+
+  test("different dimensions AND together", () => {
+    // (meat OR bakery) AND (rolls) — the rolls lines only, not all of meat.
+    const combined = applyFilters(expenses, lines, {
+      ...NO_FILTERS,
+      categoryIds: ["c-meat", "c-bakery"],
+      itemIds: ["i-rolls"],
+    });
+    assert.equal(combined.lines.length, 2);
+    assert.equal(totals(combined).spend, 320);
+  });
+
+  test("an impossible combination yields nothing rather than falling back to OR", () => {
+    // Mutton is never in the bakery category; the AND must hold.
+    const impossible = applyFilters(expenses, lines, {
+      ...NO_FILTERS,
+      categoryIds: ["c-bakery"],
+      itemIds: ["i-mutton"],
+    });
+    assert.equal(impossible.lines.length, 0);
+    assert.equal(impossible.expenses.length, 0);
+  });
+
+  test("an empty array means all, not none", () => {
+    const empty = applyFilters(expenses, lines, { ...NO_FILTERS, categoryIds: [], itemIds: [] });
+    assert.equal(totals(empty).spend, 1820);
+  });
+});
+
+describe("byMonthBreakdown", () => {
+  test("splits each month by the chosen dimension", () => {
+    const b = byMonthBreakdown(all, "category");
+    assert.deepEqual(b.months.map((m) => m.key), ["2026-05", "2026-06"]);
+
+    const meat = b.series.find((s) => s.label === "Meat & Poultry")!;
+    const bakery = b.series.find((s) => s.label === "Bakery")!;
+    // Meat is all in May; bakery straddles both months.
+    assert.deepEqual(meat.values, [1500, 0]);
+    assert.deepEqual(bakery.values, [120, 200]);
+  });
+
+  test("each series total matches the sum of its months", () => {
+    for (const s of byMonthBreakdown(all, "item").series) {
+      assert.equal(s.total, Math.round(s.values.reduce((a, b) => a + b, 0) * 100) / 100);
+    }
+  });
+
+  test("every month column sums to that month's overall spend", () => {
+    const b = byMonthBreakdown(all, "vendor");
+    const monthly = byMonth(all);
+    b.months.forEach((m, i) => {
+      const column = b.series.reduce((s, ser) => s + ser.values[i], 0);
+      assert.equal(Math.round(column * 100) / 100, monthly[i].spend);
+    });
+  });
+
+  test("ranks series by total, largest first", () => {
+    const b = byMonthBreakdown(all, "category");
+    assert.equal(b.series[0].label, "Meat & Poultry");
+  });
+
+  test("folds the tail into Other rather than inventing a ninth colour", () => {
+    // Ten distinct items, capped at 3 series: two named plus "Other (8)".
+    const many: LineRecord[] = Array.from({ length: 10 }, (_, i) => ({
+      expenseId: "e1",
+      categoryId: "c",
+      categoryName: "C",
+      itemId: `item-${i}`,
+      itemName: `Item ${i}`,
+      lineTotal: 100 - i, // descending, so ranking is predictable
+      quantity: 1,
+    }));
+    const slice = { expenses: [expenses[0]], lines: many };
+    const b = byMonthBreakdown(slice, "item", 3);
+
+    assert.equal(b.series.length, 3);
+    assert.equal(b.series[2].label, "Other (8)");
+    assert.equal(b.foldedCount, 8);
+    // Folding must not lose money.
+    const total = b.series.reduce((s, ser) => s + ser.total, 0);
+    assert.equal(Math.round(total * 100) / 100, 955);
+  });
+
+  test("returns empty structures rather than throwing on an empty slice", () => {
+    const b = byMonthBreakdown({ expenses: [], lines: [] }, "category");
+    assert.deepEqual(b.months, []);
+    assert.deepEqual(b.series, []);
   });
 });
 

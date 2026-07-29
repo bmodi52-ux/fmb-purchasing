@@ -39,11 +39,22 @@ export type Filters = {
   /** null means every month in the period. */
   month: string | null;
   vendorId: string | null;
-  categoryId: string | null;
-  itemId: string | null;
+  /**
+   * Empty means "all". Several values of the *same* dimension are an OR —
+   * "meat or bakery" — while different dimensions AND together, so
+   * (meat OR bakery) AND (mutton OR chicken). That is what people mean when
+   * they tick two boxes in one list and one in another.
+   */
+  categoryIds: string[];
+  itemIds: string[];
 };
 
-export const NO_FILTERS: Filters = { month: null, vendorId: null, categoryId: null, itemId: null };
+export const NO_FILTERS: Filters = {
+  month: null,
+  vendorId: null,
+  categoryIds: [],
+  itemIds: [],
+};
 
 /**
  * The date an expense counts against.
@@ -108,16 +119,18 @@ export function applyFilters(
   const keptIds = new Set(keptExpenses.map((e) => e.id));
   let keptLines = lines.filter((l) => keptIds.has(l.expenseId));
 
-  if (filters.categoryId) {
-    keptLines = keptLines.filter((l) => l.categoryId === filters.categoryId);
+  if (filters.categoryIds.length > 0) {
+    const wanted = new Set(filters.categoryIds);
+    keptLines = keptLines.filter((l) => l.categoryId && wanted.has(l.categoryId));
   }
-  if (filters.itemId) {
-    keptLines = keptLines.filter((l) => l.itemId === filters.itemId);
+  if (filters.itemIds.length > 0) {
+    const wanted = new Set(filters.itemIds);
+    keptLines = keptLines.filter((l) => l.itemId && wanted.has(l.itemId));
   }
 
   // Narrowing lines can empty an expense out; drop those so counts agree
   // with what the breakdowns below actually add up.
-  if (filters.categoryId || filters.itemId) {
+  if (filters.categoryIds.length > 0 || filters.itemIds.length > 0) {
     const withLines = new Set(keptLines.map((l) => l.expenseId));
     keptExpenses = keptExpenses.filter((e) => withLines.has(e.id));
   }
@@ -236,6 +249,110 @@ export function byItem(slice: Slice): Bucket[] {
   return rank(out);
 }
 
+/** Which attribute a breakdown splits spend by. */
+export type Dimension = "category" | "vendor" | "item";
+
+export type BreakdownSeries = {
+  key: string;
+  label: string;
+  /** One figure per month, aligned to the `months` array, zero-filled. */
+  values: number[];
+  total: number;
+};
+
+export type MonthBreakdown = {
+  months: { key: string; label: string }[];
+  series: BreakdownSeries[];
+  /** Series folded into "Other" because the palette has a hard ceiling. */
+  foldedCount: number;
+};
+
+/**
+ * Spend per month, split by category, vendor or item.
+ *
+ * This is what actually answers "spend over time for these items": a
+ * breakdown, not a separate filter per chart. Filtering each chart on its
+ * own would let two panels on the same screen disagree about the same
+ * period, which is how a dashboard stops being trusted.
+ *
+ * Series past `maxSeries` fold into "Other" rather than taking a generated
+ * colour — a ninth hue is indistinguishable from an existing one for a
+ * colourblind reader.
+ */
+export function byMonthBreakdown(
+  slice: Slice,
+  dimension: Dimension,
+  maxSeries = 6
+): MonthBreakdown {
+  const dateByExpense = new Map(slice.expenses.map((e) => [e.id, expenseDate(e)]));
+  const vendorByExpense = new Map(
+    slice.expenses.map((e) => [e.id, { key: e.vendorId ?? `raw:${e.vendorName}`, label: e.vendorName }])
+  );
+
+  const keyOf = (line: LineRecord): { key: string; label: string } => {
+    if (dimension === "category") {
+      return { key: line.categoryId ?? "uncategorised", label: line.categoryName };
+    }
+    if (dimension === "item") {
+      return { key: line.itemId ?? `raw:${line.itemName}`, label: line.itemName };
+    }
+    return vendorByExpense.get(line.expenseId) ?? { key: "unknown", label: "Unrecorded vendor" };
+  };
+
+  const monthKeys = [
+    ...new Set(
+      slice.expenses.map((e) => monthKey(expenseDate(e)))
+    ),
+  ].sort();
+  const monthIndex = new Map(monthKeys.map((m, i) => [m, i]));
+
+  const bySeries = new Map<string, { label: string; values: number[]; total: number }>();
+
+  for (const line of slice.lines) {
+    const date = dateByExpense.get(line.expenseId);
+    if (!date) continue;
+    const mi = monthIndex.get(monthKey(date));
+    if (mi == null) continue;
+
+    const { key, label } = keyOf(line);
+    const entry =
+      bySeries.get(key) ?? { label, values: new Array(monthKeys.length).fill(0), total: 0 };
+    entry.values[mi] += line.lineTotal;
+    entry.total += line.lineTotal;
+    bySeries.set(key, entry);
+  }
+
+  const ranked = [...bySeries.entries()]
+    .map(([key, v]) => ({ key, label: v.label, values: v.values, total: round(v.total) }))
+    .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
+
+  let series = ranked;
+  let foldedCount = 0;
+
+  if (ranked.length > maxSeries) {
+    const kept = ranked.slice(0, maxSeries - 1);
+    const rest = ranked.slice(maxSeries - 1);
+    foldedCount = rest.length;
+    const otherValues = new Array(monthKeys.length).fill(0);
+    for (const r of rest) r.values.forEach((v, i) => (otherValues[i] += v));
+    series = [
+      ...kept,
+      {
+        key: "__other__",
+        label: `Other (${rest.length})`,
+        values: otherValues,
+        total: round(rest.reduce((s, r) => s + r.total, 0)),
+      },
+    ];
+  }
+
+  return {
+    months: monthKeys.map((m) => ({ key: m, label: formatMonthLabel(m) })),
+    series: series.map((s) => ({ ...s, values: s.values.map(round) })),
+    foldedCount,
+  };
+}
+
 export function byStatus(slice: Slice): Bucket[] {
   const spendByExpense = new Map<string, number>();
   for (const line of slice.lines) {
@@ -344,6 +461,11 @@ export function insights(
   }
 
   return out;
+}
+
+/** Cents, so binary floating-point drift never reaches a rendered figure. */
+function round(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 function sum(values: number[]): number {
