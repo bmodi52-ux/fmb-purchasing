@@ -1,15 +1,23 @@
 "use client";
 
-import { formatFiscalYear } from "@/lib/fiscal-year";
+import { formatFiscalYear, ALL_YEARS } from "@/lib/fiscal-year";
 
+/**
+ * Scopes a page to one fiscal year, via a plain form so the choice lands in
+ * the URL and the server does the filtering. Shared by Reports and All
+ * Expenses, which both want the same control and the same vocabulary.
+ */
 export function FiscalYearSelect({
   fiscalYears,
   selectedFy,
   currentFy,
+  allowAllYears = false,
 }: {
   fiscalYears: number[];
-  selectedFy: number;
+  /** A year, or ALL_YEARS when the filter is off. */
+  selectedFy: number | typeof ALL_YEARS;
   currentFy: number;
+  allowAllYears?: boolean;
 }) {
   return (
     <form className="flex items-center gap-2 text-sm">
@@ -29,6 +37,7 @@ export function FiscalYearSelect({
             {y === currentFy ? " (current)" : ""}
           </option>
         ))}
+        {allowAllYears && <option value={ALL_YEARS}>All years</option>}
       </select>
     </form>
   );

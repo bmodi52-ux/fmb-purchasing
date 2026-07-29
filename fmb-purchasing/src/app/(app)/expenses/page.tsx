@@ -3,6 +3,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getColumnPreference } from "@/lib/column-prefs";
+import { fiscalYearHijri, formatFiscalYear, ALL_YEARS } from "@/lib/fiscal-year";
+import { FiscalYearSelect } from "@/components/fiscal-year-select";
 import { ExpensesTable, type ExpenseRow } from "./expenses-table";
 
 const PAGE_KEY = "all_expenses";
@@ -17,18 +19,50 @@ const DEFAULT_VISIBLE = [
   "created_at",
 ];
 
-export default async function AllExpensesPage() {
+/**
+ * Backstop for "All years", which is the one selection with no natural
+ * bound. Everything on this page — filtering, sorting, export — happens in
+ * the browser, so the row count is also the size of the payload sent to it.
+ */
+const ALL_YEARS_CAP = 2000;
+
+export default async function AllExpensesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ fy?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "all_expenses", "view");
 
+  const { fy } = await searchParams;
+  const currentFy = fiscalYearHijri(new Date());
+  // Defaults to the current year rather than everything ever recorded: an
+  // accounting page is almost always asked about a period, and it means the
+  // query is bounded by an indexed column instead of growing without limit.
+  const showAllYears = fy === ALL_YEARS;
+  const selectedFy = showAllYears ? ALL_YEARS : fy ? Number(fy) : currentFy;
+
   const admin = createAdminClient();
-  const { data: expenses } = await admin
+
+  let query = admin
     .from("expenses")
     .select(
-      "id, expense_number, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at"
+      "id, expense_number, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at",
+      { count: "exact" }
     )
     .order("created_at", { ascending: false });
+
+  if (showAllYears) query = query.range(0, ALL_YEARS_CAP - 1);
+  else query = query.eq("fiscal_year_hijri", selectedFy as number);
+
+  const [{ data: expenses, count }, { data: fyRows }] = await Promise.all([
+    query,
+    admin.from("expense_fiscal_years").select("fiscal_year_hijri"),
+  ]);
+
+  const fiscalYears = [...new Set((fyRows ?? []).map((r) => r.fiscal_year_hijri))].sort((a, b) => b - a);
+  if (!fiscalYears.includes(currentFy)) fiscalYears.unshift(currentFy);
 
   const userIds = [
     ...new Set((expenses ?? []).flatMap((e) => [e.submitted_by, e.decided_by].filter(Boolean) as string[])),
@@ -65,12 +99,34 @@ export default async function AllExpensesPage() {
     created_at: e.created_at,
   }));
 
+  const truncated = showAllYears && (count ?? 0) > rows.length;
+
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="page-title text-ink">All expenses</h1>
-        <p className="page-description mt-1">Every expense across FMB, with status, category, vendor, amounts, and GST breakdown.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="page-title text-ink">All expenses</h1>
+          <p className="page-description mt-1">
+            {showAllYears
+              ? "Every expense across FMB, with status, vendor, amounts and GST breakdown."
+              : `Expenses filed under ${formatFiscalYear(selectedFy as number)}, with status, vendor, amounts and GST breakdown.`}
+          </p>
+        </div>
+
+        <FiscalYearSelect
+          fiscalYears={fiscalYears}
+          selectedFy={selectedFy}
+          currentFy={currentFy}
+          allowAllYears
+        />
       </div>
+
+      {truncated && (
+        <p className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-ink/80">
+          Showing the {ALL_YEARS_CAP.toLocaleString()} most recent of {count?.toLocaleString()} expenses.
+          Pick a fiscal year to see a complete set.
+        </p>
+      )}
 
       <ExpensesTable rows={rows} initialVisible={visibleColumns} />
     </div>
