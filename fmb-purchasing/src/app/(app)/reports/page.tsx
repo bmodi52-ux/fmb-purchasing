@@ -4,7 +4,7 @@ import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fiscalYearHijri } from "@/lib/fiscal-year";
 import { ReportsView, type CategorySpend, type VendorSpend, type PerUnitRow } from "./reports-view";
-import { FiscalYearSelect } from "./fiscal-year-select";
+import { FiscalYearSelect } from "@/components/fiscal-year-select";
 import { categoryLabelsById } from "@/lib/categories";
 
 export default async function ReportsPage({
