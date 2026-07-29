@@ -70,7 +70,9 @@ export function AppSidebar({
 
         <nav className="flex flex-1 flex-col gap-1 text-sm">
           {navItems.map((item) => (
-            <NavLink key={item.key} href={item.href} label={item.label} onNavigate={() => setOpen(false)} />
+            // Keyed by href, not key: `key` is the permission page, and more
+            // than one nav entry can sit behind the same grant.
+            <NavLink key={item.href} href={item.href} label={item.label} onNavigate={() => setOpen(false)} />
           ))}
           <NavLink
             href="/notifications"
