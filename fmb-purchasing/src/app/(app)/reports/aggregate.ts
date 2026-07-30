@@ -94,6 +94,28 @@ export type Slice = {
 };
 
 /**
+ * The grouping key and display label for one dimension's value.
+ *
+ * The fallback ("no id, so key on the raw name instead") used to be spelled
+ * out separately in six places across this file and page.tsx. That is a
+ * silent way for things to drift: a filter built from one copy would stop
+ * matching a bucket keyed by another the moment someone edited only one of
+ * them. Every place that needs a vendor/category/item key now calls one of
+ * these three functions instead.
+ */
+export function categoryKeyOf(line: LineRecord): { key: string; label: string } {
+  return { key: line.categoryId ?? "uncategorised", label: line.categoryName };
+}
+
+export function itemKeyOf(line: LineRecord): { key: string; label: string } {
+  return { key: line.itemId ?? `raw:${line.itemName}`, label: line.itemName };
+}
+
+export function vendorKeyOf(e: ExpenseRecord): { key: string; label: string } {
+  return { key: e.vendorId ?? `raw:${e.vendorName}`, label: e.vendorName };
+}
+
+/**
  * Applies the filter bar to a period's rows.
  *
  * A category or item filter narrows the *lines*, then keeps only the
@@ -114,11 +136,7 @@ export function applyFilters(
   }
   if (filters.vendorIds.length > 0) {
     const wanted = new Set(filters.vendorIds);
-    // Matched on the fallback key too, so an expense with only a raw vendor
-    // name is still reachable — otherwise it would be permanently unfilterable.
-    keptExpenses = keptExpenses.filter(
-      (e) => wanted.has(e.vendorId ?? "") || wanted.has(`raw:${e.vendorName}`)
-    );
+    keptExpenses = keptExpenses.filter((e) => wanted.has(vendorKeyOf(e).key));
   }
 
   const keptIds = new Set(keptExpenses.map((e) => e.id));
@@ -216,8 +234,8 @@ export function byMonth(slice: Slice): Bucket[] {
 export function byCategory(slice: Slice): Bucket[] {
   const out = new Map<string, Bucket>();
   for (const line of slice.lines) {
-    const key = line.categoryId ?? "uncategorised";
-    const bucket = out.get(key) ?? { key, label: line.categoryName, spend: 0, count: 0 };
+    const { key, label } = categoryKeyOf(line);
+    const bucket = out.get(key) ?? { key, label, spend: 0, count: 0 };
     bucket.spend += line.lineTotal;
     bucket.count += 1;
     out.set(key, bucket);
@@ -233,8 +251,8 @@ export function byVendor(slice: Slice): Bucket[] {
 
   const out = new Map<string, Bucket>();
   for (const e of slice.expenses) {
-    const key = e.vendorId ?? `raw:${e.vendorName}`;
-    const bucket = out.get(key) ?? { key, label: e.vendorName, spend: 0, count: 0 };
+    const { key, label } = vendorKeyOf(e);
+    const bucket = out.get(key) ?? { key, label, spend: 0, count: 0 };
     bucket.spend += spendByExpense.get(e.id) ?? 0;
     bucket.count += 1;
     out.set(key, bucket);
@@ -245,8 +263,8 @@ export function byVendor(slice: Slice): Bucket[] {
 export function byItem(slice: Slice): Bucket[] {
   const out = new Map<string, Bucket>();
   for (const line of slice.lines) {
-    const key = line.itemId ?? `raw:${line.itemName}`;
-    const bucket = out.get(key) ?? { key, label: line.itemName, spend: 0, count: 0 };
+    const { key, label } = itemKeyOf(line);
+    const bucket = out.get(key) ?? { key, label, spend: 0, count: 0 };
     bucket.spend += line.lineTotal;
     bucket.count += 1;
     out.set(key, bucket);
@@ -290,17 +308,11 @@ export function byMonthBreakdown(
   maxSeries = 6
 ): MonthBreakdown {
   const dateByExpense = new Map(slice.expenses.map((e) => [e.id, expenseDate(e)]));
-  const vendorByExpense = new Map(
-    slice.expenses.map((e) => [e.id, { key: e.vendorId ?? `raw:${e.vendorName}`, label: e.vendorName }])
-  );
+  const vendorByExpense = new Map(slice.expenses.map((e) => [e.id, vendorKeyOf(e)]));
 
   const keyOf = (line: LineRecord): { key: string; label: string } => {
-    if (dimension === "category") {
-      return { key: line.categoryId ?? "uncategorised", label: line.categoryName };
-    }
-    if (dimension === "item") {
-      return { key: line.itemId ?? `raw:${line.itemName}`, label: line.itemName };
-    }
+    if (dimension === "category") return categoryKeyOf(line);
+    if (dimension === "item") return itemKeyOf(line);
     return vendorByExpense.get(line.expenseId) ?? { key: "unknown", label: "Unrecorded vendor" };
   };
 
@@ -434,17 +446,14 @@ function countOccurrences(slice: Slice, dimension: Dimension): Map<string, numbe
 
   if (dimension === "vendor") {
     for (const e of slice.expenses) {
-      const key = e.vendorId ?? `raw:${e.vendorName}`;
+      const { key } = vendorKeyOf(e);
       out.set(key, (out.get(key) ?? 0) + 1);
     }
     return out;
   }
 
   for (const line of slice.lines) {
-    const key =
-      dimension === "category"
-        ? (line.categoryId ?? "uncategorised")
-        : (line.itemId ?? `raw:${line.itemName}`);
+    const { key } = dimension === "category" ? categoryKeyOf(line) : itemKeyOf(line);
     out.set(key, (out.get(key) ?? 0) + 1);
   }
   return out;

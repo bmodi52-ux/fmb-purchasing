@@ -230,43 +230,7 @@ export function ReportsView({
           {query.section === "overview" && (
             <OverviewSection current={current} monthly={monthly} found={found} />
           )}
-          {query.section === "categories" && (
-            <DimensionSection
-              current={current}
-              dimension="category"
-              title="Categories"
-              unit="lines"
-              filterHint={
-                query.categories.length > 0
-                  ? "Showing only the categories you've selected above."
-                  : undefined
-              }
-            />
-          )}
-          {query.section === "vendors" && (
-            <DimensionSection
-              current={current}
-              dimension="vendor"
-              title="Vendors"
-              unit="expenses"
-              filterHint={
-                query.vendors.length > 0
-                  ? "Showing only the vendors you've selected above."
-                  : undefined
-              }
-            />
-          )}
-          {query.section === "items" && (
-            <DimensionSection
-              current={current}
-              dimension="item"
-              title="Items"
-              unit="lines"
-              filterHint={
-                query.items.length > 0 ? "Showing only the items you've selected above." : undefined
-              }
-            />
-          )}
+          {query.section === "breakdown" && <BreakdownSection query={query} current={current} />}
           {query.section === "compare" && (
             <CompareSection
               query={query}
@@ -352,12 +316,77 @@ function OverviewSection({
 
 /* ------------------------------------------------------------------ */
 
+const BREAKDOWN_CONFIG: Record<
+  Dimension,
+  { title: string; unit: "lines" | "expenses"; pillLabel: string }
+> = {
+  category: { title: "Categories", unit: "lines", pillLabel: "Categories" },
+  vendor: { title: "Vendors", unit: "expenses", pillLabel: "Vendors" },
+  item: { title: "Items", unit: "lines", pillLabel: "Items" },
+};
+
 /**
- * Categories, Vendors and Items are the same three questions asked of a
- * different column: how does it rank, how did it move month to month, and
- * what are the exact figures. One component, three configurations — three
- * near-identical copies would drift.
+ * Categories, Vendors and Items are the same question asked of a different
+ * column: how does it rank, how did it move month to month, and what are the
+ * exact figures. One dimension picker rather than three tabs — the same
+ * pattern Compare already uses for choosing what to group by.
  */
+function BreakdownSection({ query, current }: { query: ReportQuery; current: Slice }) {
+  const dimension = query.breakdownBy;
+  const config = BREAKDOWN_CONFIG[dimension];
+
+  const selectedCount =
+    dimension === "category"
+      ? query.categories.length
+      : dimension === "vendor"
+        ? query.vendors.length
+        : query.items.length;
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-ink/10 bg-white/60 p-3">
+        <span className="text-xs text-ink/55">Break down by</span>
+        <div className="flex flex-wrap gap-1.5">
+          {(
+            [
+              ["category", BREAKDOWN_CONFIG.category.pillLabel],
+              ["vendor", BREAKDOWN_CONFIG.vendor.pillLabel],
+              ["item", BREAKDOWN_CONFIG.item.pillLabel],
+            ] as const
+          ).map(([value, label]) => (
+            <Link
+              key={value}
+              href={buildHref(query, { breakdownBy: value })}
+              aria-current={dimension === value ? "true" : undefined}
+              className={`rounded-full px-3 py-1 text-xs transition-colors ${
+                dimension === value
+                  ? "bg-gold/25 text-ink ring-1 ring-gold/50"
+                  : "border border-ink/15 text-ink/60 hover:border-ink/30 hover:text-ink"
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <DimensionSection
+        current={current}
+        dimension={dimension}
+        title={config.title}
+        unit={config.unit}
+        filterHint={
+          selectedCount > 0
+            ? `Showing only the ${config.title.toLowerCase()} you've selected above.`
+            : undefined
+        }
+      />
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
 function DimensionSection({
   current,
   dimension,

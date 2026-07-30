@@ -9,6 +9,9 @@ import {
   monthKey,
   expenseDate,
   formatMonthLabel,
+  vendorKeyOf,
+  categoryKeyOf,
+  itemKeyOf,
   type ExpenseRecord,
   type LineRecord,
   type Filters,
@@ -31,6 +34,7 @@ export default async function ReportsPage({
     fy?: string;
     section?: string;
     month?: string;
+    breakdownBy?: string;
     compareBy?: string;
     vendor?: string | string[];
     category?: string | string[];
@@ -136,27 +140,11 @@ export default async function ReportsPage({
   const currentIds = new Set(currentExpenses.map((e) => e.id));
   const currentLines = allLines.filter((l) => currentIds.has(l.expenseId));
 
-  const vendorOptions = [
-    ...new Map(
-      currentExpenses.map((e) => [e.vendorId ?? `raw:${e.vendorName}`, e.vendorName])
-    ).entries(),
-  ]
-    .map(([value, label]) => ({ value, label }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-
-  const categoryOptions = [
-    ...new Map(
-      currentLines.filter((l) => l.categoryId).map((l) => [l.categoryId!, l.categoryName])
-    ).entries(),
-  ]
-    .map(([value, label]) => ({ value, label }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-
-  const itemOptions = [
-    ...new Map(currentLines.filter((l) => l.itemId).map((l) => [l.itemId!, l.itemName])).entries(),
-  ]
-    .map(([value, label]) => ({ value, label }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const vendorOptions = toSortedOptions(currentExpenses.map(vendorKeyOf));
+  const categoryOptions = toSortedOptions(
+    currentLines.filter((l) => l.categoryId).map(categoryKeyOf)
+  );
+  const itemOptions = toSortedOptions(currentLines.filter((l) => l.itemId).map(itemKeyOf));
 
   // Anything not on offer for this year is dropped rather than carried
   // silently — otherwise switching year leaves stale ids selecting nothing.
@@ -262,6 +250,12 @@ export default async function ReportsPage({
     ? params.section
     : "overview") as ReportSection;
 
+  const breakdownBy = (["item", "category", "vendor"] as const).includes(
+    params.breakdownBy as CompareDimension
+  )
+    ? (params.breakdownBy as CompareDimension)
+    : "category";
+
   const compareBy = (["item", "category", "vendor"] as const).includes(
     params.compareBy as CompareDimension
   )
@@ -275,6 +269,7 @@ export default async function ReportsPage({
     vendors: selectedVendors,
     categories: selectedCategories,
     items: selectedItems,
+    breakdownBy,
     compareBy,
   };
 
@@ -296,4 +291,11 @@ export default async function ReportsPage({
       hasCategoryOrItemFilter={selectedCategories.length > 0 || selectedItems.length > 0}
     />
   );
+}
+
+/** Dedupes {key, label} pairs into a sorted <select>/menu option list. */
+function toSortedOptions(pairs: { key: string; label: string }[]): { value: string; label: string }[] {
+  return [...new Map(pairs.map((p) => [p.key, p.label])).entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
