@@ -610,7 +610,7 @@ export function LineChart({
   // existing one under CVD. Past the token ceiling the tail is dropped and
   // said out loud below the chart rather than silently recoloured.
   const drawn = series.slice(0, CATEGORICAL.length);
-  const hidden = drawn.length - drawn.length;
+  const hidden = series.length - drawn.length;
 
   const allX = [...new Set(drawn.flatMap((s) => s.points.map((p) => p.x)))].sort();
   const allY = drawn.flatMap((s) => s.points.map((p) => p.y));

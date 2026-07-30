@@ -3,19 +3,11 @@ import { FilterControls } from "./filter-controls";
 
 export type FilterOption = { value: string; label: string };
 
-export type ReportSection =
-  | "overview"
-  | "categories"
-  | "vendors"
-  | "items"
-  | "compare"
-  | "unit-costs";
+export type ReportSection = "overview" | "breakdown" | "compare" | "unit-costs";
 
 export const SECTIONS: { key: ReportSection; label: string }[] = [
   { key: "overview", label: "Overview" },
-  { key: "categories", label: "Categories" },
-  { key: "vendors", label: "Vendors" },
-  { key: "items", label: "Items" },
+  { key: "breakdown", label: "Breakdown" },
   { key: "compare", label: "Compare" },
   { key: "unit-costs", label: "Unit costs" },
 ];
@@ -29,6 +21,7 @@ export type ReportQuery = {
   vendors: string[];
   categories: string[];
   items: string[];
+  breakdownBy: CompareDimension;
   compareBy: CompareDimension;
 };
 
@@ -46,6 +39,7 @@ export function buildHref(query: ReportQuery, patch: Partial<ReportQuery>): stri
   params.set("fy", String(next.fy));
   if (next.section !== "overview") params.set("section", next.section);
   if (next.month) params.set("month", next.month);
+  if (next.breakdownBy !== "category") params.set("breakdownBy", next.breakdownBy);
   if (next.compareBy !== "item") params.set("compareBy", next.compareBy);
   for (const v of next.vendors) params.append("vendor", v);
   for (const c of next.categories) params.append("category", c);
