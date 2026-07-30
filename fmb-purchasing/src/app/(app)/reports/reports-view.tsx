@@ -7,10 +7,13 @@ import { formatDate } from "@/lib/format";
 import {
   ReportFilters,
   SectionTabs,
+  SECTIONS,
   buildHref,
   type FilterOption,
   type ReportQuery,
 } from "./report-filters";
+import { PrintRegistryProvider, Printable } from "./printable";
+import { PrintButton } from "./print-button";
 import {
   totals,
   percentChange,
@@ -81,6 +84,27 @@ function DateCell({ date, calendar }: { date: string | null; calendar: "gregoria
   return <>{formatHijri(gregorianToHijri(new Date(date)))}</>;
 }
 
+/** Turns the active filters into a plain-language line for the print header. */
+function buildFilterSummary(
+  query: ReportQuery,
+  periodLabel: string,
+  vendors: FilterOption[],
+  categories: FilterOption[],
+  items: FilterOption[]
+): string {
+  const labelsOf = (options: FilterOption[], ids: string[]) =>
+    ids.map((id) => options.find((o) => o.value === id)?.label ?? id);
+
+  const parts = [periodLabel];
+  const v = labelsOf(vendors, query.vendors);
+  const c = labelsOf(categories, query.categories);
+  const i = labelsOf(items, query.items);
+  if (v.length > 0) parts.push(`Vendors: ${v.join(", ")}`);
+  if (c.length > 0) parts.push(`Categories: ${c.join(", ")}`);
+  if (i.length > 0) parts.push(`Items: ${i.join(", ")}`);
+  return parts.join(" · ");
+}
+
 function perUnitVendorSeries(rows: PerUnitRow[]): LineSeriesData[] {
   const byVendorName = new Map<string, PerUnitRow[]>();
   for (const r of rows) {
@@ -146,111 +170,127 @@ export function ReportsView({
     query.categories.length > 0 ||
     query.items.length > 0;
 
+  const sectionLabel = SECTIONS.find((s) => s.key === query.section)?.label ?? query.section;
+  const filterSummary = buildFilterSummary(query, periodLabel, vendors, categories, items);
+
   return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="page-title text-ink">Reports</h1>
-        <p className="page-description mt-1">
-          Fiscal year runs Shawwal → the following Ramadan on the Fatimi/Misri Hijri calendar.
-        </p>
+    <PrintRegistryProvider>
+      <div className="flex flex-col gap-5">
+        <div>
+          <h1 className="page-title text-ink">Reports</h1>
+          <p className="page-description mt-1">
+            Fiscal year runs Shawwal → the following Ramadan on the Fatimi/Misri Hijri calendar.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <SectionTabs query={query} active={query.section} />
+          {!empty && (
+            <PrintButton
+              title={`Reports — ${sectionLabel}`}
+              subtitle={filterSummary}
+              filenameBase={`reports-${query.section}-fy${query.fy}`}
+            />
+          )}
+        </div>
+
+        {/* One filter row, above every section — so whichever tab you are on,
+            the numbers describe the same slice. */}
+        <ReportFilters
+          query={query}
+          fiscalYears={fiscalYears}
+          currentFy={currentFy}
+          months={months}
+          vendors={vendors}
+          categories={categories}
+          items={items}
+        />
+
+        {empty ? (
+          <p className="rounded-xl border border-ink/10 bg-white/60 px-4 py-8 text-center text-sm text-ink/55">
+            Nothing recorded for {periodLabel}
+            {isFiltered && " with these filters"}.
+          </p>
+        ) : (
+          <>
+            {/* The headline rides above every section: whatever you are looking
+                at, the total it belongs to stays in view. */}
+            <Printable id="headline" label="Headline totals">
+              <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                <div className="flex flex-col justify-center rounded-xl border border-gold/30 bg-gold/[0.07] p-5">
+                  <HeroFigure
+                    label={`Total spend · ${periodLabel}`}
+                    value={formatMoney(now.spend)}
+                    caption={`${now.expenseCount} ${now.expenseCount === 1 ? "expense" : "expenses"}, ${now.lineCount} ${now.lineCount === 1 ? "line" : "lines"}`}
+                  />
+                  {spendDelta != null && previousLabel && (
+                    <p className="mt-2.5 text-sm text-ink/70">
+                      <span aria-hidden="true">{spendDelta > 0 ? "↑" : spendDelta < 0 ? "↓" : "→"}</span>{" "}
+                      {Math.abs(Math.round(spendDelta * 100))}%{" "}
+                      <span className="text-ink/50">
+                        {spendDelta > 0 ? "more than" : spendDelta < 0 ? "less than" : "vs"}{" "}
+                        {previousLabel}
+                        {before && ` (${formatMoney(before.spend)})`}
+                      </span>
+                    </p>
+                  )}
+                  {isFiltered && (
+                    <p className="mt-2 text-xs text-ink/45">Filtered — not the whole period.</p>
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <StatTile
+                    label="Expenses"
+                    value={String(now.expenseCount)}
+                    delta={countDelta}
+                    deltaLabel={previousLabel}
+                    trend={monthly.map((m) => m.count)}
+                    hint={previousLabel ? undefined : "No earlier period to compare"}
+                  />
+                  <StatTile
+                    label="Average expense"
+                    value={formatMoney(now.averageExpense)}
+                    trend={monthly.map((m) => m.spend)}
+                  />
+                  {hasCategoryOrItemFilter ? (
+                    <StatTile
+                      label="Lines in this slice"
+                      value={String(now.lineCount)}
+                      hint="GST is recorded per expense, so it isn't shown for a partial receipt"
+                    />
+                  ) : (
+                    <StatTile label="GST" value={formatMoney(now.gst)} hint="Included in total spend" />
+                  )}
+                </div>
+              </section>
+            </Printable>
+
+            {query.section === "overview" && (
+              <OverviewSection current={current} monthly={monthly} found={found} />
+            )}
+            {query.section === "breakdown" && <BreakdownSection query={query} current={current} />}
+            {query.section === "compare" && (
+              <CompareSection
+                query={query}
+                current={current}
+                vendors={vendors}
+                categories={categories}
+                items={items}
+                unitCostByItem={unitCostByItem}
+              />
+            )}
+            {query.section === "unit-costs" && (
+              <UnitCostsSection
+                perUnitRows={perUnitRows}
+                calendar={calendar}
+                onCalendarChange={setCalendar}
+              />
+            )}
+          </>
+        )}
       </div>
-
-      <SectionTabs query={query} active={query.section} />
-
-      {/* One filter row, above every section — so whichever tab you are on,
-          the numbers describe the same slice. */}
-      <ReportFilters
-        query={query}
-        fiscalYears={fiscalYears}
-        currentFy={currentFy}
-        months={months}
-        vendors={vendors}
-        categories={categories}
-        items={items}
-      />
-
-      {empty ? (
-        <p className="rounded-xl border border-ink/10 bg-white/60 px-4 py-8 text-center text-sm text-ink/55">
-          Nothing recorded for {periodLabel}
-          {isFiltered && " with these filters"}.
-        </p>
-      ) : (
-        <>
-          {/* The headline rides above every section: whatever you are looking
-              at, the total it belongs to stays in view. */}
-          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-            <div className="flex flex-col justify-center rounded-xl border border-gold/30 bg-gold/[0.07] p-5">
-              <HeroFigure
-                label={`Total spend · ${periodLabel}`}
-                value={formatMoney(now.spend)}
-                caption={`${now.expenseCount} ${now.expenseCount === 1 ? "expense" : "expenses"}, ${now.lineCount} ${now.lineCount === 1 ? "line" : "lines"}`}
-              />
-              {spendDelta != null && previousLabel && (
-                <p className="mt-2.5 text-sm text-ink/70">
-                  <span aria-hidden="true">{spendDelta > 0 ? "↑" : spendDelta < 0 ? "↓" : "→"}</span>{" "}
-                  {Math.abs(Math.round(spendDelta * 100))}%{" "}
-                  <span className="text-ink/50">
-                    {spendDelta > 0 ? "more than" : spendDelta < 0 ? "less than" : "vs"}{" "}
-                    {previousLabel}
-                    {before && ` (${formatMoney(before.spend)})`}
-                  </span>
-                </p>
-              )}
-              {isFiltered && (
-                <p className="mt-2 text-xs text-ink/45">Filtered — not the whole period.</p>
-              )}
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              <StatTile
-                label="Expenses"
-                value={String(now.expenseCount)}
-                delta={countDelta}
-                deltaLabel={previousLabel}
-                trend={monthly.map((m) => m.count)}
-                hint={previousLabel ? undefined : "No earlier period to compare"}
-              />
-              <StatTile
-                label="Average expense"
-                value={formatMoney(now.averageExpense)}
-                trend={monthly.map((m) => m.spend)}
-              />
-              {hasCategoryOrItemFilter ? (
-                <StatTile
-                  label="Lines in this slice"
-                  value={String(now.lineCount)}
-                  hint="GST is recorded per expense, so it isn't shown for a partial receipt"
-                />
-              ) : (
-                <StatTile label="GST" value={formatMoney(now.gst)} hint="Included in total spend" />
-              )}
-            </div>
-          </section>
-
-          {query.section === "overview" && (
-            <OverviewSection current={current} monthly={monthly} found={found} />
-          )}
-          {query.section === "breakdown" && <BreakdownSection query={query} current={current} />}
-          {query.section === "compare" && (
-            <CompareSection
-              query={query}
-              current={current}
-              vendors={vendors}
-              categories={categories}
-              items={items}
-              unitCostByItem={unitCostByItem}
-            />
-          )}
-          {query.section === "unit-costs" && (
-            <UnitCostsSection
-              perUnitRows={perUnitRows}
-              calendar={calendar}
-              onCalendarChange={setCalendar}
-            />
-          )}
-        </>
-      )}
-    </div>
+    </PrintRegistryProvider>
   );
 }
 
@@ -270,46 +310,52 @@ function OverviewSection({
   return (
     <>
       {found.length > 0 && (
-        <section className="rounded-xl border border-ink/10 bg-white/60 p-4">
-          <h2 className="text-xs tracking-wide text-ink/45 uppercase">What stands out</h2>
-          <ul className="mt-2.5 flex flex-col gap-1.5">
-            {found.map((insight) => (
-              <li key={insight.text} className="flex gap-2 text-sm text-ink/85">
-                <span aria-hidden="true" className="text-ink/30">
-                  {insight.tone === "up" ? "↑" : insight.tone === "down" ? "↓" : "•"}
-                </span>
-                {insight.text}
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Printable id="overview-insights" label="What stands out">
+          <section className="rounded-xl border border-ink/10 bg-white/60 p-4">
+            <h2 className="text-xs tracking-wide text-ink/45 uppercase">What stands out</h2>
+            <ul className="mt-2.5 flex flex-col gap-1.5">
+              {found.map((insight) => (
+                <li key={insight.text} className="flex gap-2 text-sm text-ink/85">
+                  <span aria-hidden="true" className="text-ink/30">
+                    {insight.tone === "up" ? "↑" : insight.tone === "down" ? "↓" : "•"}
+                  </span>
+                  {insight.text}
+                </li>
+              ))}
+            </ul>
+          </section>
+        </Printable>
       )}
 
       {monthly.length > 1 && (
-        <Panel title="Spend over time" subtitle="By month, using the receipt date where there is one">
-          <ColumnChart
-            data={monthly.map((m) => ({
-              key: m.key,
-              label: m.label,
-              value: m.spend,
-              count: m.count,
-            }))}
-            valueFormat={formatMoney}
-          />
-          <MonthTable monthly={monthly} />
-        </Panel>
+        <Printable id="overview-spend-over-time" label="Spend over time">
+          <Panel title="Spend over time" subtitle="By month, using the receipt date where there is one">
+            <ColumnChart
+              data={monthly.map((m) => ({
+                key: m.key,
+                label: m.label,
+                value: m.spend,
+                count: m.count,
+              }))}
+              valueFormat={formatMoney}
+            />
+            <MonthTable monthly={monthly} />
+          </Panel>
+        </Printable>
       )}
 
-      <Panel title="Where it sits" subtitle="Expenses by stage, excluding declined">
-        <StackedBar
-          data={statusMix.map((s) => ({
-            label: s.label,
-            value: s.spend,
-            detail: formatCompact(s.spend),
-            slot: STATUS_SLOT[s.key] ?? 0,
-          }))}
-        />
-      </Panel>
+      <Printable id="overview-status" label="Where it sits">
+        <Panel title="Where it sits" subtitle="Expenses by stage, excluding declined">
+          <StackedBar
+            data={statusMix.map((s) => ({
+              label: s.label,
+              value: s.spend,
+              detail: formatCompact(s.spend),
+              slot: STATUS_SLOT[s.key] ?? 0,
+            }))}
+          />
+        </Panel>
+      </Printable>
     </>
   );
 }
@@ -417,71 +463,77 @@ function DimensionSection({
         </p>
       )}
 
-      <Panel
-        title={`Spend by ${dimension}`}
-        onExport={() =>
-          downloadCsv(
-            `spend-by-${dimension}.csv`,
-            ranked.map((b) => ({ [dimension]: b.label, [unit]: b.count, total: b.spend }))
-          )
-        }
-      >
-        <BarChart
-          data={ranked.map((b) => ({ label: b.label, value: b.spend, count: b.count }))}
-          maxBars={12}
-          valueFormat={formatCompact}
-        />
-      </Panel>
+      <Printable id="breakdown-chart" label={`Spend by ${dimension}`}>
+        <Panel
+          title={`Spend by ${dimension}`}
+          onExport={() =>
+            downloadCsv(
+              `spend-by-${dimension}.csv`,
+              ranked.map((b) => ({ [dimension]: b.label, [unit]: b.count, total: b.spend }))
+            )
+          }
+        >
+          <BarChart
+            data={ranked.map((b) => ({ label: b.label, value: b.spend, count: b.count }))}
+            maxBars={12}
+            valueFormat={formatCompact}
+          />
+        </Panel>
+      </Printable>
 
       {breakdown.months.length > 1 && (
-        <Panel
-          title={`${title} over time`}
-          subtitle={`Each month split by ${dimension}${
-            breakdown.foldedCount > 0 ? ` — the smallest ${breakdown.foldedCount} are grouped` : ""
-          }`}
-        >
-          <StackedColumnChart months={breakdown.months} series={breakdown.series} />
-        </Panel>
+        <Printable id="breakdown-time" label={`${title} over time`}>
+          <Panel
+            title={`${title} over time`}
+            subtitle={`Each month split by ${dimension}${
+              breakdown.foldedCount > 0 ? ` — the smallest ${breakdown.foldedCount} are grouped` : ""
+            }`}
+          >
+            <StackedColumnChart months={breakdown.months} series={breakdown.series} />
+          </Panel>
+        </Printable>
       )}
 
-      <Panel title="The numbers" subtitle="The record — chart colours are only a guide">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-                <th className="py-2 pr-4 font-medium">{title.replace(/s$/, "")}</th>
-                <th className="py-2 pr-4 text-right font-medium capitalize">{unit}</th>
-                <th className="py-2 pr-4 text-right font-medium">Total</th>
-                <th className="py-2 pr-4 text-right font-medium">Share</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranked.map((b) => (
-                <tr key={b.key} className="border-b border-ink/5 last:border-0">
-                  <td className="py-1.5 pr-4">{b.label}</td>
-                  <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
-                    {b.count}
-                  </td>
-                  <td className="py-1.5 pr-4 text-right font-mono tabular-nums">
-                    {formatMoney(b.spend)}
-                  </td>
-                  <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
-                    {total > 0 ? `${Math.round((b.spend / total) * 100)}%` : "—"}
-                  </td>
+      <Printable id="breakdown-table" label={`${title} — the numbers`}>
+        <Panel title="The numbers" subtitle="The record — chart colours are only a guide">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
+                  <th className="py-2 pr-4 font-medium">{title.replace(/s$/, "")}</th>
+                  <th className="py-2 pr-4 text-right font-medium capitalize">{unit}</th>
+                  <th className="py-2 pr-4 text-right font-medium">Total</th>
+                  <th className="py-2 pr-4 text-right font-medium">Share</th>
                 </tr>
-              ))}
-              <tr className="border-t border-ink/15 font-medium">
-                <td className="py-2 pr-4">Total</td>
-                <td className="py-2 pr-4 text-right font-mono tabular-nums">
-                  {ranked.reduce((s, b) => s + b.count, 0)}
-                </td>
-                <td className="py-2 pr-4 text-right font-mono tabular-nums">{formatMoney(total)}</td>
-                <td className="py-2 pr-4 text-right font-mono tabular-nums">100%</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+              </thead>
+              <tbody>
+                {ranked.map((b) => (
+                  <tr key={b.key} className="border-b border-ink/5 last:border-0">
+                    <td className="py-1.5 pr-4">{b.label}</td>
+                    <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
+                      {b.count}
+                    </td>
+                    <td className="py-1.5 pr-4 text-right font-mono tabular-nums">
+                      {formatMoney(b.spend)}
+                    </td>
+                    <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
+                      {total > 0 ? `${Math.round((b.spend / total) * 100)}%` : "—"}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t border-ink/15 font-medium">
+                  <td className="py-2 pr-4">Total</td>
+                  <td className="py-2 pr-4 text-right font-mono tabular-nums">
+                    {ranked.reduce((s, b) => s + b.count, 0)}
+                  </td>
+                  <td className="py-2 pr-4 text-right font-mono tabular-nums">{formatMoney(total)}</td>
+                  <td className="py-2 pr-4 text-right font-mono tabular-nums">100%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      </Printable>
     </>
   );
 }
@@ -580,82 +632,86 @@ function CompareSection({
             {formatMoney(comparison.sharedMax)} a month.
           </p>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {comparison.subjects.map((s, i) => {
-              const unitCost = dimension === "item" ? unitCostByItem[s.key] : undefined;
-              return (
-                <div
-                  key={s.key}
-                  className="rounded-xl border border-ink/10 bg-white/60 p-3.5"
-                >
-                  <div className="flex items-start gap-2">
-                    <span
-                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm"
-                      style={{ background: seriesHue(i) }}
-                    />
-                    <p className="min-w-0 text-sm font-medium break-words text-ink">{s.label}</p>
+          <Printable id="compare-cards" label="Compare cards">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {comparison.subjects.map((s, i) => {
+                const unitCost = dimension === "item" ? unitCostByItem[s.key] : undefined;
+                return (
+                  <div
+                    key={s.key}
+                    className="rounded-xl border border-ink/10 bg-white/60 p-3.5"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span
+                        className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm"
+                        style={{ background: seriesHue(i) }}
+                      />
+                      <p className="min-w-0 text-sm font-medium break-words text-ink">{s.label}</p>
+                    </div>
+
+                    <p className="mt-1.5 text-xl leading-none font-semibold text-ink">
+                      {formatMoney(s.total)}
+                    </p>
+                    <p className="mt-1 text-xs text-ink/50">
+                      {s.occurrences} {occurrenceNoun(dimension, s.occurrences)}
+                      {unitCost && ` · $${unitCost.average.toFixed(2)}/${unitCost.unit} avg`}
+                    </p>
+
+                    <div className="mt-3">
+                      <SmallMultiple
+                        months={comparison.months}
+                        values={s.values}
+                        sharedMax={comparison.sharedMax}
+                        slot={i}
+                      />
+                    </div>
                   </div>
+                );
+              })}
+            </div>
+          </Printable>
 
-                  <p className="mt-1.5 text-xl leading-none font-semibold text-ink">
-                    {formatMoney(s.total)}
-                  </p>
-                  <p className="mt-1 text-xs text-ink/50">
-                    {s.occurrences} {occurrenceNoun(dimension, s.occurrences)}
-                    {unitCost && ` · $${unitCost.average.toFixed(2)}/${unitCost.unit} avg`}
-                  </p>
-
-                  <div className="mt-3">
-                    <SmallMultiple
-                      months={comparison.months}
-                      values={s.values}
-                      sharedMax={comparison.sharedMax}
-                      slot={i}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <Panel title="The numbers" subtitle="Side by side, in full">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-                    <th className="py-2 pr-4 font-medium">Month</th>
-                    {comparison.subjects.map((s) => (
-                      <th key={s.key} className="py-2 pr-4 text-right font-medium">
-                        {s.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {comparison.months.map((m, i) => (
-                    <tr key={m.key} className="border-b border-ink/5 last:border-0">
-                      <td className="py-1.5 pr-4">{m.label}</td>
+          <Printable id="compare-table" label="Compare — the numbers">
+            <Panel title="The numbers" subtitle="Side by side, in full">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
+                      <th className="py-2 pr-4 font-medium">Month</th>
                       {comparison.subjects.map((s) => (
-                        <td
-                          key={s.key}
-                          className="py-1.5 pr-4 text-right font-mono tabular-nums"
-                        >
-                          {s.values[i] > 0 ? formatMoney(s.values[i]) : "—"}
+                        <th key={s.key} className="py-2 pr-4 text-right font-medium">
+                          {s.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparison.months.map((m, i) => (
+                      <tr key={m.key} className="border-b border-ink/5 last:border-0">
+                        <td className="py-1.5 pr-4">{m.label}</td>
+                        {comparison.subjects.map((s) => (
+                          <td
+                            key={s.key}
+                            className="py-1.5 pr-4 text-right font-mono tabular-nums"
+                          >
+                            {s.values[i] > 0 ? formatMoney(s.values[i]) : "—"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    <tr className="border-t border-ink/15 font-medium">
+                      <td className="py-2 pr-4">Total</td>
+                      {comparison.subjects.map((s) => (
+                        <td key={s.key} className="py-2 pr-4 text-right font-mono tabular-nums">
+                          {formatMoney(s.total)}
                         </td>
                       ))}
                     </tr>
-                  ))}
-                  <tr className="border-t border-ink/15 font-medium">
-                    <td className="py-2 pr-4">Total</td>
-                    {comparison.subjects.map((s) => (
-                      <td key={s.key} className="py-2 pr-4 text-right font-mono tabular-nums">
-                        {formatMoney(s.total)}
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </Panel>
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          </Printable>
         </>
       )}
     </>
@@ -736,45 +792,47 @@ function UnitCostsSection({
             const series = perUnitVendorSeries(rows);
             const datedPoints = series.reduce((n, s) => n + s.points.length, 0);
             return (
-              <div key={groupName}>
-                <h3 className="mb-2 text-sm font-medium text-ink">{groupName}</h3>
-                {datedPoints >= 2 ? (
-                  <LineChart series={series} valueFormat={(v) => `$${v.toFixed(4)}`} height={150} />
-                ) : (
-                  <p className="text-xs text-ink/50">
-                    One purchase so far — a trend appears once there is something to compare it
-                    against.
-                  </p>
-                )}
-                <div className="mt-2 overflow-x-auto">
-                  <table className="min-w-full text-xs">
-                    <thead>
-                      <tr className="text-left text-ink/45">
-                        <th className="py-1 pr-3 font-medium">Vendor</th>
-                        <th className="py-1 pr-3 font-medium">Date</th>
-                        <th className="py-1 pr-3 text-right font-medium">Quantity</th>
-                        <th className="py-1 text-right font-medium">Per unit</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((r, i) => (
-                        <tr key={i} className="border-t border-ink/5">
-                          <td className="py-1 pr-3">{r.vendorName}</td>
-                          <td className="py-1 pr-3 font-mono text-ink/60">
-                            <DateCell date={r.receiptDate} calendar={calendar} />
-                          </td>
-                          <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
-                            {r.normalizedQuantity} {r.normalizedUnit}
-                          </td>
-                          <td className="py-1 text-right font-mono tabular-nums">
-                            ${r.perUnit.toFixed(4)}
-                          </td>
+              <Printable key={groupName} id={`unit-cost-${groupName}`} label={`Unit cost — ${groupName}`}>
+                <div>
+                  <h3 className="mb-2 text-sm font-medium text-ink">{groupName}</h3>
+                  {datedPoints >= 2 ? (
+                    <LineChart series={series} valueFormat={(v) => `$${v.toFixed(4)}`} height={150} />
+                  ) : (
+                    <p className="text-xs text-ink/50">
+                      One purchase so far — a trend appears once there is something to compare it
+                      against.
+                    </p>
+                  )}
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="min-w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-ink/45">
+                          <th className="py-1 pr-3 font-medium">Vendor</th>
+                          <th className="py-1 pr-3 font-medium">Date</th>
+                          <th className="py-1 pr-3 text-right font-medium">Quantity</th>
+                          <th className="py-1 text-right font-medium">Per unit</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {rows.map((r, i) => (
+                          <tr key={i} className="border-t border-ink/5">
+                            <td className="py-1 pr-3">{r.vendorName}</td>
+                            <td className="py-1 pr-3 font-mono text-ink/60">
+                              <DateCell date={r.receiptDate} calendar={calendar} />
+                            </td>
+                            <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
+                              {r.normalizedQuantity} {r.normalizedUnit}
+                            </td>
+                            <td className="py-1 text-right font-mono tabular-nums">
+                              ${r.perUnit.toFixed(4)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              </Printable>
             );
           })}
         </div>

@@ -89,14 +89,23 @@ function drawWaveDivider(doc: import("jspdf").jsPDF, x: number, y: number, width
   }
 }
 
-export async function exportPdf(filename: string, title: string, columns: ExportColumn[], rows: Record<string, unknown>[]) {
-  const { default: jsPDF } = await import("jspdf");
-  const autoTable = (await import("jspdf-autotable")).default;
-  const doc = new jsPDF({ orientation: columns.length > 6 ? "landscape" : "portrait" });
+/**
+ * The FMB-branded page shell (logo, wordmark, wave divider, title, optional
+ * subtitle) shared by every PDF export — a row-table export and a
+ * rasterized-widgets export otherwise have nothing in common, but they
+ * should still look like the same document family.
+ */
+function createBrandedPdf(
+  jsPDFCtor: typeof import("jspdf").jsPDF,
+  logoDataUrl: string | null,
+  title: string,
+  subtitle: string | undefined,
+  orientation: "portrait" | "landscape"
+) {
+  const doc = new jsPDFCtor({ orientation });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const logoDataUrl = await loadLogoDataUrl();
-  const HEADER_BOTTOM = 42;
+  const headerBottom = subtitle ? 47 : 42;
 
   function fillPageBackground() {
     doc.setFillColor(...FMB_CREAM);
@@ -139,20 +148,19 @@ export async function exportPdf(filename: string, title: string, columns: Export
     doc.setFontSize(7.5);
     doc.setTextColor(140, 128, 114);
     doc.text(`Generated ${new Date().toLocaleString("en-AU")}`, pageWidth - textX, 37.5, { align: "right" });
+
+    if (subtitle) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(110, 98, 84);
+      doc.text(subtitle, textX, 43);
+    }
   }
 
-  autoTable(doc, {
-    startY: HEADER_BOTTOM,
-    head: [columns.map((c) => c.label)],
-    body: rows.map((r) => columns.map((c) => cellText(r[c.key]))),
-    styles: { fontSize: 8, textColor: FMB_INK, fillColor: FMB_CREAM, lineColor: [225, 210, 180] },
-    headStyles: { fillColor: FMB_GOLD, textColor: FMB_INK, fontStyle: "bold" },
-    alternateRowStyles: { fillColor: FMB_CREAM_ALT },
-    margin: { left: 14, right: 14, top: HEADER_BOTTOM, bottom: 16 },
-    willDrawPage: fillPageBackground,
-    didDrawPage: drawHeader,
-  });
+  return { doc, pageWidth, pageHeight, headerBottom, fillPageBackground, drawHeader };
+}
 
+function drawPageNumbers(doc: import("jspdf").jsPDF, pageWidth: number, pageHeight: number) {
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
@@ -161,6 +169,107 @@ export async function exportPdf(filename: string, title: string, columns: Export
     doc.setTextColor(150, 138, 122);
     doc.text(`FMB Sydney · Page ${i} of ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: "center" });
   }
+}
 
+export async function exportPdf(filename: string, title: string, columns: ExportColumn[], rows: Record<string, unknown>[]) {
+  const { default: jsPDF } = await import("jspdf");
+  const autoTable = (await import("jspdf-autotable")).default;
+  const logoDataUrl = await loadLogoDataUrl();
+  const { doc, pageWidth, pageHeight, headerBottom, fillPageBackground, drawHeader } = createBrandedPdf(
+    jsPDF,
+    logoDataUrl,
+    title,
+    undefined,
+    columns.length > 6 ? "landscape" : "portrait"
+  );
+
+  autoTable(doc, {
+    startY: headerBottom,
+    head: [columns.map((c) => c.label)],
+    body: rows.map((r) => columns.map((c) => cellText(r[c.key]))),
+    styles: { fontSize: 8, textColor: FMB_INK, fillColor: FMB_CREAM, lineColor: [225, 210, 180] },
+    headStyles: { fillColor: FMB_GOLD, textColor: FMB_INK, fontStyle: "bold" },
+    alternateRowStyles: { fillColor: FMB_CREAM_ALT },
+    margin: { left: 14, right: 14, top: headerBottom, bottom: 16 },
+    willDrawPage: fillPageBackground,
+    didDrawPage: drawHeader,
+  });
+
+  drawPageNumbers(doc, pageWidth, pageHeight);
+  doc.save(filename);
+}
+
+/**
+ * Rasterizes a hand-picked set of on-screen chart/table elements (whatever
+ * filters produced them) into the same branded document family as
+ * `exportPdf` — this is "print this dashboard" rather than "export this
+ * table," so there's no row data to hand jsPDF, just DOM nodes.
+ */
+export async function exportWidgetsPdf(
+  filename: string,
+  title: string,
+  subtitle: string,
+  widgets: { label: string; element: HTMLElement }[]
+): Promise<void> {
+  const { default: jsPDF } = await import("jspdf");
+  // Tailwind v4's opacity-modifier utilities (e.g. border-ink/10, bg-white/60)
+  // resolve to color-mix()/oklab() at the computed-style level, which plain
+  // html2canvas can't parse — this fork adds that support.
+  const { default: html2canvas } = await import("html2canvas-pro");
+  const logoDataUrl = await loadLogoDataUrl();
+  const { doc, pageWidth, pageHeight, headerBottom, fillPageBackground, drawHeader } = createBrandedPdf(
+    jsPDF,
+    logoDataUrl,
+    title,
+    subtitle,
+    "portrait"
+  );
+
+  const marginX = 14;
+  const bottomMargin = 20;
+  const contentWidth = pageWidth - marginX * 2;
+  const labelHeight = 6;
+  const gapBetween = 10;
+  const maxHeightPerPage = pageHeight - bottomMargin - (headerBottom + 4) - labelHeight;
+
+  fillPageBackground();
+  drawHeader();
+  let y = headerBottom + 4;
+
+  for (const widget of widgets) {
+    const canvas = await html2canvas(widget.element, {
+      backgroundColor: "#fbf6ec",
+      scale: 2,
+      useCORS: true,
+    });
+
+    let imgWidth = contentWidth;
+    let imgHeight = (canvas.height / canvas.width) * imgWidth;
+    // A chart taller than a whole page would otherwise have nowhere to go —
+    // shrink it (keeping proportions) to fit a single fresh page, rather
+    // than trying to split one image across pages.
+    if (imgHeight > maxHeightPerPage) {
+      imgHeight = maxHeightPerPage;
+      imgWidth = (canvas.width / canvas.height) * imgHeight;
+    }
+
+    if (y + labelHeight + imgHeight > pageHeight - bottomMargin) {
+      doc.addPage();
+      fillPageBackground();
+      drawHeader();
+      y = headerBottom + 4;
+    }
+
+    doc.setFont("times", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...FMB_INK);
+    doc.text(widget.label, marginX, y + 4);
+    y += labelHeight;
+
+    doc.addImage(canvas.toDataURL("image/png"), "PNG", marginX, y, imgWidth, imgHeight);
+    y += imgHeight + gapBetween;
+  }
+
+  drawPageNumbers(doc, pageWidth, pageHeight);
   doc.save(filename);
 }

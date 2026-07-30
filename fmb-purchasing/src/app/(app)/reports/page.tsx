@@ -3,7 +3,6 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fiscalYearHijri, formatFiscalYear } from "@/lib/fiscal-year";
-import { categoryLabelsById } from "@/lib/categories";
 import {
   applyFilters,
   monthKey,
@@ -12,11 +11,10 @@ import {
   vendorKeyOf,
   categoryKeyOf,
   itemKeyOf,
-  type ExpenseRecord,
-  type LineRecord,
   type Filters,
   type Slice,
 } from "./aggregate";
+import { loadReportRawData } from "./data";
 import { ReportsView, type PerUnitRow } from "./reports-view";
 import {
   SECTIONS,
@@ -51,80 +49,13 @@ export default async function ReportsPage({
 
   const admin = createAdminClient();
 
-  // The previous year comes back in the same query so the dashboard can show
+  // The previous year comes back in the same fetch so the dashboard can show
   // change without a second round trip — the function runs a long way from
   // the database, so each one is expensive.
-  const [{ data: rawExpenses }, { data: fyRows }, { data: categoryRows }, { data: vendorRows }] =
-    await Promise.all([
-      admin
-        .from("expenses")
-        .select(
-          "id, expense_number, vendor_id, vendor_name_raw, status, receipt_date, created_at, total, gst_amount, fiscal_year_hijri"
-        )
-        .in("fiscal_year_hijri", [selectedFy, selectedFy - 1])
-        .neq("status", "declined"),
-      admin.from("expense_fiscal_years").select("fiscal_year_hijri"),
-      admin.from("categories").select("id, name, parent_category_id"),
-      admin.from("vendors").select("id, name"),
-    ]);
-
-  const expenseIds = (rawExpenses ?? []).map((e) => e.id);
-
-  const [{ data: rawLines }, { data: paidCosts }] = expenseIds.length
-    ? await Promise.all([
-        // The item name is three tables up from a line — line → offer → pack
-        // size → item — so it rides along as a nested embed rather than
-        // costing another wave of queries.
-        admin
-          .from("expense_line_items")
-          .select(
-            "expense_id, category_id, line_total, quantity, description_raw, pricelist_item_id, pricelist_items ( item_pack_sizes ( items ( id, name ) ) )"
-          )
-          .in("expense_id", expenseIds),
-        admin
-          .from("item_paid_unit_costs")
-          .select("item_id, item_name, expense_id, receipt_date, base_quantity, base_unit_code, cost_per_base_unit")
-          .in("expense_id", expenseIds),
-      ])
-    : [{ data: [] }, { data: [] }];
-
-  const categoryNameById = categoryLabelsById(categoryRows ?? []);
-  const vendorNameById = new Map((vendorRows ?? []).map((v) => [v.id, v.name]));
-
-  const allExpenses: ExpenseRecord[] = (rawExpenses ?? []).map((e) => ({
-    id: e.id,
-    expenseNumber: e.expense_number,
-    vendorId: e.vendor_id,
-    vendorName:
-      (e.vendor_id ? vendorNameById.get(e.vendor_id) : null) ?? e.vendor_name_raw ?? "Unrecorded vendor",
-    status: e.status,
-    receiptDate: e.receipt_date,
-    createdAt: e.created_at,
-    total: Number(e.total),
-    gst: Number(e.gst_amount),
-  }));
-
-  const fyOf = new Map((rawExpenses ?? []).map((e) => [e.id, e.fiscal_year_hijri]));
-
-  const allLines: LineRecord[] = (rawLines ?? []).map((l) => {
-    const offer = l.pricelist_items as unknown as
-      | { item_pack_sizes: { items: { id: string; name: string } | null } | null }
-      | null;
-    const item = offer?.item_pack_sizes?.items ?? null;
-    return {
-      expenseId: l.expense_id,
-      categoryId: l.category_id,
-      categoryName: l.category_id
-        ? (categoryNameById.get(l.category_id) ?? "Uncategorised")
-        : "Uncategorised",
-      itemId: item?.id ?? null,
-      // Falls back to what the receipt said, so an unmatched line still shows
-      // up under a name a person recognises rather than vanishing.
-      itemName: item?.name ?? l.description_raw,
-      lineTotal: Number(l.line_total),
-      quantity: l.quantity == null ? null : Number(l.quantity),
-    };
-  });
+  const [{ allExpenses, allLines, paidCosts, fyOf }, { data: fyRows }] = await Promise.all([
+    loadReportRawData([selectedFy, selectedFy - 1]),
+    admin.from("expense_fiscal_years").select("fiscal_year_hijri"),
+  ]);
 
   const currentExpenses = allExpenses.filter((e) => fyOf.get(e.id) === selectedFy);
   const previousExpenses = allExpenses.filter((e) => fyOf.get(e.id) === selectedFy - 1);
