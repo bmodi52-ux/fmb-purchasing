@@ -74,13 +74,15 @@ export function HomeDashboard({
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    setOrder((prev) => {
-      const oldIndex = prev.indexOf(String(active.id));
-      const newIndex = prev.indexOf(String(over.id));
-      const next = arrayMove(prev, oldIndex, newIndex);
-      reorderDashboardWidgets(next.filter((id) => !removedIds.has(id)));
-      return next;
-    });
+    // Computed from the current `order` directly rather than inside the
+    // setOrder updater — a server action dispatches a router transition,
+    // and doing that from within a state-updater callback runs it as if it
+    // were render-phase code, which React (rightly) rejects.
+    const oldIndex = order.indexOf(String(active.id));
+    const newIndex = order.indexOf(String(over.id));
+    const next = arrayMove(order, oldIndex, newIndex);
+    setOrder(next);
+    reorderDashboardWidgets(next.filter((id) => !removedIds.has(id)));
   }
 
   function openAdd() {
