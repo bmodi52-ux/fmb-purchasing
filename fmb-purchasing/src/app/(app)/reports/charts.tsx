@@ -27,6 +27,15 @@ const SURFACE = "#FBF6EC";
 const GRID = "rgba(43,33,28,0.08)";
 const INK = "#2B211C";
 
+/**
+ * The hue for a categorical slot, for callers that need to draw their own
+ * swatch beside a chart. Exported rather than duplicated so there is one
+ * palette in the file, not one per component.
+ */
+export function seriesHue(slot: number): string {
+  return CATEGORICAL[slot % CATEGORICAL.length];
+}
+
 export function formatMoney(n: number): string {
   return n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 2 });
 }
@@ -415,6 +424,87 @@ export function StackedColumnChart({
               </p>
             ) : null
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Small multiple — one subject's months, on a scale set elsewhere      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One card of a comparison: a subject's monthly columns drawn against a
+ * maximum passed in from outside.
+ *
+ * The shared maximum is the entire point. Scaled to its own peak, a subject
+ * spending a tenth as much would look like it was keeping pace — which is
+ * the standard way small multiples mislead. `slot` fixes the hue to the
+ * subject so it survives a change of selection.
+ */
+export function SmallMultiple({
+  months,
+  values,
+  sharedMax,
+  slot,
+  height = 84,
+}: {
+  months: { key: string; label: string }[];
+  values: number[];
+  sharedMax: number;
+  slot: number;
+  height?: number;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+  const color = CATEGORICAL[slot % CATEGORICAL.length];
+
+  if (months.length === 0) return <p className="text-xs text-ink/50">No months in range.</p>;
+
+  return (
+    <div className="relative">
+      <div
+        className="flex items-end gap-[3px] border-b border-ink/10"
+        style={{ height }}
+        onPointerLeave={() => setHover(null)}
+      >
+        {months.map((m, i) => {
+          const v = values[i] ?? 0;
+          const pct = (v / sharedMax) * 100;
+          return (
+            <div
+              key={m.key}
+              // Centred and width-capped: with only two or three months in
+              // range, a full-width bar reads as a slab rather than a column.
+              className="relative flex h-full flex-1 items-end justify-center"
+              onPointerEnter={() => setHover(i)}
+            >
+              {v > 0 && (
+                <div
+                  className="w-full max-w-[26px] rounded-t-[4px]"
+                  style={{
+                    height: `${Math.max(pct, 1.5)}%`,
+                    background: color,
+                    opacity: hover === i ? 1 : 0.9,
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Only the ends are labelled: at four cards wide there is no room for
+          twelve month names, and the tooltip carries the rest. */}
+      <div className="mt-1 flex justify-between text-[11px] text-ink/45">
+        <span>{months[0].label}</span>
+        {months.length > 1 && <span>{months[months.length - 1].label}</span>}
+      </div>
+
+      {hover != null && (
+        <div className="pointer-events-none absolute -top-1 left-1/2 z-20 -translate-x-1/2 -translate-y-full rounded-md border border-ink/10 bg-white px-2 py-1 text-[11px] whitespace-nowrap shadow-md">
+          <span className="font-medium text-ink">{formatMoney(values[hover] ?? 0)}</span>
+          <span className="text-ink/50"> · {months[hover].label}</span>
         </div>
       )}
     </div>

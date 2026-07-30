@@ -5,6 +5,7 @@ import {
   totals,
   byMonth,
   byMonthBreakdown,
+  compare,
   byCategory,
   byVendor,
   byItem,
@@ -192,7 +193,7 @@ describe("applyFilters", () => {
   });
 
   test("vendor filter keeps only that vendor's expenses and their lines", () => {
-    const costco = applyFilters(expenses, lines, { ...NO_FILTERS, vendorId: "v-costco" });
+    const costco = applyFilters(expenses, lines, { ...NO_FILTERS, vendorIds: ["v-costco"] });
     assert.deepEqual(costco.expenses.map((e) => e.id), ["e2", "e3"]);
     assert.equal(totals(costco).spend, 500);
   });
@@ -231,7 +232,7 @@ describe("applyFilters", () => {
   });
 
   test("a filter matching nothing yields an empty slice, not everything", () => {
-    const none = applyFilters(expenses, lines, { ...NO_FILTERS, vendorId: "v-nobody" });
+    const none = applyFilters(expenses, lines, { ...NO_FILTERS, vendorIds: ["v-nobody"] });
     assert.equal(none.expenses.length, 0);
     assert.equal(none.lines.length, 0);
     assert.equal(totals(none).spend, 0);
@@ -344,6 +345,71 @@ describe("byMonthBreakdown", () => {
     const b = byMonthBreakdown({ expenses: [], lines: [] }, "category");
     assert.deepEqual(b.months, []);
     assert.deepEqual(b.series, []);
+  });
+});
+
+describe("compare", () => {
+  test("returns one series per chosen subject", () => {
+    const c = compare(all, "item", ["i-mutton", "i-rolls"]);
+    assert.deepEqual(c.subjects.map((s) => s.label), ["Mutton", "Dinner Rolls"]);
+  });
+
+  test("shares one scale across subjects, taken from the tallest single month", () => {
+    const c = compare(all, "item", ["i-mutton", "i-rolls"]);
+    // Mutton's single month is 1320; rolls peak at 200. Both cards must
+    // scale to 1320, or rolls would look like it kept pace.
+    assert.equal(c.sharedMax, 1320);
+  });
+
+  test("falls back to the biggest spenders when nothing is chosen", () => {
+    const c = compare(all, "item", []);
+    assert.equal(c.subjects[0].label, "Mutton");
+    assert.ok(c.subjects.length > 1, "expected a default set, not a single subject");
+  });
+
+  test("caps the number of subjects so cards stay readable", () => {
+    const c = compare(all, "item", ["i-mutton", "i-chicken", "i-rolls"], 2);
+    assert.equal(c.subjects.length, 2);
+  });
+
+  test("never folds a chosen subject into Other", () => {
+    // The folding in byMonthBreakdown must not apply here — the reader
+    // named these explicitly.
+    const c = compare(all, "item", ["i-rolls"]);
+    assert.deepEqual(c.subjects.map((s) => s.label), ["Dinner Rolls"]);
+    assert.equal(c.subjects[0].total, 320);
+  });
+
+  test("counts lines for items and categories", () => {
+    const byItem = compare(all, "item", ["i-rolls"]);
+    assert.equal(byItem.subjects[0].occurrences, 2);
+
+    const byCat = compare(all, "category", ["c-meat"]);
+    assert.equal(byCat.subjects[0].occurrences, 2);
+  });
+
+  test("counts expenses for vendors, not lines", () => {
+    // Costco has two expenses but three lines between them.
+    const c = compare(all, "vendor", ["v-costco"]);
+    assert.equal(c.subjects[0].occurrences, 2);
+    assert.equal(c.subjects[0].total, 500);
+  });
+
+  test("a subject's monthly values sum to its total", () => {
+    for (const s of compare(all, "item", []).subjects) {
+      assert.equal(Math.round(s.values.reduce((a, b) => a + b, 0) * 100) / 100, s.total);
+    }
+  });
+
+  test("an unknown subject key yields nothing rather than everything", () => {
+    const c = compare(all, "item", ["i-does-not-exist"]);
+    assert.deepEqual(c.subjects, []);
+  });
+
+  test("survives an empty slice", () => {
+    const c = compare({ expenses: [], lines: [] }, "item", []);
+    assert.deepEqual(c.subjects, []);
+    assert.equal(c.sharedMax, 1);
   });
 });
 

@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { gregorianToHijri, formatHijri } from "@/lib/hijri/hijri.js";
 import { formatDate } from "@/lib/format";
 import {
   ReportFilters,
   SectionTabs,
+  buildHref,
   type FilterOption,
   type ReportQuery,
 } from "./report-filters";
@@ -19,6 +21,8 @@ import {
   byItem,
   byStatus,
   insights,
+  compare,
+  MAX_COMPARE_SUBJECTS,
   type Slice,
   type Dimension,
   type Bucket,
@@ -31,6 +35,8 @@ import {
   BarChart,
   LineChart,
   StackedBar,
+  SmallMultiple,
+  seriesHue,
   formatMoney,
   formatCompact,
   type LineSeriesData,
@@ -102,6 +108,7 @@ export function ReportsView({
   periodLabel,
   previousLabel,
   perUnitRows,
+  unitCostByItem,
   hasCategoryOrItemFilter,
 }: {
   query: ReportQuery;
@@ -116,6 +123,7 @@ export function ReportsView({
   periodLabel: string;
   previousLabel: string;
   perUnitRows: PerUnitRow[];
+  unitCostByItem: Record<string, { average: number; unit: string }>;
   hasCategoryOrItemFilter: boolean;
 }) {
   const [calendar, setCalendar] = useState<"gregorian" | "hijri">("gregorian");
@@ -133,7 +141,10 @@ export function ReportsView({
 
   const empty = now.expenseCount === 0;
   const isFiltered =
-    !!query.month || !!query.vendor || query.categories.length > 0 || query.items.length > 0;
+    !!query.month ||
+    query.vendors.length > 0 ||
+    query.categories.length > 0 ||
+    query.items.length > 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -238,7 +249,11 @@ export function ReportsView({
               dimension="vendor"
               title="Vendors"
               unit="expenses"
-              filterHint={query.vendor ? "Showing only the vendor you've selected above." : undefined}
+              filterHint={
+                query.vendors.length > 0
+                  ? "Showing only the vendors you've selected above."
+                  : undefined
+              }
             />
           )}
           {query.section === "items" && (
@@ -250,6 +265,16 @@ export function ReportsView({
               filterHint={
                 query.items.length > 0 ? "Showing only the items you've selected above." : undefined
               }
+            />
+          )}
+          {query.section === "compare" && (
+            <CompareSection
+              query={query}
+              current={current}
+              vendors={vendors}
+              categories={categories}
+              items={items}
+              unitCostByItem={unitCostByItem}
             />
           )}
           {query.section === "unit-costs" && (
@@ -430,6 +455,187 @@ function DimensionSection({
       </Panel>
     </>
   );
+}
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * The same chart once per subject, all on one scale.
+ *
+ * This is the answer to "let me filter each panel separately" that keeps the
+ * numbers honest: every card names what it is, so none of them can be
+ * mistaken for the period total, which stays above on its own.
+ */
+function CompareSection({
+  query,
+  current,
+  vendors,
+  categories,
+  items,
+  unitCostByItem,
+}: {
+  query: ReportQuery;
+  current: Slice;
+  vendors: FilterOption[];
+  categories: FilterOption[];
+  items: FilterOption[];
+  unitCostByItem: Record<string, { average: number; unit: string }>;
+}) {
+  const dimension = query.compareBy;
+
+  // Subjects come from the filter menus, so there is one place to pick
+  // things rather than a parallel selector that could disagree with them.
+  const chosen =
+    dimension === "item" ? query.items : dimension === "category" ? query.categories : query.vendors;
+
+  const comparison = useMemo(
+    () => compare(current, dimension, chosen, MAX_COMPARE_SUBJECTS),
+    [current, dimension, chosen]
+  );
+
+  const optionCount =
+    dimension === "item" ? items.length : dimension === "category" ? categories.length : vendors.length;
+
+  const usingDefaults = chosen.length === 0;
+  const overCap = chosen.length > MAX_COMPARE_SUBJECTS;
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-ink/10 bg-white/60 p-3">
+        <span className="text-xs text-ink/55">Compare by</span>
+        <div className="flex flex-wrap gap-1.5">
+          {(
+            [
+              ["item", "Items"],
+              ["category", "Categories"],
+              ["vendor", "Vendors"],
+            ] as const
+          ).map(([value, label]) => (
+            <Link
+              key={value}
+              href={buildHref(query, { compareBy: value })}
+              aria-current={dimension === value ? "true" : undefined}
+              className={`rounded-full px-3 py-1 text-xs transition-colors ${
+                dimension === value
+                  ? "bg-gold/25 text-ink ring-1 ring-gold/50"
+                  : "border border-ink/15 text-ink/60 hover:border-ink/30 hover:text-ink"
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+        <p className="text-xs text-ink/45">
+          {usingDefaults
+            ? `Showing the top ${comparison.subjects.length} by spend — pick specific ${dimension}s in the filter bar to choose your own.`
+            : `Comparing ${comparison.subjects.length} of ${optionCount}.`}
+        </p>
+      </div>
+
+      {overCap && (
+        <p className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-xs text-ink/75">
+          {chosen.length} selected, showing the first {MAX_COMPARE_SUBJECTS}. Past that the cards get
+          too narrow to read and the palette runs out of hues that stay distinct for colourblind
+          readers.
+        </p>
+      )}
+
+      {comparison.subjects.length === 0 ? (
+        <p className="rounded-xl border border-ink/10 bg-white/60 px-4 py-8 text-center text-sm text-ink/55">
+          Nothing to compare with the current filters.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-ink/50">
+            One card each, one shared scale — heights are directly comparable. Axis tops out at{" "}
+            {formatMoney(comparison.sharedMax)} a month.
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {comparison.subjects.map((s, i) => {
+              const unitCost = dimension === "item" ? unitCostByItem[s.key] : undefined;
+              return (
+                <div
+                  key={s.key}
+                  className="rounded-xl border border-ink/10 bg-white/60 p-3.5"
+                >
+                  <div className="flex items-start gap-2">
+                    <span
+                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm"
+                      style={{ background: seriesHue(i) }}
+                    />
+                    <p className="min-w-0 text-sm font-medium break-words text-ink">{s.label}</p>
+                  </div>
+
+                  <p className="mt-1.5 text-xl leading-none font-semibold text-ink">
+                    {formatMoney(s.total)}
+                  </p>
+                  <p className="mt-1 text-xs text-ink/50">
+                    {s.occurrences} {occurrenceNoun(dimension, s.occurrences)}
+                    {unitCost && ` · $${unitCost.average.toFixed(2)}/${unitCost.unit} avg`}
+                  </p>
+
+                  <div className="mt-3">
+                    <SmallMultiple
+                      months={comparison.months}
+                      values={s.values}
+                      sharedMax={comparison.sharedMax}
+                      slot={i}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <Panel title="The numbers" subtitle="Side by side, in full">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
+                    <th className="py-2 pr-4 font-medium">Month</th>
+                    {comparison.subjects.map((s) => (
+                      <th key={s.key} className="py-2 pr-4 text-right font-medium">
+                        {s.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparison.months.map((m, i) => (
+                    <tr key={m.key} className="border-b border-ink/5 last:border-0">
+                      <td className="py-1.5 pr-4">{m.label}</td>
+                      {comparison.subjects.map((s) => (
+                        <td
+                          key={s.key}
+                          className="py-1.5 pr-4 text-right font-mono tabular-nums"
+                        >
+                          {s.values[i] > 0 ? formatMoney(s.values[i]) : "—"}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr className="border-t border-ink/15 font-medium">
+                    <td className="py-2 pr-4">Total</td>
+                    {comparison.subjects.map((s) => (
+                      <td key={s.key} className="py-2 pr-4 text-right font-mono tabular-nums">
+                        {formatMoney(s.total)}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </>
+      )}
+    </>
+  );
+}
+
+function occurrenceNoun(dimension: Dimension, n: number): string {
+  if (dimension === "vendor") return n === 1 ? "expense" : "expenses";
+  return n === 1 ? "purchase" : "purchases";
 }
 
 /* ------------------------------------------------------------------ */

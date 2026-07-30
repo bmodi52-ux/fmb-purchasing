@@ -38,20 +38,20 @@ export type LineRecord = {
 export type Filters = {
   /** null means every month in the period. */
   month: string | null;
-  vendorId: string | null;
   /**
    * Empty means "all". Several values of the *same* dimension are an OR —
    * "meat or bakery" — while different dimensions AND together, so
    * (meat OR bakery) AND (mutton OR chicken). That is what people mean when
    * they tick two boxes in one list and one in another.
    */
+  vendorIds: string[];
   categoryIds: string[];
   itemIds: string[];
 };
 
 export const NO_FILTERS: Filters = {
   month: null,
-  vendorId: null,
+  vendorIds: [],
   categoryIds: [],
   itemIds: [],
 };
@@ -112,8 +112,13 @@ export function applyFilters(
   if (filters.month) {
     keptExpenses = keptExpenses.filter((e) => monthKey(expenseDate(e)) === filters.month);
   }
-  if (filters.vendorId) {
-    keptExpenses = keptExpenses.filter((e) => e.vendorId === filters.vendorId);
+  if (filters.vendorIds.length > 0) {
+    const wanted = new Set(filters.vendorIds);
+    // Matched on the fallback key too, so an expense with only a raw vendor
+    // name is still reachable — otherwise it would be permanently unfilterable.
+    keptExpenses = keptExpenses.filter(
+      (e) => wanted.has(e.vendorId ?? "") || wanted.has(`raw:${e.vendorName}`)
+    );
   }
 
   const keptIds = new Set(keptExpenses.map((e) => e.id));
@@ -351,6 +356,98 @@ export function byMonthBreakdown(
     series: series.map((s) => ({ ...s, values: s.values.map(round) })),
     foldedCount,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Compare — the same chart once per subject, on one scale             */
+/* ------------------------------------------------------------------ */
+
+export type CompareSubject = {
+  key: string;
+  label: string;
+  total: number;
+  /** Expenses for a vendor; lines for a category or item. */
+  occurrences: number;
+  /** One figure per month, aligned to `months`. */
+  values: number[];
+};
+
+export type Comparison = {
+  months: { key: string; label: string }[];
+  subjects: CompareSubject[];
+  /**
+   * The tallest single month across every subject. All the cards scale to
+   * this, which is the whole point: per-card scales would make a subject
+   * spending a tenth as much look like it was keeping pace.
+   */
+  sharedMax: number;
+};
+
+/** How many subjects can sit side by side and still be readable. */
+export const MAX_COMPARE_SUBJECTS = 4;
+
+/**
+ * Builds one monthly series per subject, on a single shared scale.
+ *
+ * `subjectKeys` is what the reader picked; when empty it falls back to the
+ * biggest spenders, so the section opens with something worth looking at
+ * rather than blank.
+ */
+export function compare(
+  slice: Slice,
+  dimension: Dimension,
+  subjectKeys: string[],
+  max = MAX_COMPARE_SUBJECTS
+): Comparison {
+  // Reuses the breakdown, asking for every series rather than a folded tail:
+  // here the subjects are chosen deliberately, so nothing should be grouped
+  // away behind "Other".
+  const full = byMonthBreakdown(slice, dimension, Number.MAX_SAFE_INTEGER);
+
+  const chosen =
+    subjectKeys.length > 0
+      ? full.series.filter((s) => subjectKeys.includes(s.key))
+      : full.series.slice(0, max);
+
+  const capped = chosen.slice(0, max);
+
+  const occurrenceOf = countOccurrences(slice, dimension);
+
+  const subjects: CompareSubject[] = capped.map((s) => ({
+    key: s.key,
+    label: s.label,
+    total: s.total,
+    occurrences: occurrenceOf.get(s.key) ?? 0,
+    values: s.values,
+  }));
+
+  return {
+    months: full.months,
+    subjects,
+    sharedMax: Math.max(1, ...subjects.flatMap((s) => s.values)),
+  };
+}
+
+/** Lines per category/item, expenses per vendor — the natural unit each. */
+function countOccurrences(slice: Slice, dimension: Dimension): Map<string, number> {
+  const out = new Map<string, number>();
+
+  if (dimension === "vendor") {
+    for (const e of slice.expenses) {
+      const key = e.vendorId ?? `raw:${e.vendorName}`;
+      out.set(key, (out.get(key) ?? 0) + 1);
+    }
+    return out;
+  }
+
+  for (const line of slice.lines) {
+    const key =
+      dimension === "category"
+        ? (line.categoryId ?? "uncategorised")
+        : (line.itemId ?? `raw:${line.itemName}`);
+    out.set(key, (out.get(key) ?? 0) + 1);
+  }
+  return out;
 }
 
 export function byStatus(slice: Slice): Bucket[] {

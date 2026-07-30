@@ -15,18 +15,24 @@ import {
   type Slice,
 } from "./aggregate";
 import { ReportsView, type PerUnitRow } from "./reports-view";
-import { SECTIONS, type ReportSection, type ReportQuery } from "./report-filters";
+import {
+  SECTIONS,
+  type ReportSection,
+  type ReportQuery,
+  type CompareDimension,
+} from "./report-filters";
 
 export default async function ReportsPage({
   searchParams,
 }: {
-  // category and item repeat, so they arrive as arrays when more than one
-  // is selected and as a bare string when exactly one is.
+  // vendor, category and item repeat, so each arrives as an array when more
+  // than one is selected and as a bare string when exactly one is.
   searchParams: Promise<{
     fy?: string;
     section?: string;
     month?: string;
-    vendor?: string;
+    compareBy?: string;
+    vendor?: string | string[];
     category?: string | string[];
     item?: string | string[];
   }>;
@@ -152,13 +158,14 @@ export default async function ReportsPage({
     .map(([value, label]) => ({ value, label }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  const selectedVendor = vendorOptions.some((v) => v.value === params.vendor) ? params.vendor! : "";
-
   // Anything not on offer for this year is dropped rather than carried
   // silently — otherwise switching year leaves stale ids selecting nothing.
   const asList = (v: string | string[] | undefined) =>
     v == null ? [] : Array.isArray(v) ? v : [v];
 
+  const selectedVendors = asList(params.vendor).filter((v) =>
+    vendorOptions.some((o) => o.value === v)
+  );
   const selectedCategories = asList(params.category).filter((c) =>
     categoryOptions.some((o) => o.value === c)
   );
@@ -166,7 +173,7 @@ export default async function ReportsPage({
 
   const filters: Filters = {
     month: selectedMonth || null,
-    vendorId: selectedVendor || null,
+    vendorIds: selectedVendors,
     categoryIds: selectedCategories,
     itemIds: selectedItems,
   };
@@ -227,25 +234,54 @@ export default async function ReportsPage({
   );
   if (!fiscalYears.includes(currentFy)) fiscalYears.unshift(currentFy);
 
+  /* ---------------- average unit cost, for the Compare cards ------------- */
+
+  // Averaged across every purchase of the item in the slice, from the same
+  // view the Unit costs section reads — so a figure here and a figure there
+  // can never disagree.
+  const unitCostByItem = new Map<string, { average: number; unit: string }>();
+  {
+    const acc = new Map<string, { sum: number; n: number; unit: string }>();
+    for (const c of paidCosts ?? []) {
+      const itemId = c.item_id as string;
+      if (!visibleExpenseIds.has(c.expense_id as string) || !visibleItemIds.has(itemId)) continue;
+      const entry = acc.get(itemId) ?? { sum: 0, n: 0, unit: c.base_unit_code as string };
+      entry.sum += Number(c.cost_per_base_unit);
+      entry.n += 1;
+      acc.set(itemId, entry);
+    }
+    for (const [itemId, v] of acc) {
+      unitCostByItem.set(itemId, { average: v.sum / v.n, unit: v.unit });
+    }
+  }
+
+  const fiscalYearsList = fiscalYears;
   const periodLabel = selectedMonth ? formatMonthLabel(selectedMonth) : formatFiscalYear(selectedFy);
 
   const section = (SECTIONS.some((s) => s.key === params.section)
     ? params.section
     : "overview") as ReportSection;
 
+  const compareBy = (["item", "category", "vendor"] as const).includes(
+    params.compareBy as CompareDimension
+  )
+    ? (params.compareBy as CompareDimension)
+    : "item";
+
   const query: ReportQuery = {
     fy: selectedFy,
     section,
     month: selectedMonth,
-    vendor: selectedVendor,
+    vendors: selectedVendors,
     categories: selectedCategories,
     items: selectedItems,
+    compareBy,
   };
 
   return (
     <ReportsView
       query={query}
-      fiscalYears={fiscalYears}
+      fiscalYears={fiscalYearsList}
       currentFy={currentFy}
       months={monthsInYear}
       vendors={vendorOptions}
@@ -256,6 +292,7 @@ export default async function ReportsPage({
       periodLabel={periodLabel}
       previousLabel={previousLabel}
       perUnitRows={perUnitRows}
+      unitCostByItem={Object.fromEntries(unitCostByItem)}
       hasCategoryOrItemFilter={selectedCategories.length > 0 || selectedItems.length > 0}
     />
   );
