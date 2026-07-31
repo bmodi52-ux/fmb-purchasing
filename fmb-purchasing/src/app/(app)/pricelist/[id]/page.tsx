@@ -5,7 +5,17 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getUserPermissions, can, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateTime } from "@/lib/format";
-import { updateItem, addPackSize, removePackSize, addOffer, updateOffer, reviewOffer, deleteOffer } from "../actions";
+import {
+  updateItem,
+  addPackSize,
+  removePackSize,
+  addOffer,
+  updateOffer,
+  reviewOffer,
+  deleteOffer,
+  addVendorItemDescription,
+  removeVendorItemDescription,
+} from "../actions";
 import { OfferForm } from "./offer-form";
 import { PackSizeForm } from "./pack-size-form";
 import { MergePanel, type DuplicateCandidate } from "./merge-panel";
@@ -104,6 +114,12 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     .eq("item_id", id)
     .order("score", { ascending: false })
     .limit(5);
+
+  const { data: vendorDescriptions } = await admin
+    .from("vendor_item_descriptions")
+    .select("id, vendor_id, description, created_at")
+    .eq("item_id", id)
+    .order("created_at");
 
   const offerIds = new Set((offers ?? []).map((o) => o.id));
   const offerHistory = (offerHistoryRows ?? []).filter((h) => offerIds.has(h.item_id));
@@ -502,6 +518,73 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             </label>
             <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
               + Add pack size
+            </SubmitButton>
+          </form>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <h2 className="mb-1 section-title text-ink">Vendor item descriptions</h2>
+        <p className="mb-4 text-sm text-ink/50">
+          What receipts call this item. A submitted receipt is matched here first, so this is how the item keeps
+          matching after it&apos;s been renamed to something readable. Remove any wording that belongs to a different
+          product — while it&apos;s listed, every receipt saying it will be filed against this item.
+        </p>
+
+        {(vendorDescriptions ?? []).length === 0 ? (
+          <p className="text-sm text-ink/50">
+            None recorded yet. One is added automatically the first time a receipt line resolves to this item.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2 text-sm">
+            {(vendorDescriptions ?? []).map((d) => (
+              <li
+                key={d.id}
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-md border border-ink/10 bg-white p-3"
+              >
+                <div className="min-w-0">
+                  <p className="break-words text-ink">{d.description}</p>
+                  <p className="text-xs text-ink/45">
+                    {d.vendor_id
+                      ? (vendorNameById.get(d.vendor_id) ?? "unknown vendor")
+                      : "Any vendor — carried over from a rename or added by hand"}
+                  </p>
+                </div>
+                {canEdit && (
+                  <form action={removeVendorItemDescription}>
+                    <input type="hidden" name="description_id" value={d.id} />
+                    <input type="hidden" name="item_id" value={item.id} />
+                    <SubmitButton className="shrink-0 text-xs text-maroon/70 hover:underline">remove</SubmitButton>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {canEdit && (
+          <form
+            action={addVendorItemDescription}
+            className="mt-4 flex flex-wrap items-end gap-2 border-t border-ink/10 pt-4"
+          >
+            <input type="hidden" name="item_id" value={item.id} />
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+              <span className="text-ink/70">Description as it appears on the receipt</span>
+              <input name="description" required placeholder="e.g. Bekaa Natural Set Yoghurt 5kg" className="input" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-ink/70">Vendor (optional)</span>
+              <select name="vendor_id" defaultValue="" className="input">
+                <option value="">Any vendor</option>
+                {(vendors ?? []).map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+              + Add description
             </SubmitButton>
           </form>
         )}

@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { categoryLabelsById } from "@/lib/categories";
+import { recordVendorItemDescription } from "@/lib/expense-matching";
 
 async function requirePricelistEdit() {
   const user = await getCurrentUser();
@@ -352,10 +353,61 @@ export async function updateItem(formData: FormData) {
       .eq("id", itemId);
 
     await admin.from("item_history").insert({ item_id: itemId, changed_by: user.id, changes });
+
+    // Renaming an item used to break matching outright: receipts still say
+    // what they said, and the old name was the only thing linking them. Keep
+    // it as a description so tidying a name stays free of consequence.
+    if (changes.name) {
+      await recordVendorItemDescription(admin, {
+        itemId,
+        vendorId: null,
+        description: String(changes.name.old ?? ""),
+        userId: user.id,
+      });
+    }
   }
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
+}
+
+/**
+ * Teach an item a wording somebody expects to see on a receipt — either
+ * ahead of the first one arriving, or to repair a link after a merge.
+ */
+export async function addVendorItemDescription(formData: FormData) {
+  const user = await requirePricelistEdit();
+
+  const itemId = String(formData.get("item_id"));
+  const description = String(formData.get("description") ?? "").trim();
+  if (!itemId || !description) return;
+
+  await recordVendorItemDescription(createAdminClient(), {
+    itemId,
+    vendorId: fieldOrNull(formData, "vendor_id"),
+    description,
+    userId: user.id,
+  });
+
+  revalidatePath(`/pricelist/${itemId}`);
+}
+
+/**
+ * Scoped by item as well as id: a description is only ever removed from the
+ * page it is shown on, and the id alone must not be enough to unpick another
+ * item's matching.
+ */
+export async function removeVendorItemDescription(formData: FormData) {
+  await requirePricelistEdit();
+
+  const id = String(formData.get("description_id"));
+  const itemId = String(formData.get("item_id"));
+  if (!id || !itemId) return;
+
+  const admin = createAdminClient();
+  await admin.from("vendor_item_descriptions").delete().eq("id", id).eq("item_id", itemId);
+
+  revalidatePath(`/pricelist/${itemId}`);
 }
 
 const OFFER_TRACKED_FIELDS = [
