@@ -82,6 +82,77 @@ async function resolveUnitId(
 }
 
 /**
+ * The item a remembered receipt wording belongs to, or null.
+ *
+ * Scoped to the category when the receipt gave one, since the same wording
+ * under two categories is two different products by this app's own rules.
+ * Deliberately refuses to guess when more than one item claims the wording:
+ * a wrong link here silently attributes spend to the wrong product, which is
+ * worse than creating an item somebody has to merge.
+ */
+async function findItemByDescription(
+  admin: SupabaseClient,
+  description: string,
+  categoryId: string | null
+): Promise<string | null> {
+  const query = admin
+    .from("vendor_item_descriptions")
+    .select("item_id, items!inner (category_id)")
+    .eq("description_normalized", normalize(description));
+
+  const { data } = await (categoryId
+    ? query.eq("items.category_id", categoryId)
+    : query);
+
+  const itemIds = [...new Set((data ?? []).map((r) => r.item_id as string))];
+  return itemIds.length === 1 ? itemIds[0] : null;
+}
+
+/**
+ * Remember that this wording means this item, so a later rename can't break
+ * the link.
+ *
+ * Read-then-insert rather than an upsert: the table's unique index is on
+ * `coalesce(vendor_id, …)` so that one vendorless wording can't be recorded
+ * twice, and PostgREST's on_conflict can only name plain columns. The insert
+ * still races against a concurrent identical submission, so a duplicate-key
+ * violation is swallowed — that outcome is the one we wanted anyway.
+ */
+export async function recordVendorItemDescription(
+  admin: SupabaseClient,
+  {
+    itemId,
+    vendorId,
+    description,
+    userId,
+  }: { itemId: string; vendorId: string | null; description: string; userId: string | null }
+): Promise<void> {
+  const trimmed = description.trim();
+  if (!trimmed) return;
+
+  const existing = admin
+    .from("vendor_item_descriptions")
+    .select("id")
+    .eq("item_id", itemId)
+    .eq("description_normalized", normalize(trimmed));
+
+  const { data: found } = await (vendorId
+    ? existing.eq("vendor_id", vendorId)
+    : existing.is("vendor_id", null)
+  ).maybeSingle();
+  if (found) return;
+
+  const { error } = await admin.from("vendor_item_descriptions").insert({
+    item_id: itemId,
+    vendor_id: vendorId,
+    description: trimmed,
+    description_normalized: normalize(trimmed),
+    created_by: userId,
+  });
+  if (error && error.code !== "23505") throw error;
+}
+
+/**
  * Match/create the top-level Item — one row per canonical product (e.g.
  * "Chicken Thighs", canonical unit kg), independent of vendor or packaging.
  *
@@ -89,9 +160,11 @@ async function resolveUnitId(
  * 0009: different meats have different cuts, so "Legs and Shoulders" under
  * Mutton and under Beef are different products and must not collapse into one.
  *
- * Still exact-normalized-name within a category — OCR variants of the same
- * product ("Mutton Legs/Shoulders" vs "Legs and Shoulders") will each create
- * an item, and a merge tool remains deferred (§9/§14).
+ * Falls back to the wordings recorded in vendor_item_descriptions when the
+ * name doesn't match, which is what lets a pricelist item be renamed to
+ * something readable without every later receipt for it creating a duplicate.
+ * OCR variants nobody has confirmed yet still create an item, and the merge
+ * tool folds those together.
  */
 export async function matchOrCreateItem(
   admin: SupabaseClient,
@@ -115,6 +188,9 @@ export async function matchOrCreateItem(
     : lookup.is("category_id", null)
   ).maybeSingle();
   if (existing) return { id: existing.id, status: "matched" };
+
+  const byDescription = await findItemByDescription(admin, description, categoryId);
+  if (byDescription) return { id: byDescription, status: "matched" };
 
   const fallbackUnitId = await unitIdByCode(admin, "ea");
   const canonicalUnitId = await resolveUnitId(admin, normalizedUnit, fallbackUnitId);
@@ -194,9 +270,55 @@ async function matchOrCreatePackSize(
 }
 
 /**
+ * The offer this vendor's own wording already resolved to, or null.
+ *
+ * The strongest signal available: the same vendor writing the same words on
+ * a second receipt is all but certainly selling the same thing. Worth
+ * short-circuiting on, because the pack size derived from a receipt line is
+ * only ever the plain "one unit" shape — once a human has corrected it to
+ * what the vendor actually sells (a 5 kg tub), rederiving it would miss and
+ * quietly add a second pack size beside the corrected one.
+ *
+ * Only when exactly one offer is in the frame. Several offers means several
+ * pack sizes, and picking wrong would file the spend against the wrong
+ * per-unit cost — falling through creates a pending offer somebody reviews
+ * instead, which is the failure worth having.
+ */
+async function findOfferByVendorDescription(
+  admin: SupabaseClient,
+  vendorId: string,
+  description: string
+): Promise<string | null> {
+  const { data: known } = await admin
+    .from("vendor_item_descriptions")
+    .select("item_id")
+    .eq("vendor_id", vendorId)
+    .eq("description_normalized", normalize(description));
+
+  const itemIds = [...new Set((known ?? []).map((r) => r.item_id as string))];
+  if (itemIds.length !== 1) return null;
+
+  const { data: packs } = await admin.from("item_pack_sizes").select("id").eq("item_id", itemIds[0]);
+  const packIds = (packs ?? []).map((p) => p.id as string);
+  if (packIds.length === 0) return null;
+
+  const { data: offers } = await admin
+    .from("pricelist_items")
+    .select("id")
+    .eq("vendor_id", vendorId)
+    .in("pack_size_id", packIds);
+
+  return offers?.length === 1 ? (offers[0].id as string) : null;
+}
+
+/**
  * Match a line item against that vendor's known offers for the matched pack
  * size (§3.1.2 — scoped to vendor, never across vendors). No match -> new
  * provisional offer under a matched/created Item + pack size.
+ *
+ * Whichever way it resolves, the receipt's wording is recorded against the
+ * item on the way out, so the next receipt saying the same thing matches
+ * however the item has been renamed since.
  */
 export async function matchOrCreateOffer(
   admin: SupabaseClient,
@@ -214,6 +336,9 @@ export async function matchOrCreateOffer(
     normalizedUnit?: string | null;
   }
 ): Promise<{ id: string; status: "matched" | "created" }> {
+  const knownOffer = await findOfferByVendorDescription(admin, vendorId, description);
+  if (knownOffer) return { id: knownOffer, status: "matched" };
+
   const item = await matchOrCreateItem(admin, { description, categoryId, normalizedUnit, userId });
 
   const { data: itemRow } = await admin.from("items").select("canonical_unit_id").eq("id", item.id).single();
@@ -222,6 +347,8 @@ export async function matchOrCreateOffer(
     canonicalUnitId: itemRow!.canonical_unit_id,
     normalizedUnit,
   });
+
+  await recordVendorItemDescription(admin, { itemId: item.id, vendorId, description, userId });
 
   const { data: byVendor } = await admin
     .from("pricelist_items")
