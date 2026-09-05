@@ -6,6 +6,9 @@ import { canViewExpense } from "@/lib/expense-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { ReceiptViewer } from "@/components/receipt-viewer";
+import { ReversePanel } from "./reverse-panel";
+import { reopenExpense } from "../../approvals/actions";
+import { reversePayment } from "../../payments/actions";
 
 const money = (n: number) =>
   n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
@@ -149,6 +152,14 @@ export default async function ExpenseDetailPage({
 
   const person = (personId: string | null) =>
     personId ? nameById.get(personId) ?? "Unknown" : "—";
+
+  // A decision can be unwound by whoever could make it. Paid is separate:
+  // money has already left the account, so that correction belongs to the
+  // person who made the payment.
+  const canReopen =
+    can(permissions, "approvals", "approve") &&
+    (expense.status === "approved" || expense.status === "declined");
+  const canUnpay = can(permissions, "payments", "mark_paid") && expense.status === "paid";
 
   const backHref = can(permissions, "all_expenses", "view") ? "/expenses" : "/my-submissions";
   const backLabel = backHref === "/expenses" ? "All expenses" : "My submissions";
@@ -342,6 +353,31 @@ export default async function ExpenseDetailPage({
             </Field>
             <Field label="Marked paid by">{person(expense.paid_by)}</Field>
           </dl>
+        </section>
+      )}
+
+      {/* ---------------- corrections ---------------- */}
+      {(canReopen || canUnpay) && (
+        <section className="flex flex-col gap-3">
+          <h2 className="section-title text-ink">Correct this</h2>
+          {canReopen && (
+            <ReversePanel
+              expenseId={expense.id}
+              action={reopenExpense}
+              label={expense.status === "declined" ? "Reopen this decline" : "Reopen this approval"}
+              prompt="Reopen"
+              helpText={`This returns ${expense.expense_number ?? "the expense"} to awaiting review, and records who reopened it and why.`}
+            />
+          )}
+          {canUnpay && (
+            <ReversePanel
+              expenseId={expense.id}
+              action={reversePayment}
+              label="Undo this payment"
+              prompt="Undo payment"
+              helpText="Use this when the transfer did not happen, or the reference was wrong. The expense returns to approved so it can be paid again properly."
+            />
+          )}
         </section>
       )}
 
