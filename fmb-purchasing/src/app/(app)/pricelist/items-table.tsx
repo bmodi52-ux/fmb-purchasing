@@ -4,6 +4,7 @@ import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { ColumnsDataTable, type ColumnDef, type BulkAction } from "@/components/columns-data-table";
 import { reviewOffer, bulkReviewOffers } from "./actions";
+import { collapseToItems } from "./collapse-offers";
 
 export type OfferRow = {
   id: string;
@@ -28,7 +29,13 @@ export type OfferRow = {
   costPerBaseUnit: number | null;
   baseUnitCode: string | null;
   comments: string | null;
+  /**
+   * Set only on a collapsed row: how many further offers this item has that
+   * the row is standing in for. Never persisted — see ./collapse-offers.
+   */
+  otherOfferCount?: number;
 };
+
 
 /** "1 L × 10 (10 L)" for a carton, "Loose (per kg)" when bought by weight. */
 function formatPackSize(r: OfferRow): string {
@@ -64,6 +71,14 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
             {r.name}
           </Link>
           {r.brand && <span className="ml-1 text-xs text-ink/40">({r.brand})</span>}
+          {r.otherOfferCount ? (
+            <span
+              className="ml-2 rounded-full bg-ink/5 px-2 py-0.5 text-xs text-ink/50"
+              title="Showing this item's best offer. Expand the row, or show the Vendor column, to see them all."
+            >
+              +{r.otherOfferCount} more {r.otherOfferCount === 1 ? "offer" : "offers"}
+            </span>
+          ) : null}
         </>
       ),
       exportValue: (r) => r.name,
@@ -154,6 +169,7 @@ export function ItemsTable({
   canApprove,
   initialVisible,
   emptyLabel,
+  collapseByItem = false,
 }: {
   rows: OfferRow[];
   /** Every offer on the page, across both the pending and approved sections — used to show an
@@ -162,6 +178,14 @@ export function ItemsTable({
   canApprove: boolean;
   initialVisible: string[];
   emptyLabel?: string;
+  /**
+   * Collapse to one row per item when the Vendor column is hidden.
+   *
+   * Off for the pending-review table, where approving is per offer: a
+   * collapsed row would put Approve and Reject next to one offer standing in
+   * for several, and it would not be clear which was being decided.
+   */
+  collapseByItem?: boolean;
 }) {
   const bulkActions: BulkAction<OfferRow>[] | undefined = canApprove
     ? [
@@ -225,6 +249,7 @@ export function ItemsTable({
       emptyLabel={emptyLabel}
       bulkActions={bulkActions}
       renderExpanded={renderExpanded}
+      deriveRows={collapseByItem ? collapseToItems : undefined}
     />
   );
 }

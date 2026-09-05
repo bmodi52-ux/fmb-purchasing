@@ -28,6 +28,7 @@ export type ApprovalRow = {
   submittedByName: string;
   created_at: string;
   hasReceipt: boolean;
+  submitterComment: string | null;
   lineItems: ApprovalLineItem[];
 };
 
@@ -112,6 +113,15 @@ export function ApprovalsList({ expenses }: { expenses: ApprovalRow[] }) {
                     <span className="text-ink/40">No receipt attached</span>
                   )}
                 </div>
+
+                {/* The submitter wrote this for whoever is reading this row,
+                    so it sits above the line items rather than below them. */}
+                {e.submitterComment && (
+                  <div className="rounded-md border border-gold/40 bg-gold/5 px-3 py-2 text-sm">
+                    <span className="text-ink/50">Note from {e.submittedByName}: </span>
+                    <span className="whitespace-pre-wrap text-ink">{e.submitterComment}</span>
+                  </div>
+                )}
 
                 <table className="min-w-full text-sm">
                   <thead>

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { revalidateReports } from "../reports/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, userCan } from "@/lib/permissions";
 import { extractReceipt, type ExtractedReceipt } from "@/lib/receipt-extraction";
 import { lookupAbn, type AbnLookupResult } from "@/lib/abn-lookup";
 import { matchOrCreateVendor, matchOrCreateOffer } from "@/lib/expense-matching";
@@ -115,6 +115,52 @@ export async function uploadReceiptFileAction(
   if (error) return { path: null, fileName: null, error: `Could not save the file: ${error.message}` };
 
   return { path, fileName: file.name, error: null };
+}
+
+/**
+ * A receipt rejected in the browser for being too large, before any upload was
+ * attempted.
+ *
+ * This is the one failure a submitter can hit that leaves no trace anywhere:
+ * reportError only runs server-side, and the size check happens before
+ * anything is sent, so nothing reaches a catch block. The person is simply
+ * told to split their PDF, and nobody else ever finds out.
+ *
+ * That matters because it decides a real question. Photos are downscaled
+ * client-side and land well under the limit; PDFs cannot be, so a large
+ * scanned invoice is a dead end. Whether that dead end is ever actually
+ * reached is what determines if uploading direct to storage with a signed URL
+ * — a moderate refactor of this flow — is worth building. Without this, the
+ * answer only arrives if someone thinks to complain.
+ *
+ * Telemetry, so it fails silently: a submitter already looking at an error
+ * must never get a second one because the reporting itself was refused.
+ */
+export async function reportOversizeReceiptAction(input: {
+  fileName: string;
+  fileType: string;
+  sizeBytes: number;
+}): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) return;
+  if (!(await userCan(user, "submit_expense", "submit"))) return;
+
+  const megabytes = (input.sizeBytes / (1024 * 1024)).toFixed(1);
+  const kind = input.fileType === "application/pdf" ? "PDF" : (input.fileType || "file");
+
+  // The size sits in the message on purpose: record_error_event fingerprints
+  // with digits stripped, so every occurrence collapses onto one row while the
+  // row still shows the most recent size.
+  await reportError({
+    source: "receipt-too-large",
+    error: `${kind} of ${megabytes} MB exceeded the upload limit`,
+    detail:
+      `${input.fileName} (${input.fileType}, ${input.sizeBytes} bytes) was rejected in the browser ` +
+      `before upload. The cap is the Server Action request body limit, currently 3.5MB client-side. ` +
+      `Images are downscaled automatically; a PDF cannot be, so if this is a PDF the submitter had no ` +
+      `way to proceed. Repeated occurrences are the signal to upload direct to storage via a signed URL.`,
+    userId: user.id,
+  });
 }
 
 export type VendorLookupSuggestion = { id: string; vendorNumber: string | null; name: string };
@@ -243,6 +289,8 @@ export type CreateExpenseInput = {
   subtotal: number;
   gstAmount: number;
   total: number;
+  /** Free-text note from the submitter; see migration 0025. */
+  submitterComment: string | null;
   lineItems: LineItemInput[];
 };
 
@@ -282,6 +330,7 @@ export async function createExpense(
       subtotal: input.subtotal,
       gst_amount: input.gstAmount,
       total: input.total,
+      submitter_comment: input.submitterComment,
       status: "submitted",
       fiscal_year_hijri: fiscalYear,
     })
@@ -378,6 +427,7 @@ export async function getExpenseForEdit(expenseId: string): Promise<ExpenseForEd
     subtotal: expense.subtotal,
     gstAmount: expense.gst_amount,
     total: expense.total,
+    submitterComment: expense.submitter_comment,
     lineItems: (lineItems ?? []).map((li) => ({
       description: li.description_raw,
       quantity: li.quantity,
@@ -434,6 +484,7 @@ export async function updateExpense(
       subtotal: input.subtotal,
       gst_amount: input.gstAmount,
       total: input.total,
+      submitter_comment: input.submitterComment,
       fiscal_year_hijri: fiscalYear,
       updated_at: new Date().toISOString(),
     })

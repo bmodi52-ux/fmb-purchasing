@@ -15,6 +15,7 @@ export type SubmissionRow = {
   invoice_number: string | null;
   total: number;
   status: string;
+  submitter_comment: string | null;
   decision_comment: string | null;
   decided_at: string | null;
   payment_reference: string | null;
@@ -29,6 +30,7 @@ const EXPORT_COLUMNS: ExportColumn[] = [
   { key: "invoice_number", label: "Invoice #" },
   { key: "total", label: "Total" },
   { key: "status", label: "Status" },
+  { key: "submitter_comment", label: "My note" },
   { key: "decision_comment", label: "Comment" },
   { key: "payment_reference", label: "Payment reference" },
   { key: "payment_date", label: "Payment date" },
@@ -97,6 +99,15 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                   <StatusBadge status={e.status} />
                 </div>
               </div>
+
+              {/* The submitter's own note, so they can see what they said —
+                  particularly when a decision comes back referring to it. */}
+              {e.submitter_comment && (
+                <p className="mt-2 rounded-md bg-ink/5 px-3 py-2 text-sm text-ink/70">
+                  <span className="text-ink/50">Your note: </span>
+                  <span className="whitespace-pre-wrap">{e.submitter_comment}</span>
+                </p>
+              )}
 
               {e.status === "declined" && (
                 <p className="mt-2 rounded-md bg-maroon/5 px-3 py-2 text-sm text-maroon">

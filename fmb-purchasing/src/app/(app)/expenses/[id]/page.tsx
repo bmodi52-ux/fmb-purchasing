@@ -57,7 +57,7 @@ export default async function ExpenseDetailPage({
   const { data: expense } = await admin
     .from("expenses")
     .select(
-      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, status, fiscal_year_hijri, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, created_at"
+      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, created_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -206,6 +206,13 @@ export default async function ExpenseDetailPage({
             <ReceiptViewer expenseId={expense.id} label="View receipt" />
           )}
         </div>
+
+        {expense.submitter_comment && (
+          <div className="mt-4 rounded-md border border-gold/40 bg-gold/5 px-3 py-2 text-sm">
+            <span className="text-ink/50">Note from the submitter: </span>
+            <span className="whitespace-pre-wrap text-ink">{expense.submitter_comment}</span>
+          </div>
+        )}
       </section>
 
       {/* ---------------- line items ---------------- */}

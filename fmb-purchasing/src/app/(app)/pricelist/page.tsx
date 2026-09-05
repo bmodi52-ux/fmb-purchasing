@@ -11,10 +11,14 @@ import { dismissDuplicatePair } from "./actions";
 import { leafCategories, categoryLabelsById } from "@/lib/categories";
 
 const PAGE_KEY = "pricelist";
+// Vendor is deliberately off by default. A row is a vendor offer, so showing
+// that column is what splits an item into one row per vendor; with it hidden
+// the table collapses to one row per item (see collapseToItems in
+// items-table.tsx). Defaulting it on would mean every multi-vendor item
+// appeared several times before anyone had asked to compare vendors.
 const DEFAULT_VISIBLE = [
   "item_number",
   "name",
-  "vendor",
   "category",
   "pack_size",
   "pack_price",
@@ -162,16 +166,20 @@ export default async function PricelistPage() {
               since 0024 made its code the prefix on every item number, and
               nineteen rows of it pushed the offers table off the screen. */}
           {canEdit && (
-            <p className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-ink/50">
-              <span>Manage</span>
-              <Link href="/pricelist/categories" className="text-ink/70 underline hover:text-ink">
-                Categories
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Link
+                href="/pricelist/categories"
+                className="rounded-md border border-ink/15 bg-white/60 px-3 py-1.5 text-sm text-ink/80 transition-colors hover:border-ink/30 hover:text-ink"
+              >
+                Manage categories
               </Link>
-              <span aria-hidden="true">·</span>
-              <Link href="/pricelist/units" className="text-ink/70 underline hover:text-ink">
-                Units
+              <Link
+                href="/pricelist/units"
+                className="rounded-md border border-ink/15 bg-white/60 px-3 py-1.5 text-sm text-ink/80 transition-colors hover:border-ink/30 hover:text-ink"
+              >
+                Manage units
               </Link>
-            </p>
+            </div>
           )}
         </div>
         {canEdit && (
@@ -226,8 +234,14 @@ export default async function PricelistPage() {
       )}
 
       <section>
-        <h2 className="mb-2 section-title text-ink">All offers</h2>
-        <ItemsTable rows={rest} allOffers={rows} canApprove={canApprove} initialVisible={visibleColumns} emptyLabel="None." />
+        <h2 className="section-title text-ink">Items</h2>
+        {/* Phrased to hold either way round, since this is server-rendered and
+            column visibility lives in the client table. */}
+        <p className="mb-2 text-sm text-ink/50">
+          Each vendor&rsquo;s offer is listed as its own row only while the Vendor
+          column is shown. Otherwise expand an item to compare its vendors.
+        </p>
+        <ItemsTable rows={rest} allOffers={rows} canApprove={canApprove} initialVisible={visibleColumns} emptyLabel="None." collapseByItem />
       </section>
     </div>
   );
