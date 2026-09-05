@@ -37,7 +37,7 @@ Needs a `.env.local` — copy `.env.local.example` and fill it in:
 | `NEXT_PUBLIC_SITE_URL` | only to make reset links point somewhere local |
 
 ```bash
-npm test          # 156 tests, incl. migrations applied to a real Postgres
+npm test          # 189 tests, incl. migrations applied to a real Postgres
 npx tsc --noEmit  # the check ESLint cannot do
 npx eslint .
 ```
@@ -89,6 +89,13 @@ Useful scripts in `scripts/`:
 | `create-receipts-bucket.mjs` | creates the private `receipts` storage bucket |
 | `compare-extraction.mjs` | runs real receipts through several models and scores them — `--dry-run` first, it spends money |
 | `dry-run-sql.mjs` | applies a migration to a throwaway database |
+
+## Backups
+
+See [docs/backup-and-restore.md](docs/backup-and-restore.md). The short version:
+turn on PITR, and remember that Storage is not covered by it — a database
+restore brings back every `storage_path` pointing at objects that may no longer
+exist.
 
 ## Design
 

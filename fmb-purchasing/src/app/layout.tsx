@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter, IBM_Plex_Mono, Amiri } from "next/font/google";
 import "./globals.css";
 
@@ -28,6 +28,20 @@ const amiri = Amiri({
 export const metadata: Metadata = {
   title: "FMB Sydney",
   description: "Expense submission, approval and reporting for FMB.",
+  // Named here as well as in the manifest: iOS reads this one when the site is
+  // added to a home screen, and ignores the manifest's short_name.
+  appleWebApp: { capable: true, title: "FMB Purchasing", statusBarStyle: "default" },
+};
+
+/**
+ * Tints the browser chrome to the brand gold on Android, and stops the page
+ * being zoomable-but-unusable on a phone by pinning the initial scale without
+ * locking out zoom entirely — receipts get squinted at, so pinch must work.
+ */
+export const viewport: Viewport = {
+  themeColor: "#D89C24",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
