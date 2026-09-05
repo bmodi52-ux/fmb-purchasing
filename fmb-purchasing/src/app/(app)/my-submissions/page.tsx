@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { SubmissionsList } from "./submissions-list";
 
 export default async function MySubmissionsPage() {
@@ -18,7 +19,10 @@ export default async function MySubmissionsPage() {
     .eq("submitted_by", user.id)
     .order("created_at", { ascending: false });
 
-  const rows = (expenses ?? []).map((e) => ({ ...e, hasReceipt: e.receipt_file_path != null }));
+  // One query for the whole page rather than one per row: the list only
+  // needs to know whether to offer a link.
+  const withFiles = await expenseIdsWithAttachments(admin, (expenses ?? []).map((e) => e.id));
+  const rows = (expenses ?? []).map((e) => ({ ...e, hasReceipt: withFiles.has(e.id) || e.receipt_file_path != null }));
 
   return (
     <div className="flex flex-col gap-6">

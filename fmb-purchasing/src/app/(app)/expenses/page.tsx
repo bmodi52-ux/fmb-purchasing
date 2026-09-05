@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getColumnPreference } from "@/lib/column-prefs";
 import { currentFiscalYearHijri, formatFiscalYear, ALL_YEARS } from "@/lib/fiscal-year";
+import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { FiscalYearSelect } from "@/components/fiscal-year-select";
 import { ExpensesTable, type ExpenseRow } from "./expenses-table";
 
@@ -78,6 +79,9 @@ export default async function AllExpensesPage({
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
   const vendorNumberById = new Map((vendors ?? []).map((v) => [v.id, v.vendor_number]));
 
+  // One query for the whole page rather than one per row: the list only
+  // needs to know whether to offer a link.
+  const withFiles = await expenseIdsWithAttachments(admin, (expenses ?? []).map((e) => e.id));
   const rows: ExpenseRow[] = (expenses ?? []).map((e) => ({
     id: e.id,
     expenseNumber: e.expense_number,
@@ -87,7 +91,7 @@ export default async function AllExpensesPage({
     status: e.status,
     invoice_number: e.invoice_number,
     receipt_date: e.receipt_date,
-    hasReceipt: e.receipt_file_path != null,
+    hasReceipt: withFiles.has(e.id) || e.receipt_file_path != null,
     subtotal: e.subtotal,
     gst_amount: e.gst_amount,
     total: e.total,

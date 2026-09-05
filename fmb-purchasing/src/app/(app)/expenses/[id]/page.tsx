@@ -71,6 +71,11 @@ export default async function ExpenseDetailPage({
 
   const permissions = await getUserPermissions(user.teamIds);
 
+  const { count: attachmentCount } = await admin
+    .from("expense_attachments")
+    .select("id", { count: "exact", head: true })
+    .eq("expense_id", id);
+
   const [{ data: lineItems }, { data: history }, { data: vendor }] = await Promise.all([
     admin
       .from("expense_line_items")
@@ -202,7 +207,7 @@ export default async function ExpenseDetailPage({
             </Field>
           </dl>
 
-          {expense.receipt_file_path && (
+          {((attachmentCount ?? 0) > 0 || expense.receipt_file_path) && (
             <ReceiptViewer expenseId={expense.id} label="View receipt" />
           )}
         </div>

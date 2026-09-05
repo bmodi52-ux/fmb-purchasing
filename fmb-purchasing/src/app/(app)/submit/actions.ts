@@ -6,23 +6,62 @@ import { revalidateReports } from "../reports/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission, userCan } from "@/lib/permissions";
-import { extractReceipt, type ExtractedReceipt } from "@/lib/receipt-extraction";
+import { extractReceipt, type ExtractedReceipt, type LineKind } from "@/lib/receipt-extraction";
 import { lookupAbn, type AbnLookupResult } from "@/lib/abn-lookup";
 import { matchOrCreateVendor, matchOrCreateOffer } from "@/lib/expense-matching";
-import { fiscalYearHijri } from "@/lib/fiscal-year";
+import { fiscalYearForReceipt } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
 import { leafCategories } from "@/lib/categories";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
 import { ilikeContains, orFilter } from "@/lib/pgrst-filter";
 import { reportError } from "@/lib/errors";
+import { lineGst, lineSubtotal, reconcile, round2, sumLineGst } from "@/lib/expense-money";
+import {
+  resolvePayee,
+  searchPayees,
+  getPayee,
+  type PayeeChoice,
+  type PayeeSuggestion,
+} from "@/lib/payees";
+import {
+  ACCEPTED_TYPES,
+  expenseIdsWithFile,
+  storeReceiptFile,
+  type StoredFile,
+} from "@/lib/receipt-storage";
+import { checkExtractionThrottle } from "@/lib/extraction-throttle";
 
 export type ExtractState = {
   data: ExtractedReceipt | null;
-  receiptPath: string | null;
+  /** The stored file, whether or not extraction managed to read it. */
+  attachment: StoredFile | null;
   error: string | null;
 };
 
-const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
+/**
+ * Extraction results, keyed by the SHA-256 of the file they were read from.
+ *
+ * Two taps on the same receipt used to mean two uploads and two model calls.
+ * The upload half is fixed by content-addressing; this fixes the billing half,
+ * and makes the second attempt instant — which removes the impatience that
+ * caused it. Process-local and unbounded is fine: entries are small, a serverless
+ * instance is short-lived, and a miss costs only what the call would have cost
+ * anyway.
+ */
+const extractionCache = new Map<string, ExtractedReceipt>();
+
+async function readUpload(
+  formData: FormData
+): Promise<{ file: File; bytes: Uint8Array } | { error: string }> {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Choose a receipt photo or PDF first." };
+  }
+  if (!ACCEPTED_TYPES.has(file.type)) {
+    return { error: "Only JPG, PNG, WebP, or PDF files are supported." };
+  }
+  return { file, bytes: new Uint8Array(await file.arrayBuffer()) };
+}
 
 export async function extractReceiptAction(
   _prev: ExtractState,
@@ -32,38 +71,60 @@ export async function extractReceiptAction(
   if (!user) redirect("/login");
   await requirePermission(user, "submit_expense", "submit");
 
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { data: null, receiptPath: null, error: "Choose a receipt photo or PDF first." };
-  }
-  if (!ACCEPTED_TYPES.has(file.type)) {
-    return { data: null, receiptPath: null, error: "Only JPG, PNG, WebP, or PDF files are supported." };
-  }
+  const read = await readUpload(formData);
+  if ("error" in read) return { data: null, attachment: null, error: read.error };
 
   const admin = createAdminClient();
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const path = `${user.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
-  const { error: uploadError } = await admin.storage.from("receipts").upload(path, bytes, {
-    contentType: file.type,
-  });
-  if (uploadError) {
+  let attachment: StoredFile;
+  try {
+    attachment = await storeReceiptFile(admin, {
+      bytes: read.bytes,
+      name: read.file.name,
+      type: read.file.type,
+    });
+  } catch (err) {
     await reportError({
       source: "receipt-upload",
-      error: uploadError,
-      detail: `${file.type}, ${file.size} bytes`,
+      error: err,
+      detail: `${read.file.type}, ${read.file.size} bytes`,
       userId: user.id,
     });
-    return { data: null, receiptPath: null, error: `Could not save the receipt file: ${uploadError.message}` };
+    return {
+      data: null,
+      attachment: null,
+      error: `Could not save the receipt file: ${(err as Error).message}`,
+    };
   }
 
-  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id").order("sort_order");
+  // Served before the throttle is consulted: a repeat of a file already read
+  // costs nothing, so it should not consume anyone's allowance either.
+  const cached = extractionCache.get(attachment.sha256);
+  if (cached) return { data: cached, attachment, error: null };
+
+  const verdict = await checkExtractionThrottle(user.id);
+  if (!verdict.allowed) {
+    return {
+      data: null,
+      attachment,
+      error:
+        `That's a lot of receipts in one hour. The reader will accept more in about ` +
+        `${verdict.retryAfterMinutes} minute${verdict.retryAfterMinutes === 1 ? "" : "s"} — ` +
+        `you can still fill this one in by hand in the meantime.`,
+    };
+  }
+
+  const { data: categories } = await admin
+    .from("categories")
+    .select("id, name, parent_category_id")
+    .order("sort_order");
   const categoryNames = leafCategories(categories ?? []).map((c) => c.name);
 
   try {
-    const base64 = Buffer.from(bytes).toString("base64");
-    const extracted = await extractReceipt(base64, file.type, categoryNames);
-    return { data: extracted, receiptPath: path, error: null };
+    const base64 = Buffer.from(read.bytes).toString("base64");
+    const extracted = await extractReceipt(base64, read.file.type, categoryNames);
+    extractionCache.set(attachment.sha256, extracted);
+    return { data: extracted, attachment, error: null };
   } catch (err) {
     // The submitter is told to carry on manually, so without this the
     // failure is invisible — extraction could break for one vendor's PDF
@@ -71,12 +132,12 @@ export async function extractReceiptAction(
     await reportError({
       source: "receipt-extraction",
       error: err,
-      detail: `${file.type}, ${file.size} bytes`,
+      detail: `${read.file.type}, ${read.file.size} bytes`,
       userId: user.id,
     });
     return {
       data: null,
-      receiptPath: path,
+      attachment,
       error: `Could not read that receipt automatically (${(err as Error).message}). You can still fill in the details manually.`,
     };
   }
@@ -89,9 +150,9 @@ export async function lookupAbnAction(abn: string): Promise<AbnLookupResult> {
   return lookupAbn(abn);
 }
 
-export type UploadFileState = { path: string | null; fileName: string | null; error: string | null };
+export type UploadFileState = { attachment: StoredFile | null; error: string | null };
 
-/** Attach a receipt during manual entry, without triggering AI extraction. */
+/** Attach a file during manual entry, without triggering AI extraction. */
 export async function uploadReceiptFileAction(
   _prev: UploadFileState,
   formData: FormData
@@ -100,22 +161,19 @@ export async function uploadReceiptFileAction(
   if (!user) redirect("/login");
   await requirePermission(user, "submit_expense", "submit");
 
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { path: null, fileName: null, error: "Choose a file first." };
+  const read = await readUpload(formData);
+  if ("error" in read) return { attachment: null, error: read.error };
+
+  try {
+    const attachment = await storeReceiptFile(createAdminClient(), {
+      bytes: read.bytes,
+      name: read.file.name,
+      type: read.file.type,
+    });
+    return { attachment, error: null };
+  } catch (err) {
+    return { attachment: null, error: `Could not save the file: ${(err as Error).message}` };
   }
-  if (!ACCEPTED_TYPES.has(file.type)) {
-    return { path: null, fileName: null, error: "Only JPG, PNG, WebP, or PDF files are supported." };
-  }
-
-  const admin = createAdminClient();
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const path = `${user.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-
-  const { error } = await admin.storage.from("receipts").upload(path, bytes, { contentType: file.type });
-  if (error) return { path: null, fileName: null, error: `Could not save the file: ${error.message}` };
-
-  return { path, fileName: file.name, error: null };
 }
 
 /**
@@ -283,12 +341,27 @@ export type LineItemInput = {
    * receipt next month fails to match all over again — see 0023.
    */
   originalDescription?: string | null;
+  /**
+   * What this line is. Only "goods" is a purchase; the rest exist so the lines
+   * add up to the total printed on the receipt — see migration 0026.
+   */
+  kind: LineKind;
   quantity: number | null;
   unitPrice: number | null;
   lineTotal: number;
   categoryName: string | null;
+  /** Read from the receipt per line, not apportioned from the total. */
+  gstApplicable: boolean;
   normalizedQuantity: number | null;
   normalizedUnit: string | null;
+};
+
+export type AttachmentInput = {
+  storagePath: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number | null;
+  sha256: string | null;
 };
 
 export type CreateExpenseInput = {
@@ -296,14 +369,108 @@ export type CreateExpenseInput = {
   abn: string | null;
   invoiceNumber: string | null;
   receiptDate: string | null;
-  receiptPath: string | null;
-  subtotal: number;
-  gstAmount: number;
+  /** Receipt, delivery docket, covering email — see migration 0028. */
+  attachments: AttachmentInput[];
+  /**
+   * What the receipt says was paid. Captured, never computed: the line items
+   * must account for it, and a charge that is not itemised gets its own line
+   * rather than quietly changing this figure.
+   */
   total: number;
   /** Free-text note from the submitter; see migration 0025. */
   submitterComment: string | null;
+  /** Who to reimburse. Null only where nobody has chosen yet. */
+  payee: PayeeChoice | null;
   lineItems: LineItemInput[];
 };
+
+/**
+ * Turns the submitted lines into rows, computing money per line rather than
+ * apportioning it from the receipt total.
+ *
+ * Charge lines are deliberately not matched against the Pricelist. A card
+ * surcharge is not a product, and running it through matchOrCreateOffer would
+ * file "CREDIT SURCHARGE" as a pending item under the vendor — noise in the
+ * catalogue that a person would then have to reject, once per receipt.
+ */
+async function buildLineRows(
+  admin: ReturnType<typeof createAdminClient>,
+  input: CreateExpenseInput,
+  vendorId: string,
+  userId: string
+) {
+  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
+  const categoryIdByName = new Map(
+    leafCategories(categories ?? []).map((c) => [c.name.toLowerCase(), c.id])
+  );
+
+  const rows = [];
+  for (const [index, item] of input.lineItems.entries()) {
+    const categoryId = item.categoryName
+      ? (categoryIdByName.get(item.categoryName.toLowerCase()) ?? null)
+      : null;
+
+    let pricelistItemId: string | null = null;
+    let resolvedCategoryId = categoryId;
+
+    if (item.kind === "goods") {
+      const matched = await matchOrCreateOffer(admin, {
+        vendorId,
+        originalDescription: item.originalDescription ?? null,
+        description: item.description,
+        categoryId,
+        userId,
+        normalizedUnit: item.normalizedUnit,
+      });
+      pricelistItemId = matched.id;
+      // Prefer the category of the item this line resolved to. When the line
+      // matched something a person has already classified, that beats whatever
+      // the receipt suggested — and when extraction returned "unclear" there is
+      // nothing to prefer, so an existing item's category fills the gap.
+      resolvedCategoryId = matched.categoryId ?? categoryId;
+    }
+
+    const money = { kind: item.kind, lineTotal: item.lineTotal, gstApplicable: item.gstApplicable };
+    rows.push({
+      pricelist_item_id: pricelistItemId,
+      description_raw: item.description,
+      category_id: resolvedCategoryId,
+      kind: item.kind,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      line_subtotal: lineSubtotal(money),
+      line_gst: lineGst(money),
+      line_total: item.lineTotal,
+      gst_applicable: item.gstApplicable,
+      normalized_quantity: item.normalizedQuantity,
+      normalized_unit: item.normalizedUnit,
+      sort_order: index,
+    });
+  }
+  return rows;
+}
+
+/** Shared validation, so create and update cannot drift apart. */
+function validate(input: CreateExpenseInput): string | null {
+  if (!input.vendorName.trim()) return "Vendor is required.";
+  if (input.lineItems.length === 0) return "Add at least one line item.";
+
+  const balance = reconcile(
+    input.lineItems.map((l) => ({
+      kind: l.kind,
+      lineTotal: l.lineTotal,
+      gstApplicable: l.gstApplicable,
+    })),
+    input.total
+  );
+  if (!balance.balanced) {
+    const gap = Math.abs(balance.difference).toFixed(2);
+    return balance.difference > 0
+      ? `The line items come to $${balance.lineSum.toFixed(2)}, but the receipt total is $${input.total.toFixed(2)} — $${gap} is unaccounted for. Add it as a charge, or correct a line.`
+      : `The line items come to $${balance.lineSum.toFixed(2)}, which is $${gap} more than the receipt total of $${input.total.toFixed(2)}. Check for a discount that needs recording, or a duplicated line.`;
+  }
+  return null;
+}
 
 export async function createExpense(
   input: CreateExpenseInput
@@ -312,8 +479,8 @@ export async function createExpense(
   if (!user) redirect("/login");
   await requirePermission(user, "submit_expense", "submit");
 
-  if (!input.vendorName.trim()) return { error: "Vendor is required." };
-  if (input.lineItems.length === 0) return { error: "Add at least one line item." };
+  const invalid = validate(input);
+  if (invalid) return { error: invalid };
 
   const admin = createAdminClient();
 
@@ -323,83 +490,44 @@ export async function createExpense(
     userId: user.id,
   });
 
-  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
-  const categoryIdByName = new Map(leafCategories(categories ?? []).map((c) => [c.name.toLowerCase(), c.id]));
+  const lines = await buildLineRows(admin, input, vendor.id, user.id);
+  const payeeId = await resolvePayee(admin, input.payee, user);
+  const gstAmount = sumLineGst(lines.map((l) => ({
+    kind: l.kind,
+    lineTotal: l.line_total,
+    gstApplicable: l.gst_applicable,
+  })));
 
-  const receiptDate = input.receiptDate ? new Date(input.receiptDate) : new Date();
-  const fiscalYear = fiscalYearHijri(receiptDate);
-
-  const { data: expense, error: expenseError } = await admin
-    .from("expenses")
-    .insert({
-      submitted_by: user.id,
-      vendor_id: vendor.id,
-      vendor_name_raw: input.vendorName,
-      invoice_number: input.invoiceNumber,
-      receipt_date: input.receiptDate,
-      receipt_file_path: input.receiptPath,
-      subtotal: input.subtotal,
-      gst_amount: input.gstAmount,
-      total: input.total,
-      submitter_comment: input.submitterComment,
-      status: "submitted",
-      fiscal_year_hijri: fiscalYear,
+  // One transaction rather than 1 + 2N round trips to Sydney, and the sum
+  // check runs inside it — see migration 0031.
+  const { data, error } = await admin
+    .rpc("create_expense_with_lines", {
+      p_submitted_by: user.id,
+      p_vendor_id: vendor.id,
+      p_vendor_name_raw: input.vendorName,
+      p_invoice_number: input.invoiceNumber,
+      p_receipt_date: input.receiptDate,
+      p_subtotal: round2(input.total - gstAmount),
+      p_gst_amount: gstAmount,
+      p_total: input.total,
+      p_submitter_comment: input.submitterComment,
+      p_payee_id: payeeId,
+      p_fiscal_year_hijri: fiscalYearForReceipt(input.receiptDate),
+      p_lines: lines,
+      p_attachments: toAttachmentRows(input.attachments),
     })
-    .select("id, expense_number")
     .single();
 
-  if (expenseError || !expense) {
-    return { error: expenseError?.message ?? "Could not create the expense." };
+  if (error || !data) {
+    await reportError({ source: "expense-create", error: error ?? "no row returned", userId: user.id });
+    return { error: error?.message ?? "Could not create the expense." };
   }
 
-  for (const [index, item] of input.lineItems.entries()) {
-    const categoryId = item.categoryName
-      ? (categoryIdByName.get(item.categoryName.toLowerCase()) ?? null)
-      : null;
-
-    const matched = await matchOrCreateOffer(admin, {
-      vendorId: vendor.id,
-      originalDescription: item.originalDescription ?? null,
-      description: item.description,
-      categoryId,
-      userId: user.id,
-      normalizedUnit: item.normalizedUnit,
-    });
-
-    // Prefer the category of the item this line resolved to. When the line
-    // matched something a person has already classified, that beats whatever
-    // the receipt suggested — and when extraction returned "unclear" there is
-    // nothing to prefer, so an existing item's category fills the gap.
-    const resolvedCategoryId = matched.categoryId ?? categoryId;
-
-    const lineGst = input.total > 0 ? Math.round(((item.lineTotal / input.total) * input.gstAmount) * 100) / 100 : 0;
-
-    await admin.from("expense_line_items").insert({
-      expense_id: expense.id,
-      pricelist_item_id: matched.id,
-      description_raw: item.description,
-      category_id: resolvedCategoryId,
-      quantity: item.quantity,
-      unit_price: item.unitPrice,
-      line_subtotal: Math.round((item.lineTotal - lineGst) * 100) / 100,
-      line_gst: lineGst,
-      line_total: item.lineTotal,
-      normalized_quantity: item.normalizedQuantity,
-      normalized_unit: item.normalizedUnit,
-      sort_order: index,
-    });
-  }
-
-  await admin.from("expense_status_history").insert({
-    expense_id: expense.id,
-    from_status: null,
-    to_status: "submitted",
-    actor_id: user.id,
-  });
+  const created = data as { id: string; expense_number: string };
 
   await notifyExpenseSubmitted({
-    id: expense.id,
-    expense_number: expense.expense_number,
+    id: created.id,
+    expense_number: created.expense_number,
     vendor_name_raw: input.vendorName,
     total: input.total,
     submitted_by: user.id,
@@ -408,7 +536,17 @@ export async function createExpense(
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
   revalidateReports();
-  return { expenseId: expense.id };
+  return { expenseId: created.id };
+}
+
+function toAttachmentRows(attachments: AttachmentInput[]) {
+  return attachments.map((a) => ({
+    storage_path: a.storagePath,
+    file_name: a.fileName,
+    content_type: a.contentType,
+    size_bytes: a.sizeBytes,
+    sha256: a.sha256,
+  }));
 }
 
 export type ExpenseForEdit = CreateExpenseInput & { id: string };
@@ -423,11 +561,20 @@ export async function getExpenseForEdit(expenseId: string): Promise<ExpenseForEd
   const { data: expense } = await admin.from("expenses").select("*").eq("id", expenseId).maybeSingle();
   if (!expense || expense.submitted_by !== user.id || expense.status !== "submitted") return null;
 
-  const { data: lineItems } = await admin
-    .from("expense_line_items")
-    .select("description_raw, quantity, unit_price, line_total, category_id, normalized_quantity, normalized_unit")
-    .eq("expense_id", expenseId)
-    .order("sort_order");
+  const [{ data: lineItems }, { data: attachments }] = await Promise.all([
+    admin
+      .from("expense_line_items")
+      .select(
+        "description_raw, kind, quantity, unit_price, line_total, category_id, gst_applicable, normalized_quantity, normalized_unit"
+      )
+      .eq("expense_id", expenseId)
+      .order("sort_order"),
+    admin
+      .from("expense_attachments")
+      .select("storage_path, file_name, content_type, size_bytes, sha256")
+      .eq("expense_id", expenseId)
+      .order("sort_order"),
+  ]);
 
   const categoryIds = [...new Set((lineItems ?? []).map((li) => li.category_id).filter(Boolean))];
   const { data: categories } = categoryIds.length
@@ -441,17 +588,27 @@ export async function getExpenseForEdit(expenseId: string): Promise<ExpenseForEd
     abn: null,
     invoiceNumber: expense.invoice_number,
     receiptDate: expense.receipt_date,
-    receiptPath: expense.receipt_file_path,
-    subtotal: expense.subtotal,
-    gstAmount: expense.gst_amount,
-    total: expense.total,
+    attachments: (attachments ?? []).map((a) => ({
+      storagePath: a.storage_path,
+      fileName: a.file_name,
+      contentType: a.content_type,
+      sizeBytes: a.size_bytes,
+      sha256: a.sha256,
+    })),
+    total: Number(expense.total),
     submitterComment: expense.submitter_comment,
+    payee: expense.payee_id ? { kind: "existing", payeeId: expense.payee_id } : null,
     lineItems: (lineItems ?? []).map((li) => ({
       description: li.description_raw,
+      kind: (li.kind ?? "goods") as LineKind,
       quantity: li.quantity,
       unitPrice: li.unit_price,
-      lineTotal: li.line_total,
+      lineTotal: Number(li.line_total),
       categoryName: li.category_id ? (categoryNameById.get(li.category_id) ?? null) : null,
+      // Null on rows written before 0026, whose GST was apportioned. Treated
+      // as GST-free so an edit does not silently invent a credit; the
+      // reconciliation strip shows the submitter what it now adds up to.
+      gstApplicable: li.gst_applicable === true,
       normalizedQuantity: li.normalized_quantity,
       normalizedUnit: li.normalized_unit,
     })),
@@ -466,18 +623,10 @@ export async function updateExpense(
   if (!user) redirect("/login");
   await requirePermission(user, "submit_expense", "edit_own");
 
-  if (!input.vendorName.trim()) return { error: "Vendor is required." };
-  if (input.lineItems.length === 0) return { error: "Add at least one line item." };
+  const invalid = validate(input);
+  if (invalid) return { error: invalid };
 
   const admin = createAdminClient();
-  const { data: existing } = await admin
-    .from("expenses")
-    .select("id, submitted_by, status")
-    .eq("id", expenseId)
-    .maybeSingle();
-  if (!existing || existing.submitted_by !== user.id || existing.status !== "submitted") {
-    return { error: "This expense can no longer be edited." };
-  }
 
   const vendor = await matchOrCreateVendor(admin, {
     name: input.vendorName,
@@ -485,69 +634,159 @@ export async function updateExpense(
     userId: user.id,
   });
 
-  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
-  const categoryIdByName = new Map(leafCategories(categories ?? []).map((c) => [c.name.toLowerCase(), c.id]));
+  const lines = await buildLineRows(admin, input, vendor.id, user.id);
+  const payeeId = await resolvePayee(admin, input.payee, user);
+  const gstAmount = sumLineGst(lines.map((l) => ({
+    kind: l.kind,
+    lineTotal: l.line_total,
+    gstApplicable: l.gst_applicable,
+  })));
 
-  const receiptDate = input.receiptDate ? new Date(input.receiptDate) : new Date();
-  const fiscalYear = fiscalYearHijri(receiptDate);
+  // Ownership and status are re-checked inside the function against a locked
+  // row, which closes the window between an approver deciding and a submitter
+  // saving an edit they opened beforehand.
+  const { error } = await admin.rpc("update_expense_with_lines", {
+    p_expense_id: expenseId,
+    p_actor: user.id,
+    p_vendor_id: vendor.id,
+    p_vendor_name_raw: input.vendorName,
+    p_invoice_number: input.invoiceNumber,
+    p_receipt_date: input.receiptDate,
+    p_subtotal: round2(input.total - gstAmount),
+    p_gst_amount: gstAmount,
+    p_total: input.total,
+    p_submitter_comment: input.submitterComment,
+    p_payee_id: payeeId,
+    p_fiscal_year_hijri: fiscalYearForReceipt(input.receiptDate),
+    p_lines: lines,
+    p_attachments: toAttachmentRows(input.attachments),
+  });
 
-  const { error: updateError } = await admin
-    .from("expenses")
-    .update({
-      vendor_id: vendor.id,
-      vendor_name_raw: input.vendorName,
-      invoice_number: input.invoiceNumber,
-      receipt_date: input.receiptDate,
-      receipt_file_path: input.receiptPath,
-      subtotal: input.subtotal,
-      gst_amount: input.gstAmount,
-      total: input.total,
-      submitter_comment: input.submitterComment,
-      fiscal_year_hijri: fiscalYear,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", expenseId);
-  if (updateError) return { error: updateError.message };
-
-  await admin.from("expense_line_items").delete().eq("expense_id", expenseId);
-
-  for (const [index, item] of input.lineItems.entries()) {
-    const categoryId = item.categoryName
-      ? (categoryIdByName.get(item.categoryName.toLowerCase()) ?? null)
-      : null;
-
-    const matched = await matchOrCreateOffer(admin, {
-      vendorId: vendor.id,
-      originalDescription: item.originalDescription ?? null,
-      description: item.description,
-      categoryId,
-      userId: user.id,
-      normalizedUnit: item.normalizedUnit,
-    });
-
-    // Same as createExpense: the resolved item's category beats the guess.
-    const resolvedCategoryId = matched.categoryId ?? categoryId;
-
-    const lineGst = input.total > 0 ? Math.round(((item.lineTotal / input.total) * input.gstAmount) * 100) / 100 : 0;
-
-    await admin.from("expense_line_items").insert({
-      expense_id: expenseId,
-      pricelist_item_id: matched.id,
-      description_raw: item.description,
-      category_id: resolvedCategoryId,
-      quantity: item.quantity,
-      unit_price: item.unitPrice,
-      line_subtotal: Math.round((item.lineTotal - lineGst) * 100) / 100,
-      line_gst: lineGst,
-      line_total: item.lineTotal,
-      normalized_quantity: item.normalizedQuantity,
-      normalized_unit: item.normalizedUnit,
-      sort_order: index,
-    });
+  if (error) {
+    // The function raises when the expense has moved on, which is a normal
+    // race rather than a fault worth reporting.
+    if (/can no longer be edited|belongs to someone else/.test(error.message)) {
+      return { error: "This expense can no longer be edited." };
+    }
+    await reportError({ source: "expense-update", error, userId: user.id, expenseId });
+    return { error: error.message };
   }
 
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
   revalidateReports();
   return { expenseId };
+}
+
+/* ------------------------------------------------------------------ */
+/* Duplicate detection                                                  */
+/* ------------------------------------------------------------------ */
+
+export type DuplicateWarning = {
+  expenseId: string;
+  expenseNumber: string | null;
+  vendorName: string;
+  total: number;
+  status: string;
+  submittedByName: string;
+  receiptDate: string | null;
+  /** Why we think it is the same: identical file, or same vendor and invoice. */
+  reason: "same-file" | "same-invoice";
+};
+
+/**
+ * Whether this looks like something already submitted.
+ *
+ * Warns rather than blocks. A repeated vendor/invoice pair is usually a double
+ * submission and occasionally legitimate — a supplier restarting their
+ * numbering each year, a genuine same-day repeat order — and a hard block
+ * would eventually stop a real expense with no way through.
+ *
+ * Two signals, strongest first. Identical file bytes are the same photograph
+ * of the same receipt, which is a firmer answer than an invoice number a
+ * supplier may reuse.
+ */
+export async function findPossibleDuplicates(input: {
+  sha256List: string[];
+  vendorName: string | null;
+  invoiceNumber: string | null;
+  excludeExpenseId?: string | null;
+}): Promise<DuplicateWarning[]> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!(await userCan(user, "submit_expense", "submit"))) return [];
+
+  const admin = createAdminClient();
+  const found = new Map<string, DuplicateWarning["reason"]>();
+
+  for (const sha of input.sha256List.filter(Boolean)) {
+    for (const id of await expenseIdsWithFile(admin, sha)) found.set(id, "same-file");
+  }
+
+  const invoice = input.invoiceNumber?.trim();
+  if (invoice && input.vendorName?.trim()) {
+    const { data: vendors } = await admin
+      .from("vendors")
+      .select("id")
+      .ilike("name", input.vendorName.trim())
+      .limit(5);
+    const vendorIds = (vendors ?? []).map((v) => v.id);
+    if (vendorIds.length) {
+      const { data } = await admin
+        .from("expenses")
+        .select("id")
+        .in("vendor_id", vendorIds)
+        .ilike("invoice_number", invoice)
+        .neq("status", "declined")
+        .limit(5);
+      for (const row of data ?? []) if (!found.has(row.id)) found.set(row.id, "same-invoice");
+    }
+  }
+
+  if (input.excludeExpenseId) found.delete(input.excludeExpenseId);
+  if (found.size === 0) return [];
+
+  const { data: expenses } = await admin
+    .from("expenses")
+    .select("id, expense_number, vendor_name_raw, total, status, receipt_date, submitted_by")
+    .in("id", [...found.keys()]);
+
+  const submitterIds = [...new Set((expenses ?? []).map((e) => e.submitted_by))];
+  const { data: profiles } = submitterIds.length
+    ? await admin.from("profiles").select("id, full_name, email").in("id", submitterIds)
+    : { data: [] };
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
+
+  return (expenses ?? []).map((e) => ({
+    expenseId: e.id,
+    expenseNumber: e.expense_number,
+    vendorName: e.vendor_name_raw ?? "Unrecorded vendor",
+    total: Number(e.total),
+    status: e.status,
+    submittedByName: nameById.get(e.submitted_by) ?? "someone else",
+    receiptDate: e.receipt_date,
+    reason: found.get(e.id)!,
+  }));
+}
+
+/* ------------------------------------------------------------------ */
+/* Payee lookup                                                         */
+/* ------------------------------------------------------------------ */
+
+export async function searchPayeesAction(query: string): Promise<PayeeSuggestion[]> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "submit_expense", "submit");
+  return searchPayees(createAdminClient(), query);
+}
+
+/** The submitter's own payee record, so "reimburse me" can be pre-selected. */
+export async function myPayeeAction(): Promise<PayeeSuggestion | null> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "submit_expense", "submit");
+
+  const admin = createAdminClient();
+  const { data } = await admin.from("payees").select("id").eq("profile_id", user.id).maybeSingle();
+  return data ? getPayee(admin, data.id as string) : null;
 }

@@ -39,6 +39,7 @@ export default async function SubmitExpensePage({
       <SubmitForm
         categories={leafCategories(categories ?? []).map((c) => c.name)}
         vendorNames={(vendors ?? []).map((v) => v.name)}
+        myName={user.fullName || user.email}
         editExpense={editExpense}
       />
     </div>
