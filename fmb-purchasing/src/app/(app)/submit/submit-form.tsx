@@ -31,6 +31,9 @@ function toReviewItems(items: ExtractedReceipt["lineItems"]): ReviewItem[] {
     key: `${i}-${Date.now()}`,
     itemNumber: "",
     description: item.description,
+    // Frozen at extraction time: editing the row never touches this, so a
+    // corrected line still knows what the receipt was originally read as.
+    originalDescription: item.description,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
     lineTotal: item.lineTotal ?? (item.quantity && item.unitPrice ? round2(item.quantity * item.unitPrice) : 0),
@@ -49,6 +52,8 @@ function blankItem(): ReviewItem {
     key: String(Math.random()),
     itemNumber: "",
     description: "",
+    // Typed by hand, so there is no earlier reading to compare against.
+    originalDescription: null,
     quantity: null,
     unitPrice: null,
     lineTotal: 0,
