@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateReports } from "../reports/data";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -58,6 +59,7 @@ export async function markExpensePaid(formData: FormData) {
   revalidatePath("/payments");
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
+  revalidateReports();
 }
 
 /** Marks all selected expenses paid on the same date, with an optional shared reference. */
@@ -75,4 +77,5 @@ export async function bulkMarkPaid(expenseIds: string[], paymentDate: string, pa
   revalidatePath("/payments");
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
+  revalidateReports();
 }

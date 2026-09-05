@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateReports } from "../reports/data";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { categoryLabelsById } from "@/lib/categories";
 import { recordVendorItemDescription } from "@/lib/expense-matching";
+import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
+import { UNIT_DIMENSIONS, type UnitDimension } from "@/lib/units";
 
 async function requirePricelistEdit() {
   const user = await getCurrentUser();
@@ -109,6 +112,7 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
   if (offerError) return { error: offerError.message, success: false };
 
   revalidatePath("/pricelist");
+  revalidateReports();
   return { error: null, success: true };
 }
 
@@ -135,6 +139,7 @@ export async function addPackSize(formData: FormData) {
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
+  revalidateReports();
 }
 
 const PACK_SIZE_TRACKED_FIELDS = [
@@ -202,6 +207,7 @@ export async function updatePackSize(formData: FormData) {
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
+  revalidateReports();
 }
 
 /**
@@ -227,6 +233,7 @@ export async function deleteOffer(formData: FormData) {
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
+  revalidateReports();
 }
 
 export async function removePackSize(formData: FormData) {
@@ -244,6 +251,7 @@ export async function removePackSize(formData: FormData) {
 
   await admin.from("item_pack_sizes").delete().eq("id", packSizeId);
   revalidatePath(`/pricelist/${itemId}`);
+  revalidateReports();
 }
 
 export async function addOffer(formData: FormData) {
@@ -270,6 +278,7 @@ export async function addOffer(formData: FormData) {
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
+  revalidateReports();
 }
 
 async function reviewOffers(offerIds: string[], decision: "approved" | "rejected") {
@@ -301,6 +310,7 @@ async function reviewOffers(offerIds: string[], decision: "approved" | "rejected
   }
 
   revalidatePath("/pricelist");
+  revalidateReports();
 }
 
 /** Approving an offer also confirms its parent Item, if still pending. */
@@ -369,6 +379,7 @@ export async function updateItem(formData: FormData) {
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
+  revalidateReports();
 }
 
 /**
@@ -462,6 +473,7 @@ export async function updateOffer(formData: FormData) {
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
+  revalidateReports();
 }
 
 export type ItemSearchResult = {
@@ -480,10 +492,11 @@ export async function searchItemsForMerge(query: string, excludeItemId: string):
   if (trimmed.length < 2) return [];
 
   const admin = createAdminClient();
+  const retiredMatchIds = await itemIdsByRetiredNumber(admin, trimmed);
   const { data: items } = await admin
     .from("items")
     .select("id, item_number, name, category_id")
-    .or(`item_number.ilike.%${trimmed}%,name.ilike.%${trimmed}%`)
+    .or(itemMatchFilter(trimmed, retiredMatchIds))
     .neq("id", excludeItemId)
     .limit(10);
   if (!items || items.length === 0) return [];
@@ -531,6 +544,7 @@ export async function mergeItemAction(_prev: MergeItemState, formData: FormData)
 
   revalidatePath("/pricelist");
   revalidatePath(`/pricelist/${winnerId}`);
+  revalidateReports();
 
   // The page this was submitted from no longer exists, so redirect server-side
   // — a client-side redirect loses the race against revalidation re-rendering
@@ -559,12 +573,256 @@ export async function dismissDuplicatePair(formData: FormData) {
   revalidatePath(`/pricelist/${b}`);
 }
 
-export async function addUnit(formData: FormData) {
+export type UnitFormState = { error: string | null; success: boolean };
+
+/**
+ * Adding a unit never worked: 0009 made units.base_unit_code NOT NULL with no
+ * default, this only sent code and label, and the error was discarded — so the
+ * button submitted, failed, and showed nothing.
+ *
+ * The missing fields are not defaultable. A cost is only comparable with
+ * another when both reduce to the same base unit (see offer_unit_costs in
+ * 0010, which groups by base_unit_code), so a unit that guessed its dimension
+ * and factor would produce exactly the silently-wrong per-unit costs 0009 was
+ * written to eliminate. They are asked for instead.
+ */
+export async function addUnit(_prev: UnitFormState, formData: FormData): Promise<UnitFormState> {
   await requirePricelistEdit();
+
   const code = String(formData.get("code") ?? "").trim();
-  if (!code) return;
+  if (!code) return { error: "A unit name is required.", success: false };
+
+  const dimension = String(formData.get("dimension") ?? "").trim();
+  if (!UNIT_DIMENSIONS.includes(dimension as UnitDimension)) {
+    return { error: "Choose what this unit measures.", success: false };
+  }
 
   const admin = createAdminClient();
-  await admin.from("units").insert({ code, label: code });
+
+  const { data: clash } = await admin.from("units").select("code").eq("code", code).maybeSingle();
+  if (clash) return { error: `A unit called "${code}" already exists.`, success: false };
+
+  // Empty means "this unit defines its own scale" — the first unit of a
+  // dimension has nothing to convert to, and length currently has none at all.
+  const baseChoice = String(formData.get("base_unit_code") ?? "").trim();
+
+  let baseUnitCode = code;
+  let toBaseFactor = 1;
+
+  if (baseChoice) {
+    const { data: base } = await admin
+      .from("units")
+      .select("code, dimension, base_unit_code")
+      .eq("code", baseChoice)
+      .maybeSingle();
+
+    if (!base) return { error: `There is no unit called "${baseChoice}".`, success: false };
+    if (base.dimension !== dimension) {
+      return { error: `${baseChoice} measures ${base.dimension}, not ${dimension}.`, success: false };
+    }
+    // Converting to a non-base unit would put this unit one step further from
+    // the base than everything else, and the cost views compare on the base.
+    if (base.base_unit_code !== base.code) {
+      return {
+        error: `${baseChoice} is itself measured against ${base.base_unit_code}. Convert to ${base.base_unit_code} directly, so every ${dimension} unit shares one base.`,
+        success: false,
+      };
+    }
+
+    const factor = numberOrNull(formData, "to_base_factor");
+    if (factor == null || factor <= 0) {
+      return {
+        error: `How many ${baseChoice} is one ${code}? Enter a number greater than zero.`,
+        success: false,
+      };
+    }
+
+    baseUnitCode = base.code;
+    toBaseFactor = factor;
+  }
+
+  const { error } = await admin.from("units").insert({
+    code,
+    label: code,
+    dimension,
+    base_unit_code: baseUnitCode,
+    to_base_factor: toBaseFactor,
+    sort_order: 100,
+  });
+  if (error) return { error: error.message, success: false };
+
+  revalidatePath("/pricelist/units");
   revalidatePath("/pricelist");
+  revalidateReports();
+  return { error: null, success: true };
+}
+
+// ---------------------------------------------------------------------
+// Categories
+// ---------------------------------------------------------------------
+
+export type CategoryFormState = { error: string | null; success: boolean };
+
+/** Mirrors the categories_code_format check constraint in migration 0024. */
+const CATEGORY_CODE_PATTERN = /^[A-Z][A-Z0-9]{1,5}$/;
+
+/**
+ * Codes are the visible half of every item number, so they are normalised
+ * rather than rejected on case — someone typing "chk" means CHK.
+ */
+function categoryCodeOrNull(formData: FormData): { code: string | null; error: string | null } {
+  const raw = String(formData.get("code") ?? "").trim().toUpperCase();
+  if (!raw) return { code: null, error: null };
+  if (!CATEGORY_CODE_PATTERN.test(raw)) {
+    return {
+      code: null,
+      error: "A code is 2–6 characters, letters and digits, starting with a letter (e.g. CHK).",
+    };
+  }
+  return { code: raw, error: null };
+}
+
+export async function createCategory(
+  _prev: CategoryFormState,
+  formData: FormData
+): Promise<CategoryFormState> {
+  await requirePricelistEdit();
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "A category name is required.", success: false };
+
+  const { code, error: codeError } = categoryCodeOrNull(formData);
+  if (codeError) return { error: codeError, success: false };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("categories").insert({
+    name,
+    code,
+    parent_category_id: fieldOrNull(formData, "parent_category_id"),
+    sort_order: numberOrNull(formData, "sort_order") ?? 500,
+  });
+
+  if (error) {
+    // Both collisions are unique-constraint violations; say which one.
+    const message = error.message.includes("categories_code_key")
+      ? `The code ${code} is already used by another category.`
+      : error.message.includes("categories_name_key")
+        ? `A category called "${name}" already exists.`
+        : error.message;
+    return { error: message, success: false };
+  }
+
+  revalidatePath("/pricelist/categories");
+  revalidatePath("/pricelist");
+  revalidateReports();
+  return { error: null, success: true };
+}
+
+/**
+ * Renaming, re-parenting or recoding a category. Changing the code renumbers
+ * every item filed under it — the categories_propagate_code trigger does the
+ * work, and the old numbers survive in item_number_aliases.
+ */
+export async function updateCategory(
+  _prev: CategoryFormState,
+  formData: FormData
+): Promise<CategoryFormState> {
+  await requirePricelistEdit();
+
+  const id = String(formData.get("category_id") ?? "");
+  if (!id) return { error: "No category to update.", success: false };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "A category name is required.", success: false };
+
+  const { code, error: codeError } = categoryCodeOrNull(formData);
+  if (codeError) return { error: codeError, success: false };
+
+  const parentCategoryId = fieldOrNull(formData, "parent_category_id");
+  // One level of nesting only, per 0008 — a category that is already somebody
+  // else's parent cannot itself be filed under a third.
+  if (parentCategoryId === id) {
+    return { error: "A category cannot be its own parent.", success: false };
+  }
+
+  const admin = createAdminClient();
+
+  if (parentCategoryId) {
+    const { count } = await admin
+      .from("categories")
+      .select("id", { count: "exact", head: true })
+      .eq("parent_category_id", id);
+    if ((count ?? 0) > 0) {
+      return {
+        error: "This category has subcategories of its own, so it cannot also sit under another.",
+        success: false,
+      };
+    }
+  }
+
+  const { error } = await admin
+    .from("categories")
+    .update({ name, code, parent_category_id: parentCategoryId })
+    .eq("id", id);
+
+  if (error) {
+    const message = error.message.includes("categories_code_key")
+      ? `The code ${code} is already used by another category.`
+      : error.message.includes("categories_name_key")
+        ? `A category called "${name}" already exists.`
+        : error.message;
+    return { error: message, success: false };
+  }
+
+  revalidatePath("/pricelist/categories");
+  revalidatePath("/pricelist");
+  revalidatePath("/submit");
+  revalidateReports();
+  return { error: null, success: true };
+}
+
+/**
+ * Only ever removes a category nothing points at. Reassigning items would be
+ * a bulk edit with real consequences for their numbers, and that belongs on
+ * the items themselves, not buried in a delete button.
+ */
+export async function deleteCategory(
+  _prev: CategoryFormState,
+  formData: FormData
+): Promise<CategoryFormState> {
+  await requirePricelistEdit();
+
+  const id = String(formData.get("category_id") ?? "");
+  if (!id) return { error: "No category to delete.", success: false };
+
+  const admin = createAdminClient();
+  const [items, children, lineItems, offers] = await Promise.all([
+    admin.from("items").select("id", { count: "exact", head: true }).eq("category_id", id),
+    admin.from("categories").select("id", { count: "exact", head: true }).eq("parent_category_id", id),
+    admin.from("expense_line_items").select("id", { count: "exact", head: true }).eq("category_id", id),
+    admin.from("pricelist_items").select("id", { count: "exact", head: true }).eq("category_id", id),
+  ]);
+
+  // Named individually because "still in use" is not actionable on its own —
+  // the fix is different for each.
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const blockers: string[] = [];
+  if ((items.count ?? 0) > 0) blockers.push(plural(items.count!, "item", "items"));
+  if ((children.count ?? 0) > 0) blockers.push(plural(children.count!, "subcategory", "subcategories"));
+  if ((lineItems.count ?? 0) > 0) blockers.push(plural(lineItems.count!, "receipt line", "receipt lines"));
+  if ((offers.count ?? 0) > 0) blockers.push(plural(offers.count!, "vendor offer", "vendor offers"));
+
+  if (blockers.length > 0) {
+    return {
+      error: `Still used by ${blockers.join(", ")}. Move those to another category first.`,
+      success: false,
+    };
+  }
+
+  await admin.from("categories").delete().eq("id", id);
+  revalidatePath("/pricelist/categories");
+  revalidatePath("/pricelist");
+  revalidatePath("/submit");
+  revalidateReports();
+  return { error: null, success: true };
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateReports } from "../reports/data";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -59,6 +60,7 @@ export async function reviewExpense(formData: FormData) {
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
   revalidatePath("/payments");
+  revalidateReports();
 }
 
 export async function bulkReviewExpenses(expenseIds: string[], decision: "approved" | "declined") {
@@ -76,4 +78,5 @@ export async function bulkReviewExpenses(expenseIds: string[], decision: "approv
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
   revalidatePath("/payments");
+  revalidateReports();
 }
