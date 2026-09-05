@@ -28,7 +28,14 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  await supabase.auth.getUser();
+  // `getClaims()` rather than `getUser()`: it still refreshes an expired
+  // session (it reads through `getSession()`, which renews and re-sets the
+  // cookies), but once the Supabase project is on asymmetric JWT signing keys
+  // it verifies the token's signature locally against a cached JWKS instead of
+  // spending a network round trip to the Auth server on every navigation.
+  // On a project still using the legacy symmetric secret it falls back to
+  // `getUser()` internally, so this is safe either way — just not yet faster.
+  await supabase.auth.getClaims();
 
   return response;
 }

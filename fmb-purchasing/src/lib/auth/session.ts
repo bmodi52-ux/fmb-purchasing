@@ -18,31 +18,36 @@ export type CurrentUser = {
  */
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) return null;
+  // `getClaims()` verifies the access token's signature locally against a
+  // cached JWKS (once the project is on asymmetric signing keys), so
+  // establishing who is asking costs no network round trip. It falls back to
+  // an Auth server call on projects still using the legacy symmetric secret,
+  // which is what `getUser()` did unconditionally.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims.sub;
+
+  if (!userId) return null;
 
   const admin = createAdminClient();
+
+  // Team memberships ride along as an embed rather than costing a second
+  // sequential round trip — every authenticated page load waits on this.
   const { data: profile } = await admin
     .from("profiles")
-    .select("id, full_name, email, is_active, must_change_password")
-    .eq("id", user.id)
+    .select("id, full_name, email, is_active, must_change_password, team_members ( team_id )")
+    .eq("id", userId)
     .single();
 
   if (!profile || !profile.is_active) return null;
 
-  const { data: memberships } = await admin
-    .from("team_members")
-    .select("team_id")
-    .eq("user_id", user.id);
+  const memberships = (profile.team_members ?? []) as { team_id: string }[];
 
   return {
     id: profile.id,
     fullName: profile.full_name,
     email: profile.email,
     mustChangePassword: profile.must_change_password,
-    teamIds: (memberships ?? []).map((m) => m.team_id),
+    teamIds: memberships.map((m) => m.team_id),
   };
 });

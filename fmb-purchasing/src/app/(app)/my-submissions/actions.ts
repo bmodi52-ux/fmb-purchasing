@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateReports } from "../reports/data";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -29,6 +30,7 @@ export async function deleteExpense(formData: FormData) {
   const admin = createAdminClient();
   await deleteExpenseById(user.id, expenseId, admin);
   revalidatePath("/my-submissions");
+  revalidateReports();
 }
 
 /** Deletes any selected expenses that are still eligible (own, still "submitted"); silently skips the rest. */
@@ -42,4 +44,5 @@ export async function bulkDeleteExpenses(expenseIds: string[]) {
     await deleteExpenseById(user.id, id, admin);
   }
   revalidatePath("/my-submissions");
+  revalidateReports();
 }

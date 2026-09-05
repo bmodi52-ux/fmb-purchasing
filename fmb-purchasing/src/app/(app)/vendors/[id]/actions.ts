@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateReports } from "../../reports/data";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -39,6 +40,7 @@ export async function updateVendorDetails(formData: FormData) {
 
   revalidatePath(`/vendors/${vendorId}`);
   revalidatePath("/vendors");
+  revalidateReports();
 }
 
 export async function addCollectionAddress(formData: FormData) {
