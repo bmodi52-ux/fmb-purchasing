@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getColumnPreference } from "@/lib/column-prefs";
-import { fiscalYearHijri, formatFiscalYear, ALL_YEARS } from "@/lib/fiscal-year";
+import { currentFiscalYearHijri, formatFiscalYear, ALL_YEARS } from "@/lib/fiscal-year";
 import { FiscalYearSelect } from "@/components/fiscal-year-select";
 import { ExpensesTable, type ExpenseRow } from "./expenses-table";
 
@@ -36,7 +36,7 @@ export default async function AllExpensesPage({
   await requirePermission(user, "all_expenses", "view");
 
   const { fy } = await searchParams;
-  const currentFy = fiscalYearHijri(new Date());
+  const currentFy = currentFiscalYearHijri();
   // Defaults to the current year rather than everything ever recorded: an
   // accounting page is almost always asked about a period, and it means the
   // query is bounded by an indexed column instead of growing without limit.

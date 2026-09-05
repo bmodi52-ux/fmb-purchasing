@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { gregorianToHijri, formatHijri } from "@/lib/hijri/hijri.js";
+import { gregorianToHijri, formatHijri } from "@/lib/hijri/hijri";
 import { formatDate } from "@/lib/format";
 import {
   ReportFilters,
@@ -500,10 +500,10 @@ function DimensionSection({
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-                  <th className="py-2 pr-4 font-medium">{title.replace(/s$/, "")}</th>
-                  <th className="py-2 pr-4 text-right font-medium capitalize">{unit}</th>
-                  <th className="py-2 pr-4 text-right font-medium">Total</th>
-                  <th className="py-2 pr-4 text-right font-medium">Share</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">{title.replace(/s$/, "")}</th>
+                  <th scope="col" className="py-2 pr-4 text-right font-medium capitalize">{unit}</th>
+                  <th scope="col" className="py-2 pr-4 text-right font-medium">Total</th>
+                  <th scope="col" className="py-2 pr-4 text-right font-medium">Share</th>
                 </tr>
               </thead>
               <tbody>
@@ -677,9 +677,9 @@ function CompareSection({
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-                      <th className="py-2 pr-4 font-medium">Month</th>
+                      <th scope="col" className="py-2 pr-4 font-medium">Month</th>
                       {comparison.subjects.map((s) => (
-                        <th key={s.key} className="py-2 pr-4 text-right font-medium">
+                        <th scope="col" key={s.key} className="py-2 pr-4 text-right font-medium">
                           {s.label}
                         </th>
                       ))}
@@ -807,10 +807,10 @@ function UnitCostsSection({
                     <table className="min-w-full text-xs">
                       <thead>
                         <tr className="text-left text-ink/45">
-                          <th className="py-1 pr-3 font-medium">Vendor</th>
-                          <th className="py-1 pr-3 font-medium">Date</th>
-                          <th className="py-1 pr-3 text-right font-medium">Quantity</th>
-                          <th className="py-1 text-right font-medium">Per unit</th>
+                          <th scope="col" className="py-1 pr-3 font-medium">Vendor</th>
+                          <th scope="col" className="py-1 pr-3 font-medium">Date</th>
+                          <th scope="col" className="py-1 pr-3 text-right font-medium">Quantity</th>
+                          <th scope="col" className="py-1 text-right font-medium">Per unit</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -850,9 +850,9 @@ function MonthTable({ monthly }: { monthly: Bucket[] }) {
       <table className="min-w-full text-sm">
         <thead>
           <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-            <th className="py-2 pr-4 font-medium">Month</th>
-            <th className="py-2 pr-4 text-right font-medium">Expenses</th>
-            <th className="py-2 pr-4 text-right font-medium">Total</th>
+            <th scope="col" className="py-2 pr-4 font-medium">Month</th>
+            <th scope="col" className="py-2 pr-4 text-right font-medium">Expenses</th>
+            <th scope="col" className="py-2 pr-4 text-right font-medium">Total</th>
           </tr>
         </thead>
         <tbody>

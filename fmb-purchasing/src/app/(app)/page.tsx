@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fiscalYearHijri } from "@/lib/fiscal-year";
+import { currentFiscalYearHijri } from "@/lib/fiscal-year";
 import { loadReportRawData } from "./reports/data";
 import { computeWidgetData } from "./reports/dashboard-widgets";
 import { HomeDashboard, type SavedWidget } from "./home-dashboard";
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
   }
 
   const admin = createAdminClient();
-  const currentFy = fiscalYearHijri(new Date());
+  const currentFy = currentFiscalYearHijri();
 
   const [{ data: widgetRows }, { data: fyRows }] = await Promise.all([
     admin

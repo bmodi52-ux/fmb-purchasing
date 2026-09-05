@@ -21,7 +21,7 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { gregorianToHijri, formatHijri } from "./hijri.js";
+import { gregorianToHijri, formatHijri } from "./hijri.ts";
 
 /**
  * hijri.js only exposes forward conversion, so finding the Gregorian date of

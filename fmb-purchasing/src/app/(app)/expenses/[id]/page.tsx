@@ -272,12 +272,12 @@ export default async function ExpenseDetailPage({
             <table className="w-full text-sm">
               <thead className="border-b border-ink/10 text-left text-ink/60">
                 <tr>
-                  <th className="px-4 py-2 font-medium">Description</th>
-                  <th className="px-4 py-2 font-medium">Category</th>
-                  <th className="px-4 py-2 font-medium">Pricelist item</th>
-                  <th className="px-4 py-2 text-right font-medium">Qty</th>
-                  <th className="px-4 py-2 text-right font-medium">Unit price</th>
-                  <th className="px-4 py-2 text-right font-medium">Total</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Description</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Category</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Pricelist item</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">Qty</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">Unit price</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">Total</th>
                 </tr>
               </thead>
               <tbody>

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fiscalYearHijri, formatFiscalYear } from "@/lib/fiscal-year";
+import { currentFiscalYearHijri, formatFiscalYear } from "@/lib/fiscal-year";
 import {
   applyFilters,
   monthKey,
@@ -44,7 +44,7 @@ export default async function ReportsPage({
   await requirePermission(user, "reports", "view");
 
   const params = await searchParams;
-  const currentFy = fiscalYearHijri(new Date());
+  const currentFy = currentFiscalYearHijri();
   const selectedFy = params.fy ? Number(params.fy) : currentFy;
 
   const admin = createAdminClient();

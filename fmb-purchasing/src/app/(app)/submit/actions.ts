@@ -13,6 +13,7 @@ import { fiscalYearHijri } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
 import { leafCategories } from "@/lib/categories";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
+import { ilikeContains, orFilter } from "@/lib/pgrst-filter";
 import { reportError } from "@/lib/errors";
 
 export type ExtractState = {
@@ -178,7 +179,7 @@ export async function searchVendorsAction(query: string): Promise<VendorLookupSu
   const { data } = await admin
     .from("vendors")
     .select("id, vendor_number, name")
-    .or(`vendor_number.ilike.%${trimmed}%,name.ilike.%${trimmed}%`)
+    .or(orFilter(ilikeContains("vendor_number", trimmed), ilikeContains("name", trimmed)))
     .eq("status", "approved")
     .limit(8);
 

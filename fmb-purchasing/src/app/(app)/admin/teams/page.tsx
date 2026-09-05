@@ -119,9 +119,9 @@ export default async function TeamsAdminPage() {
                   <table className="min-w-full text-xs">
                     <thead>
                       <tr>
-                        <th className="p-1 text-left font-medium text-ink/60">Page</th>
+                        <th scope="col" className="p-1 text-left font-medium text-ink/60">Page</th>
                         {(actions ?? []).map((a) => (
-                          <th key={a.key} className="p-1 text-center font-medium text-ink/60">
+                          <th scope="col" key={a.key} className="p-1 text-center font-medium text-ink/60">
                             {a.label}
                           </th>
                         ))}
@@ -130,7 +130,14 @@ export default async function TeamsAdminPage() {
                     <tbody>
                       {(pages ?? []).map((page) => (
                         <tr key={page.key} className="border-t border-ink/5">
-                          <td className="p-1 text-ink/80">{page.label}</td>
+                          {/* A row header, not a cell. This is a grid of
+                              checkboxes whose meaning comes entirely from the
+                              intersection of its two axes: without this, a
+                              screen reader announces "Approve, ticked" with no
+                              way to hear which page it belongs to. */}
+                          <th scope="row" className="p-1 text-left font-normal text-ink/80">
+                            {page.label}
+                          </th>
                           {(actions ?? []).map((a) => {
                             const granted = grantSet.has(`${team.id}:${page.key}:${a.key}`);
                             return (

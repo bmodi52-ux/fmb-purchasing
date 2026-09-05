@@ -143,9 +143,9 @@ function RankedTable({
       <table className="min-w-full text-xs">
         <thead>
           <tr className="border-b border-ink/10 text-left text-ink/55">
-            <th className="py-1.5 pr-3 font-medium capitalize">{dimension}</th>
-            <th className="py-1.5 pr-3 text-right font-medium">Total</th>
-            <th className="py-1.5 text-right font-medium capitalize">{unit}</th>
+            <th scope="col" className="py-1.5 pr-3 font-medium capitalize">{dimension}</th>
+            <th scope="col" className="py-1.5 pr-3 text-right font-medium">Total</th>
+            <th scope="col" className="py-1.5 text-right font-medium capitalize">{unit}</th>
           </tr>
         </thead>
         <tbody>
@@ -213,9 +213,9 @@ function CompareTable({
       <table className="min-w-full text-xs">
         <thead>
           <tr className="border-b border-ink/10 text-left text-ink/55">
-            <th className="py-1.5 pr-3 font-medium">Month</th>
+            <th scope="col" className="py-1.5 pr-3 font-medium">Month</th>
             {comparison.subjects.map((s) => (
-              <th key={s.key} className="py-1.5 pr-3 text-right font-medium">
+              <th scope="col" key={s.key} className="py-1.5 pr-3 text-right font-medium">
                 {s.label}
               </th>
             ))}
@@ -245,9 +245,9 @@ function UnitCostTable({ rows }: { rows: PerUnitRow[] }) {
       <table className="min-w-full text-xs">
         <thead>
           <tr className="text-left text-ink/45">
-            <th className="py-1 pr-3 font-medium">Vendor</th>
-            <th className="py-1 pr-3 text-right font-medium">Quantity</th>
-            <th className="py-1 text-right font-medium">Per unit</th>
+            <th scope="col" className="py-1 pr-3 font-medium">Vendor</th>
+            <th scope="col" className="py-1 pr-3 text-right font-medium">Quantity</th>
+            <th scope="col" className="py-1 text-right font-medium">Per unit</th>
           </tr>
         </thead>
         <tbody>

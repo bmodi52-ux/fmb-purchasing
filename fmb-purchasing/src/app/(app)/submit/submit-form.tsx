@@ -20,6 +20,7 @@ import type { ExtractedReceipt } from "@/lib/receipt-extraction";
 import { VendorLookupFields } from "./vendor-lookup-fields";
 import { ItemLookupCells } from "./item-lookup-cells";
 import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image-resize";
+import { normalizeReceiptDate } from "@/lib/format";
 
 const initialExtractState: ExtractState = { data: null, receiptPath: null, error: null };
 const initialUploadState: UploadFileState = { path: null, fileName: null, error: null };
@@ -108,7 +109,7 @@ export function SubmitForm({
       setVendorName(d.vendor ?? "");
       setAbn(d.abn ?? "");
       setInvoiceNumber(d.invoiceNumber ?? "");
-      setReceiptDate(normalizeDateInput(d.date));
+      setReceiptDate(normalizeReceiptDate(d.date));
       const reviewItems = toReviewItems(d.lineItems);
       setItems(reviewItems.length ? reviewItems : [blankItem()]);
       const computedTotal = d.total ?? reviewItems.reduce((s, it) => s + (it.lineTotal || 0), 0);
@@ -254,13 +255,6 @@ export function SubmitForm({
       editExpenseId={editExpense?.id ?? null}
     />
   );
-}
-
-function normalizeDateInput(raw: string | null): string {
-  if (!raw) return "";
-  const parsed = new Date(raw);
-  if (isNaN(parsed.getTime())) return "";
-  return parsed.toISOString().slice(0, 10);
 }
 
 function ReviewForm(props: {
@@ -487,14 +481,14 @@ function ReviewForm(props: {
         <table className="min-w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-ink/50">
-              <th className="p-1">Item #</th>
-              <th className="p-1">Description</th>
-              <th className="p-1">Category</th>
-              <th className="p-1">Qty</th>
-              <th className="p-1">Unit price</th>
-              <th className="p-1">Line total</th>
-              <th className="p-1">Per-unit</th>
-              <th className="p-1" />
+              <th scope="col" className="p-1">Item #</th>
+              <th scope="col" className="p-1">Description</th>
+              <th scope="col" className="p-1">Category</th>
+              <th scope="col" className="p-1">Qty</th>
+              <th scope="col" className="p-1">Unit price</th>
+              <th scope="col" className="p-1">Line total</th>
+              <th scope="col" className="p-1">Per-unit</th>
+              <th scope="col" className="p-1" />
             </tr>
           </thead>
           <tbody>

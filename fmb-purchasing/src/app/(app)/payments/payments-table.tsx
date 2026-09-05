@@ -108,19 +108,19 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-left text-ink/60">
-                    <th className="p-2">
+                    <th scope="col" className="p-2">
                       <span className="sr-only">Select</span>
                     </th>
-                    <th className="p-2">Entry #</th>
-                    <th className="p-2">Vendor</th>
-                    <th className="p-2">Submitted by</th>
-                    <th className="p-2">Invoice</th>
-                    <th className="p-2">Receipt</th>
-                    <th className="p-2">Approved</th>
-                    <th className="p-2">Total</th>
-                    <th className="p-2">Payment reference</th>
-                    <th className="p-2">Payment date</th>
-                    <th className="p-2" />
+                    <th scope="col" className="p-2">Entry #</th>
+                    <th scope="col" className="p-2">Vendor</th>
+                    <th scope="col" className="p-2">Submitted by</th>
+                    <th scope="col" className="p-2">Invoice</th>
+                    <th scope="col" className="p-2">Receipt</th>
+                    <th scope="col" className="p-2">Approved</th>
+                    <th scope="col" className="p-2">Total</th>
+                    <th scope="col" className="p-2">Payment reference</th>
+                    <th scope="col" className="p-2">Payment date</th>
+                    <th scope="col" className="p-2" />
                   </tr>
                 </thead>
                 <tbody>

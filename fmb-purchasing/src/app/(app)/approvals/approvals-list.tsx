@@ -126,11 +126,11 @@ export function ApprovalsList({ expenses }: { expenses: ApprovalRow[] }) {
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-ink/50">
-                      <th className="p-1">Description</th>
-                      <th className="p-1">Category</th>
-                      <th className="p-1">Qty</th>
-                      <th className="p-1">Unit price</th>
-                      <th className="p-1">Line total</th>
+                      <th scope="col" className="p-1">Description</th>
+                      <th scope="col" className="p-1">Category</th>
+                      <th scope="col" className="p-1">Qty</th>
+                      <th scope="col" className="p-1">Unit price</th>
+                      <th scope="col" className="p-1">Line total</th>
                     </tr>
                   </thead>
                   <tbody>
