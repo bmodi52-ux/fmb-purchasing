@@ -43,11 +43,15 @@ export function AppSidebar({
         </button>
       </div>
 
-      {/* Backdrop: closes the menu on tap, mobile only, never renders at md: */}
+      {/* Backdrop: closes the menu on tap, mobile only, never renders at md:.
+          Not a <button>. It was one, which put a second, invisible "Close menu"
+          control into the tab order immediately after the real one — so a
+          keyboard user met the same announcement twice with nothing between
+          them. The toggle above already closes the menu and is reachable;
+          this is a tap target for people using a finger. */}
       {open && (
-        <button
-          type="button"
-          aria-label="Close menu"
+        <div
+          aria-hidden="true"
           onClick={() => setOpen(false)}
           className="fixed inset-0 z-30 bg-ink/30 md:hidden"
         />

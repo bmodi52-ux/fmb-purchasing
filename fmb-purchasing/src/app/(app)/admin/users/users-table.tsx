@@ -45,7 +45,9 @@ const COLUMNS: ColumnDef<UserRow>[] = [
         <ResetPasswordButton userId={u.id} fullName={u.full_name} />
         <form action={setUserActive}>
           <input type="hidden" name="user_id" value={u.id} />
-          <input type="hidden" name="active" value={String(u.is_active)} />
+          {/* The state to apply, matching the button's own label — not the
+              state to flip. */}
+          <input type="hidden" name="active" value={String(!u.is_active)} />
           <SubmitButton className="text-xs text-ink/60 hover:text-ink">
             {u.is_active ? "Disable" : "Enable"}
           </SubmitButton>

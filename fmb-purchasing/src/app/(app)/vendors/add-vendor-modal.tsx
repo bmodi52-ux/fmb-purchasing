@@ -1,19 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { Dialog } from "@/components/dialog";
 import { AddVendorForm } from "./add-vendor-form";
 
 export function AddVendorModal() {
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
 
   return (
     <>
@@ -25,29 +17,12 @@ export function AddVendorModal() {
         + Add vendor
       </button>
 
+      {/* Escape, the backdrop, focus trapping and focus restore all live in
+          Dialog — this used to handle only the first of those. */}
       {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 p-4 py-10"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            className="w-full max-w-xl rounded-lg border border-ink/10 bg-cream p-6 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="section-title text-ink">Add vendor</h2>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close"
-                className="text-ink/40 hover:text-ink"
-              >
-                ×
-              </button>
-            </div>
-            <AddVendorForm onSuccess={() => setOpen(false)} />
-          </div>
-        </div>
+        <Dialog title="Add vendor" align="start" onClose={() => setOpen(false)}>
+          <AddVendorForm onSuccess={() => setOpen(false)} />
+        </Dialog>
       )}
     </>
   );
