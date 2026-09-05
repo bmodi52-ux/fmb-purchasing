@@ -1,4 +1,4 @@
-import type { LineKind } from "@/lib/receipt-extraction";
+import type { LineKind, StoredLineKind } from "@/lib/receipt-extraction";
 
 /**
  * The arithmetic that decides what an expense is worth, and whether it adds
@@ -34,7 +34,11 @@ import type { LineKind } from "@/lib/receipt-extraction";
 const GST_DIVISOR = 11;
 
 export type MoneyLine = {
-  kind: LineKind;
+  /**
+   * Wider than the enum the model can return, because `unallocated` is a kind
+   * the app assigns rather than one a receipt states — see residualFor.
+   */
+  kind: StoredLineKind;
   /** GST-inclusive amount for this line, as printed. Negative for a discount. */
   lineTotal: number;
   gstApplicable: boolean;
@@ -124,4 +128,59 @@ export function gstDiscrepancy(lines: MoneyLine[], printedGst: number | null): n
  */
 export function suggestedKindForDifference(difference: number): LineKind {
   return difference < 0 ? "discount" : "surcharge";
+}
+
+/**
+ * Above this share of the receipt total, a gap stops being a plausible
+ * surcharge and starts being missing goods.
+ *
+ * Australian card surcharges run to about 1.5%, delivery on a grocery order
+ * rarely exceeds 10%, and a bulk discount can reach 10-15%. Measured against
+ * the real receipt folder, the two gaps that were genuinely charges came in at
+ * 0.3% and 3.1%, while the two that were missing line items were 36% and 100%.
+ * There is a wide, empty gulf between those, which is what makes a threshold
+ * here safe rather than arbitrary.
+ */
+const CHARGE_PLAUSIBILITY_LIMIT = 0.15;
+
+export type Residual = {
+  kind: StoredLineKind;
+  amount: number;
+  /** Why this line exists, shown to the submitter for confirmation. */
+  reason: "charge" | "unitemised";
+};
+
+/**
+ * What to do with money the line items do not account for.
+ *
+ * The submitter should not have to tell the app that a 56c gap on a $100
+ * grocery receipt was the card surcharge — extraction usually reads it, and
+ * when it does not, the arithmetic is unambiguous. So the line gets created
+ * automatically and the submitter only has to glance at it.
+ *
+ * What must not be automated is the case where the gap is large enough that
+ * it is probably a line item nobody read. A $1,097 "surcharge" on a $3,021
+ * invoice is not a surcharge, it is half the invoice missing, and booking it
+ * silently under a charge type would hide exactly the failure a person needs
+ * to see. Those become an `unallocated` line instead (see migration 0026),
+ * which keeps both invariants true — the total is right, and the lines sum to
+ * it — while marking the ambiguity for the review queue rather than burying it.
+ *
+ * Returns null when the lines already account for the total.
+ */
+export function residualFor(lines: MoneyLine[], receiptTotal: number): Residual | null {
+  const balance = reconcile(lines, receiptTotal);
+  if (balance.balanced) return null;
+
+  const share = receiptTotal === 0 ? 1 : Math.abs(balance.difference / receiptTotal);
+  const hasGoods = lines.some((l) => l.kind === "goods");
+
+  if (!hasGoods || share > CHARGE_PLAUSIBILITY_LIMIT) {
+    return { kind: "unallocated", amount: balance.difference, reason: "unitemised" };
+  }
+  return {
+    kind: suggestedKindForDifference(balance.difference),
+    amount: balance.difference,
+    reason: "charge",
+  };
 }

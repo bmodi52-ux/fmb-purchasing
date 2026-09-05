@@ -6,7 +6,7 @@ import { revalidateReports } from "../reports/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission, userCan } from "@/lib/permissions";
-import { extractReceipt, type ExtractedReceipt, type LineKind } from "@/lib/receipt-extraction";
+import { extractReceipt, type ExtractedReceipt, type StoredLineKind } from "@/lib/receipt-extraction";
 import { lookupAbn, type AbnLookupResult } from "@/lib/abn-lookup";
 import { matchOrCreateVendor, matchOrCreateOffer } from "@/lib/expense-matching";
 import { fiscalYearForReceipt } from "@/lib/fiscal-year";
@@ -345,7 +345,7 @@ export type LineItemInput = {
    * What this line is. Only "goods" is a purchase; the rest exist so the lines
    * add up to the total printed on the receipt — see migration 0026.
    */
-  kind: LineKind;
+  kind: StoredLineKind;
   quantity: number | null;
   unitPrice: number | null;
   lineTotal: number;
@@ -600,7 +600,7 @@ export async function getExpenseForEdit(expenseId: string): Promise<ExpenseForEd
     payee: expense.payee_id ? { kind: "existing", payeeId: expense.payee_id } : null,
     lineItems: (lineItems ?? []).map((li) => ({
       description: li.description_raw,
-      kind: (li.kind ?? "goods") as LineKind,
+      kind: (li.kind ?? "goods") as StoredLineKind,
       quantity: li.quantity,
       unitPrice: li.unit_price,
       lineTotal: Number(li.line_total),

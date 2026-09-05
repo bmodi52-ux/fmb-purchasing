@@ -8,17 +8,21 @@ import {
   round2,
   type MoneyLine,
 } from "@/lib/expense-money";
-import type { LineKind } from "@/lib/receipt-extraction";
+import type { StoredLineKind } from "@/lib/receipt-extraction";
 
 const money = (n: number) =>
   n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
-export const CHARGE_KIND_LABELS: Record<Exclude<LineKind, "goods">, string> = {
+export const CHARGE_KIND_LABELS: Record<Exclude<StoredLineKind, "goods">, string> = {
   surcharge: "Card or service surcharge",
   delivery: "Delivery or freight",
   discount: "Discount",
   rounding: "Cash rounding",
   deposit: "Container deposit",
+  // The escape hatch of migration 0026: a receipt that cannot be itemised at
+  // all still records the right total, with the ambiguity stated rather than
+  // hidden inside a guessed line.
+  unallocated: "Not itemised",
 };
 
 /**
@@ -42,13 +46,16 @@ export function ReconciliationStrip({
   onReceiptTotalChange,
   printedGst,
   onAddCharge,
+  autoAddedCount = 0,
 }: {
   lines: MoneyLine[];
   receiptTotal: number;
   onReceiptTotalChange: (v: number) => void;
   /** GST as printed on the receipt, for comparison. Null when it printed none. */
   printedGst: number | null;
-  onAddCharge: (kind: LineKind, amount: number) => void;
+  onAddCharge: (kind: StoredLineKind, amount: number) => void;
+  /** How many lines the app added itself, so the copy can say so. */
+  autoAddedCount?: number;
 }) {
   const goods = lines.filter((l) => l.kind === "goods");
   const charges = lines.filter((l) => l.kind !== "goods");
@@ -87,7 +94,17 @@ export function ReconciliationStrip({
         >
           <span className="font-sans text-sm text-ink/75">
             {balance.balanced ? (
-              <>Everything on the receipt is accounted for.</>
+              autoAddedCount > 0 ? (
+                <>
+                  Everything is accounted for.{" "}
+                  <span className="text-ink/55">
+                    {autoAddedCount === 1 ? "One line was" : `${autoAddedCount} lines were`} added
+                    automatically to match the receipt total — worth a glance.
+                  </span>
+                </>
+              ) : (
+                <>Everything on the receipt is accounted for.</>
+              )
             ) : balance.difference > 0 ? (
               <>
                 <span className="font-semibold text-ink">{money(balance.difference)}</span> of the
@@ -108,7 +125,7 @@ export function ReconciliationStrip({
               onClick={() => onAddCharge(suggested, round2(balance.difference))}
               className="shrink-0 rounded-md border border-gold-deep/40 bg-white px-3 py-1.5 font-sans text-xs font-medium text-gold-deep hover:bg-gold/10"
             >
-              Add as {CHARGE_KIND_LABELS[suggested as Exclude<LineKind, "goods">].toLowerCase()}
+              Add as {CHARGE_KIND_LABELS[suggested as Exclude<StoredLineKind, "goods">].toLowerCase()}
             </button>
           )}
         </div>

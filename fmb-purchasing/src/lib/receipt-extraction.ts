@@ -17,6 +17,14 @@ export const LINE_KINDS = [
 
 export type LineKind = (typeof LINE_KINDS)[number];
 
+/**
+ * Every kind a stored line can have. `unallocated` is deliberately absent from
+ * the enum offered to the model: it is not something a receipt says, it is what
+ * the app records when the lines it read do not account for the total and the
+ * shortfall is too large to be a charge — see residualFor in expense-money.
+ */
+export type StoredLineKind = LineKind | "unallocated";
+
 export type ExtractedLineItem = {
   description: string;
   kind: LineKind;
@@ -445,7 +453,17 @@ export async function extractReceiptDetailed(
     note: str(raw.note),
     // A payee object whose every field came back null says nothing.
     payee: payee && Object.values(payee).some((v) => v !== null) ? payee : null,
-    lineItems: ((raw.lineItems as Record<string, unknown>[]) ?? []).map((item) => ({
+    lineItems: ((raw.lineItems as Record<string, unknown>[]) ?? [])
+      // A charge of nothing is not a charge. Real receipts print waived fees —
+      // one DoorDash order in the sample set carried "Delivery Fee $0.00" and
+      // "Dasher Tip $0.00" — and carrying those through would add rows to the
+      // review table that hold no money and mean nothing. Goods are kept at
+      // zero, because a zero-priced good is a real thing worth seeing.
+      .filter((item) => {
+        const kind = toKind(item.kind);
+        return kind === "goods" || num(item.lineTotal) !== 0;
+      })
+      .map((item) => ({
       description: str(item.description) ?? "",
       kind: toKind(item.kind),
       quantity: num(item.quantity),

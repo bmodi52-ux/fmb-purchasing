@@ -19,7 +19,7 @@ import {
   type ExpenseForEdit,
   type DuplicateWarning,
 } from "./actions";
-import type { ExtractedReceipt, LineKind } from "@/lib/receipt-extraction";
+import type { ExtractedReceipt, StoredLineKind } from "@/lib/receipt-extraction";
 import type { PayeeChoice } from "@/lib/payees";
 import { VendorLookupFields } from "./vendor-lookup-fields";
 import { ItemLookupCells } from "./item-lookup-cells";
@@ -27,12 +27,17 @@ import { PayeePicker } from "./payee-picker";
 import { ReconciliationStrip, CHARGE_KIND_LABELS } from "./reconciliation-strip";
 import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image-resize";
 import { normalizeReceiptDate } from "@/lib/format";
-import { round2, sumLines } from "@/lib/expense-money";
+import { round2, sumLines, residualFor } from "@/lib/expense-money";
 
 const initialExtractState: ExtractState = { data: null, attachment: null, error: null };
 const initialUploadState: UploadFileState = { attachment: null, error: null };
 
-type ReviewItem = LineItemInput & { key: string; itemNumber: string };
+type ReviewItem = LineItemInput & {
+  key: string;
+  itemNumber: string;
+  /** Added by the app to account for the receipt total, not read from the receipt. */
+  autoAdded?: boolean;
+};
 
 /**
  * An unfinished submission, kept in this browser.
@@ -103,11 +108,11 @@ function toReviewItems(items: ExtractedReceipt["lineItems"]): ReviewItem[] {
   }));
 }
 
-function blankItem(kind: LineKind = "goods", lineTotal = 0): ReviewItem {
+function blankItem(kind: StoredLineKind = "goods", lineTotal = 0): ReviewItem {
   return {
     key: String(Math.random()),
     itemNumber: "",
-    description: kind === "goods" ? "" : CHARGE_KIND_LABELS[kind as Exclude<LineKind, "goods">],
+    description: kind === "goods" ? "" : CHARGE_KIND_LABELS[kind as Exclude<StoredLineKind, "goods">],
     // Typed by hand, so there is no earlier reading to compare against.
     originalDescription: null,
     kind,
@@ -121,6 +126,38 @@ function blankItem(kind: LineKind = "goods", lineTotal = 0): ReviewItem {
     normalizedQuantity: null,
     normalizedUnit: null,
   };
+}
+
+/**
+ * Adds a line for whatever the extracted lines do not account for.
+ *
+ * A 56c gap on a $100 grocery receipt is the card surcharge, and nobody
+ * should have to tell the app that. A $1,097 gap on a $3,021 invoice is not
+ * a surcharge — it is line items nobody read — so that one is booked as
+ * unallocated and stays visible for a person. residualFor draws the line.
+ */
+function withBookedResidual(items: ReviewItem[], receiptTotal: number): ReviewItem[] {
+  const residual = residualFor(
+    items.map((i) => ({ kind: i.kind, lineTotal: i.lineTotal, gstApplicable: i.gstApplicable })),
+    receiptTotal
+  );
+  if (!residual) return items;
+
+  const line = blankItem(residual.kind, residual.amount);
+  return [
+    ...items,
+    {
+      ...line,
+      autoAdded: true,
+      description:
+        residual.reason === "unitemised"
+          ? "Not itemised on the receipt"
+          : line.description,
+      // An unallocated remainder has no way of knowing whether GST applies,
+      // and guessing yes would invent a credit.
+      gstApplicable: residual.reason === "charge" ? line.gstApplicable : false,
+    },
+  ];
 }
 
 export function SubmitForm({
@@ -202,12 +239,19 @@ export function SubmitForm({
       setInvoiceNumber(d.invoiceNumber ?? "");
       setReceiptDate(normalizeReceiptDate(d.date));
       const reviewItems = toReviewItems(d.lineItems);
-      setItems(reviewItems.length ? reviewItems : [blankItem()]);
       // The receipt total is what the receipt says, not what the lines sum to.
       // When extraction could not read one, the lines are the best available
-      // starting point — and the strip immediately shows it as balanced, which
-      // is honest: there is nothing yet to disagree with.
-      setTotal(round2(d.total ?? sumLines(reviewItems)));
+      // starting point — and the strip then shows it as balanced, which is
+      // honest: there is nothing yet to disagree with.
+      const receiptTotal = round2(d.total ?? sumLines(reviewItems));
+      // Extraction reads most charges itself — surcharge, delivery and discount
+      // lines all come back with their own kind. When it misses one, the
+      // arithmetic still says what it was, so the app books it rather than
+      // handing the submitter a subtraction to do. Only a gap too large to be a
+      // charge is left visibly unresolved.
+      const withResidual = withBookedResidual(reviewItems, receiptTotal);
+      setItems(withResidual.length ? withResidual : [blankItem()]);
+      setTotal(receiptTotal);
       setPrintedGst(d.gstAmount);
       setExtractedPayeeName(d.payee?.name ?? null);
       setExtractionNote(d.note);
@@ -481,7 +525,7 @@ function ReviewForm(props: {
     updateItem(key, { categoryName: s.categoryName ?? undefined });
   }
 
-  function addCharge(kind: LineKind, amount: number) {
+  function addCharge(kind: StoredLineKind, amount: number) {
     props.setItems((prev) => [...prev, blankItem(kind, amount)]);
   }
 
@@ -657,7 +701,13 @@ function ReviewForm(props: {
           </thead>
           <tbody>
             {props.items.map((item) => (
-              <tr key={item.key} className="border-t border-ink/5">
+              <tr
+                key={item.key}
+                // A line the app added to make the receipt add up is tinted, so
+                // the submitter is confirming something rather than hunting for
+                // what changed.
+                className={`border-t border-ink/5 ${item.autoAdded ? "bg-gold/10" : ""}`}
+              >
                 {item.kind === "goods" ? (
                   <ItemLookupCells
                     itemNumber={item.itemNumber}
@@ -699,7 +749,7 @@ function ReviewForm(props: {
                   ) : (
                     <select
                       value={item.kind}
-                      onChange={(e) => updateItem(item.key, { kind: e.target.value as LineKind })}
+                      onChange={(e) => updateItem(item.key, { kind: e.target.value as StoredLineKind })}
                       className="rounded border border-ink/10 bg-white px-2 py-1"
                       aria-label="Charge type"
                     >
@@ -795,6 +845,7 @@ function ReviewForm(props: {
         onReceiptTotalChange={props.setTotal}
         printedGst={props.printedGst}
         onAddCharge={addCharge}
+        autoAddedCount={props.items.filter((i) => i.autoAdded).length}
       />
 
       {/* Below the numbers, because it is usually written about them — a price

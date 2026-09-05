@@ -8,6 +8,7 @@ import {
   reconcile,
   gstDiscrepancy,
   suggestedKindForDifference,
+  residualFor,
   type MoneyLine,
 } from "./expense-money.ts";
 
@@ -126,6 +127,68 @@ describe("gstDiscrepancy", () => {
     // printing GST $0.00, with a line wrongly flagged taxable.
     const lines = [goods(975, true)];
     assert.equal(gstDiscrepancy(lines, 0), -88.64);
+  });
+});
+
+/**
+ * Every case below is a real gap from a real receipt, measured by
+ * scripts/compare-extraction.mjs across the FMB receipts folder. The point of
+ * the rule is that the submitter should not be asked to do arithmetic the app
+ * can do — but should always be asked when the answer is not arithmetic.
+ */
+describe("residualFor", () => {
+  test("balanced lines need no residual at all", () => {
+    assert.equal(residualFor([goods(99.51)], 99.51), null);
+  });
+
+  test("a small shortfall is booked as a surcharge without asking", () => {
+    // Please_pay_Burhanuddin_Modi: lines 1813.87, total 1819.21 — 0.3%.
+    const r = residualFor([goods(1813.87)], 1819.21);
+    assert.equal(r?.kind, "surcharge");
+    assert.equal(r?.reason, "charge");
+    assert.equal(r?.amount, 5.34);
+  });
+
+  test("a small overshoot is booked as a discount", () => {
+    // Fresh_Produce_Invoice: lines 987.00, total 957 — 3.1%.
+    const r = residualFor([goods(987)], 957);
+    assert.equal(r?.kind, "discount");
+    assert.equal(r?.reason, "charge");
+    assert.equal(r?.amount, -30);
+  });
+
+  test("a gap too large to be a charge is left visible, not guessed at", () => {
+    // Please_pay_Taj_Mart: lines 1924.81, total 3021.96 — 36% of the invoice
+    // is missing. Booking that as a "surcharge" would hide the failure.
+    const r = residualFor([goods(1924.81)], 3021.96);
+    assert.equal(r?.kind, "unallocated");
+    assert.equal(r?.reason, "unitemised");
+  });
+
+  test("a receipt with no line items at all is unallocated, whatever the size", () => {
+    // Shehrullah_Sehori: a total of 1165.50 and nothing itemised.
+    const r = residualFor([], 1165.5);
+    assert.equal(r?.kind, "unallocated");
+    assert.equal(r?.amount, 1165.5);
+  });
+
+  test("charges alone do not count as itemisation", () => {
+    // A receipt read as nothing but a delivery fee has not been itemised.
+    const r = residualFor([{ kind: "delivery", lineTotal: 6.99, gstApplicable: true }], 106.99);
+    assert.equal(r?.kind, "unallocated");
+  });
+
+  test("the boundary sits between a plausible discount and missing goods", () => {
+    // 10% — a real bulk discount, booked automatically.
+    assert.equal(residualFor([goods(100)], 90)?.kind, "discount");
+    // 20% — too much to assume, so a person decides.
+    assert.equal(residualFor([goods(100)], 80)?.kind, "unallocated");
+  });
+
+  test("the Aldi surcharge is booked rather than handed to the submitter", () => {
+    const r = residualFor([goods(13.35), goods(86.16)], 100.07);
+    assert.equal(r?.kind, "surcharge");
+    assert.equal(r?.amount, 0.56);
   });
 });
 
