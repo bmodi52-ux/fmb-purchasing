@@ -40,6 +40,7 @@ truncate table
   vendor_item_descriptions,
   item_duplicate_dismissals,
   item_history,
+  item_number_aliases,
   pricelist_item_history,
   pricelist_items,
   item_pack_sizes,
@@ -56,14 +57,13 @@ truncate table
   password_reset_attempts
 restart identity;
 
--- Once 0024 lands, add item_number_aliases to the list above.
-
--- Sanity check before committing. Every count must be 0, and the three
--- kept tables must still hold rows.
+-- Sanity check before committing. Every count must be 0, and the kept tables
+-- must still hold rows.
 select 'expenses' as t, count(*) from expenses
 union all select 'items', count(*) from items
 union all select 'vendors', count(*) from vendors
 union all select 'pricelist_items', count(*) from pricelist_items
+union all select 'item_number_aliases', count(*) from item_number_aliases
 union all select 'profiles (kept)', count(*) from profiles
 union all select 'teams (kept)', count(*) from teams
 union all select 'categories (kept)', count(*) from categories

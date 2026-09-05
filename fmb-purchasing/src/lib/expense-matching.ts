@@ -179,18 +179,30 @@ export async function matchOrCreateItem(
     normalizedUnit: string | null;
     userId: string;
   }
-): Promise<{ id: string; status: "matched" | "created" }> {
+): Promise<{ id: string; status: "matched" | "created"; categoryId: string | null }> {
   const name = normalize(description);
 
-  const lookup = admin.from("items").select("id").ilike("name", name);
+  const lookup = admin.from("items").select("id, category_id").ilike("name", name);
   const { data: existing } = await (categoryId
     ? lookup.eq("category_id", categoryId)
     : lookup.is("category_id", null)
   ).maybeSingle();
-  if (existing) return { id: existing.id, status: "matched" };
+  if (existing) {
+    return { id: existing.id, status: "matched", categoryId: existing.category_id };
+  }
 
   const byDescription = await findItemByDescription(admin, description, categoryId);
-  if (byDescription) return { id: byDescription, status: "matched" };
+  if (byDescription) {
+    // The matched item's own category wins over whatever the receipt suggested.
+    // A person put it there; the extraction only guessed, and when it returned
+    // "unclear" there is nothing to prefer anyway.
+    const { data: matchedItem } = await admin
+      .from("items")
+      .select("category_id")
+      .eq("id", byDescription)
+      .single();
+    return { id: byDescription, status: "matched", categoryId: matchedItem?.category_id ?? null };
+  }
 
   const fallbackUnitId = await unitIdByCode(admin, "ea");
   const canonicalUnitId = await resolveUnitId(admin, normalizedUnit, fallbackUnitId);
@@ -208,7 +220,7 @@ export async function matchOrCreateItem(
     .select("id")
     .single();
   if (error) throw error;
-  return { id: created.id, status: "created" };
+  return { id: created.id, status: "created", categoryId };
 }
 
 /**
@@ -335,9 +347,22 @@ export async function matchOrCreateOffer(
     userId: string;
     normalizedUnit?: string | null;
   }
-): Promise<{ id: string; status: "matched" | "created" }> {
+): Promise<{ id: string; status: "matched" | "created"; categoryId: string | null }> {
   const knownOffer = await findOfferByVendorDescription(admin, vendorId, description);
-  if (knownOffer) return { id: knownOffer, status: "matched" };
+  if (knownOffer) {
+    // Same reasoning as in matchOrCreateItem: this vendor's wording is already
+    // tied to an item somebody categorised, so that category is the answer.
+    const { data: known } = await admin
+      .from("pricelist_items")
+      .select("item_pack_sizes ( items ( category_id ) )")
+      .eq("id", knownOffer)
+      .single<{ item_pack_sizes: { items: { category_id: string | null } | null } | null }>();
+    return {
+      id: knownOffer,
+      status: "matched",
+      categoryId: known?.item_pack_sizes?.items?.category_id ?? null,
+    };
+  }
 
   const item = await matchOrCreateItem(admin, { description, categoryId, normalizedUnit, userId });
 
@@ -356,7 +381,7 @@ export async function matchOrCreateOffer(
     .eq("vendor_id", vendorId)
     .eq("pack_size_id", packSizeId)
     .maybeSingle();
-  if (byVendor) return { id: byVendor.id, status: "matched" };
+  if (byVendor) return { id: byVendor.id, status: "matched", categoryId: item.categoryId };
 
   const { data: created, error } = await admin
     .from("pricelist_items")
@@ -369,5 +394,5 @@ export async function matchOrCreateOffer(
     .select("id")
     .single();
   if (error) throw error;
-  return { id: created.id, status: "created" };
+  return { id: created.id, status: "created", categoryId: item.categoryId };
 }

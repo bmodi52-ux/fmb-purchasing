@@ -5,7 +5,11 @@ export type ExtractedLineItem = {
   quantity: number | null;
   unitPrice: number | null;
   lineTotal: number | null;
-  category: string;
+  /**
+   * Leaf category name, or null when the line is too vague to classify. Null
+   * is a real answer here rather than a failure — see UNCLEAR_CATEGORY.
+   */
+  category: string | null;
   normalizedQuantity: number | null;
   normalizedUnit: string | null;
   gstApplicable: boolean;
@@ -23,6 +27,22 @@ export type ExtractedReceipt = {
 };
 
 const EXTRACT_TOOL_NAME = "record_receipt";
+
+/**
+ * How the model says "this line does not tell me enough to classify it".
+ *
+ * There was previously no way to say that. The enum held only real categories
+ * and the prompt sent anything unmatched to "Miscellaneous", so a line reading
+ * "Sundries" or "Item 4" came back looking as decided as any other, the item
+ * was filed under Miscellaneous, and nothing ever suggested a person should
+ * look at it.
+ *
+ * The two mean opposite things and are worth keeping apart: Miscellaneous is a
+ * decision — this spend belongs to no other category — while this is the
+ * absence of one. It maps to a null category, which leaves the item
+ * uncategorised and listed as needing attention on the Pricelist.
+ */
+export const UNCLEAR_CATEGORY = "Unclear — needs a person";
 
 function buildTool(categoryNames: string[]): Anthropic.Tool {
   return {
@@ -49,8 +69,9 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
               lineTotal: { type: ["number", "null"] },
               category: {
                 type: "string",
-                enum: categoryNames,
-                description: "Best-fit category from the provided list.",
+                enum: [...categoryNames, UNCLEAR_CATEGORY],
+                description:
+                  "Best-fit category for this line, or the 'Unclear' option when the line text does not say enough to choose one.",
               },
               normalizedQuantity: {
                 type: ["number", "null"],
@@ -83,7 +104,8 @@ const SYSTEM_PROMPT = `You extract structured accounting data from photos or PDF
 Rules:
 - Every receipt must resolve to Subtotal (excl. GST) -> GST amount -> Total (incl. GST). Infer GST from whatever the receipt makes inferable (an explicit GST line, "Total incl. GST", a registered ABN printed on a tax invoice, etc.). If the receipt gives no GST signal at all — no GST line, and nothing indicating whether printed prices are GST-inclusive or GST-free — do NOT assume GST-free. Assume all printed prices are GST-inclusive (standard 10% Australian GST): set total to the printed total, then compute gstAmount = total / 11 and subtotal = total - gstAmount.
 - For each line item, infer the canonical base unit and total quantity from the printed pack description (e.g. "Tomato Sauce Carton — 3x4L" -> normalizedQuantity 12, normalizedUnit "L"; "Chicken 10kg box" -> normalizedQuantity 10, normalizedUnit "kg"). If no sensible unit conversion applies (e.g. a service line), leave both null.
-- Assign each line item the closest category from the provided enum. Use "Miscellaneous" only when nothing else fits.
+- Assign each line item the closest category from the provided enum. "Miscellaneous" is a real choice meaning the spend genuinely belongs to no other category — a one-off fee, a sundry charge. It is NOT a way of saying you are unsure.
+- When the line text does not say enough to classify it — "Sundries", "Item 4", "Misc goods", an illegible or truncated description — choose the "Unclear" option instead of guessing. An unclear line is put in front of a person to decide, which is far better than a confident wrong category nobody ever revisits.
 - Strip currency symbols from numbers. If a value is unreadable or absent, use null rather than guessing.
 - Call the record_receipt tool exactly once with everything you found.`;
 
@@ -139,7 +161,9 @@ export async function extractReceipt(
       quantity: item.quantity ?? null,
       unitPrice: item.unitPrice ?? null,
       lineTotal: item.lineTotal ?? null,
-      category: item.category ?? "Miscellaneous",
+      // The sentinel and a missing value both mean nobody has classified this,
+      // which downstream is a null category rather than a guess.
+      category: !item.category || item.category === UNCLEAR_CATEGORY ? null : item.category,
       normalizedQuantity: item.normalizedQuantity ?? null,
       normalizedUnit: item.normalizedUnit ?? null,
       gstApplicable: item.gstApplicable ?? false,

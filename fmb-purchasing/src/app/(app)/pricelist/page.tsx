@@ -91,6 +91,15 @@ export default async function PricelistPage() {
       getColumnPreference(user.id, PAGE_KEY, DEFAULT_VISIBLE),
     ]);
 
+  // Receipt-created items arrive uncategorised whenever extraction could not
+  // classify the line, and an uncategorised item is invisible in the numbering
+  // (it reads I-0042, not CHK-0042) and lands in "Uncategorised" on every
+  // report. Surfaced here so the fix is a click away rather than something
+  // nobody discovers.
+  const { data: uncategorisedItems } = canEdit
+    ? await admin.from("items").select("id, item_number, name").is("category_id", null).order("name")
+    : { data: null };
+
   const { data: duplicateRows } = await admin
     .from("item_duplicate_candidates")
     .select("item_id, item_name, item_number, candidate_id, candidate_name, candidate_item_number, score")
@@ -190,6 +199,29 @@ export default async function PricelistPage() {
           />
         )}
       </div>
+
+      {canEdit && (uncategorisedItems ?? []).length > 0 && (
+        <details className="rounded-lg border border-gold/40 bg-gold/5 px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-ink">
+            {uncategorisedItems!.length} item{uncategorisedItems!.length === 1 ? "" : "s"} without a category
+          </summary>
+          <p className="mt-2 text-sm text-ink/60">
+            Receipt extraction files a line as uncategorised when the wording
+            doesn&rsquo;t say what it is. Until someone chooses, these number as
+            I-0000 rather than by category, and report as Uncategorised.
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {uncategorisedItems!.map((i) => (
+              <li key={i.id as string}>
+                <Link href={`/pricelist/${i.id}`} className="text-ink underline">
+                  <span className="font-mono text-xs text-ink/50">{(i.item_number as string) ?? "—"}</span>{" "}
+                  {i.name as string}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {canEdit && duplicatePairs.length > 0 && (
         <details className="rounded-lg border border-gold/40 bg-gold/5 px-4 py-3">
