@@ -332,17 +332,86 @@ async function findOfferByVendorDescription(
  * item on the way out, so the next receipt saying the same thing matches
  * however the item has been renamed since.
  */
+/**
+ * Remember what extraction actually read, when a person corrected it.
+ *
+ * A correction was previously recorded only as its outcome: the tidy wording a
+ * human typed got remembered against the item, and the misreading that made
+ * them type it was discarded. So the same vendor printing the same awkward
+ * text next month produced the same failure to match, and another duplicate
+ * item, however many times somebody had already fixed it.
+ *
+ * Recording the misreading as a second wording for the same item closes that
+ * loop: the correction is what teaches the app, and it only has to be made
+ * once. Safe by construction — the wording is attached to the item the
+ * submitter themselves chose, and findItemByDescription already refuses to
+ * guess when two items claim the same wording, so a bad entry degrades into
+ * "no match" rather than a wrong one.
+ */
+async function rememberMisreading(
+  admin: SupabaseClient,
+  {
+    itemId,
+    vendorId,
+    description,
+    originalDescription,
+    userId,
+  }: {
+    itemId: string;
+    vendorId: string;
+    description: string;
+    originalDescription: string | null;
+    userId: string;
+  }
+): Promise<void> {
+  if (!isWorthRemembering(originalDescription, description)) return;
+
+  await recordVendorItemDescription(admin, {
+    itemId,
+    vendorId,
+    description: originalDescription!.trim(),
+    userId,
+  });
+}
+
+/**
+ * Whether a submitter's edit taught us a wording worth keeping.
+ *
+ * Separated out so the rule is testable without a database: everything else in
+ * this module speaks the Supabase client's query API, which the in-process test
+ * Postgres cannot answer.
+ *
+ * Compared after normalization, so re-casing or re-spacing a description — the
+ * commonest kind of edit — does not fill the table with rows that all mean the
+ * same thing and would never have failed to match anyway.
+ */
+export function isWorthRemembering(
+  originalDescription: string | null | undefined,
+  description: string
+): boolean {
+  const original = (originalDescription ?? "").trim();
+  if (!original) return false;
+  return normalize(original) !== normalize(description);
+}
+
 export async function matchOrCreateOffer(
   admin: SupabaseClient,
   {
     vendorId,
     description,
+    originalDescription = null,
     categoryId,
     userId,
     normalizedUnit = null,
   }: {
     vendorId: string;
     description: string;
+    /**
+     * What extraction read before the submitter corrected it, when they did.
+     * Remembered alongside the corrected wording so the same misreading links
+     * straight through next time instead of creating a duplicate item.
+     */
+    originalDescription?: string | null;
     categoryId: string | null;
     userId: string;
     normalizedUnit?: string | null;
@@ -354,14 +423,24 @@ export async function matchOrCreateOffer(
     // tied to an item somebody categorised, so that category is the answer.
     const { data: known } = await admin
       .from("pricelist_items")
-      .select("item_pack_sizes ( items ( category_id ) )")
+      .select("item_pack_sizes ( items ( id, category_id ) )")
       .eq("id", knownOffer)
-      .single<{ item_pack_sizes: { items: { category_id: string | null } | null } | null }>();
-    return {
-      id: knownOffer,
-      status: "matched",
-      categoryId: known?.item_pack_sizes?.items?.category_id ?? null,
-    };
+      .single<{
+        item_pack_sizes: { items: { id: string; category_id: string | null } | null } | null;
+      }>();
+    const matchedItem = known?.item_pack_sizes?.items ?? null;
+
+    if (matchedItem) {
+      await rememberMisreading(admin, {
+        itemId: matchedItem.id,
+        vendorId,
+        description,
+        originalDescription,
+        userId,
+      });
+    }
+
+    return { id: knownOffer, status: "matched", categoryId: matchedItem?.category_id ?? null };
   }
 
   const item = await matchOrCreateItem(admin, { description, categoryId, normalizedUnit, userId });
@@ -374,6 +453,13 @@ export async function matchOrCreateOffer(
   });
 
   await recordVendorItemDescription(admin, { itemId: item.id, vendorId, description, userId });
+  await rememberMisreading(admin, {
+    itemId: item.id,
+    vendorId,
+    description,
+    originalDescription,
+    userId,
+  });
 
   const { data: byVendor } = await admin
     .from("pricelist_items")

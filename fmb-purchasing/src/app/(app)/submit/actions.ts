@@ -272,6 +272,16 @@ export async function searchPricelistItemsAction(query: string): Promise<ItemLoo
 
 export type LineItemInput = {
   description: string;
+  /**
+   * What receipt extraction originally read for this line, before the
+   * submitter touched it. Null for manually entered lines, and for lines left
+   * exactly as extracted.
+   *
+   * Recorded as an extra wording for the matched item, so a correction teaches
+   * the app something. Without it the misread text is discarded and the same
+   * receipt next month fails to match all over again — see 0023.
+   */
+  originalDescription?: string | null;
   quantity: number | null;
   unitPrice: number | null;
   lineTotal: number;
@@ -348,6 +358,7 @@ export async function createExpense(
 
     const matched = await matchOrCreateOffer(admin, {
       vendorId: vendor.id,
+      originalDescription: item.originalDescription ?? null,
       description: item.description,
       categoryId,
       userId: user.id,
@@ -506,6 +517,7 @@ export async function updateExpense(
 
     const matched = await matchOrCreateOffer(admin, {
       vendorId: vendor.id,
+      originalDescription: item.originalDescription ?? null,
       description: item.description,
       categoryId,
       userId: user.id,
