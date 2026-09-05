@@ -354,13 +354,19 @@ export async function createExpense(
       normalizedUnit: item.normalizedUnit,
     });
 
+    // Prefer the category of the item this line resolved to. When the line
+    // matched something a person has already classified, that beats whatever
+    // the receipt suggested — and when extraction returned "unclear" there is
+    // nothing to prefer, so an existing item's category fills the gap.
+    const resolvedCategoryId = matched.categoryId ?? categoryId;
+
     const lineGst = input.total > 0 ? Math.round(((item.lineTotal / input.total) * input.gstAmount) * 100) / 100 : 0;
 
     await admin.from("expense_line_items").insert({
       expense_id: expense.id,
       pricelist_item_id: matched.id,
       description_raw: item.description,
-      category_id: categoryId,
+      category_id: resolvedCategoryId,
       quantity: item.quantity,
       unit_price: item.unitPrice,
       line_subtotal: Math.round((item.lineTotal - lineGst) * 100) / 100,
@@ -506,13 +512,16 @@ export async function updateExpense(
       normalizedUnit: item.normalizedUnit,
     });
 
+    // Same as createExpense: the resolved item's category beats the guess.
+    const resolvedCategoryId = matched.categoryId ?? categoryId;
+
     const lineGst = input.total > 0 ? Math.round(((item.lineTotal / input.total) * input.gstAmount) * 100) / 100 : 0;
 
     await admin.from("expense_line_items").insert({
       expense_id: expenseId,
       pricelist_item_id: matched.id,
       description_raw: item.description,
-      category_id: categoryId,
+      category_id: resolvedCategoryId,
       quantity: item.quantity,
       unit_price: item.unitPrice,
       line_subtotal: Math.round((item.lineTotal - lineGst) * 100) / 100,
