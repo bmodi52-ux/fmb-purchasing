@@ -7,6 +7,7 @@ import {
   extractReceiptAction,
   lookupAbnAction,
   uploadReceiptFileAction,
+  reportOversizeReceiptAction,
   createExpense,
   updateExpense,
   type ExtractState,
@@ -85,6 +86,7 @@ export function SubmitForm({
   const [total, setTotal] = useState(editExpense?.total ?? 0);
   const [subtotal, setSubtotal] = useState(editExpense?.subtotal ?? 0);
   const [gstAmount, setGstAmount] = useState(editExpense?.gstAmount ?? 0);
+  const [submitterComment, setSubmitterComment] = useState(editExpense?.submitterComment ?? "");
   const [items, setItems] = useState<ReviewItem[]>(() =>
     editExpense
       ? editExpense.lineItems.map((it, i) => ({ ...it, key: `edit-${i}`, itemNumber: "" }))
@@ -143,6 +145,13 @@ export function SubmitForm({
           `That file is ${formatBytes(prepared.size)}, which is too large to upload. ` +
             `Please use a photo instead of a scan, or split the PDF.`
         );
+        // Not awaited, and its failure is swallowed: telling someone their file
+        // is too big must not wait on, or be replaced by, a reporting error.
+        void reportOversizeReceiptAction({
+          fileName: prepared.name,
+          fileType: prepared.type,
+          sizeBytes: prepared.size,
+        }).catch(() => {});
         input.value = "";
         return;
       }
@@ -229,6 +238,8 @@ export function SubmitForm({
       setGstAmount={setGstAmount}
       total={total}
       setTotal={setTotal}
+      submitterComment={submitterComment}
+      setSubmitterComment={setSubmitterComment}
       receiptPath={receiptPath}
       setReceiptPath={setReceiptPath}
       receiptFileName={receiptFileName}
@@ -268,6 +279,8 @@ function ReviewForm(props: {
   setGstAmount: (v: number) => void;
   total: number;
   setTotal: (v: number) => void;
+  submitterComment: string;
+  setSubmitterComment: (v: string) => void;
   receiptPath: string | null;
   setReceiptPath: (v: string | null) => void;
   receiptFileName: string | null;
@@ -344,6 +357,7 @@ function ReviewForm(props: {
         subtotal: props.subtotal,
         gstAmount: props.gstAmount,
         total: props.total,
+        submitterComment: props.submitterComment.trim() || null,
         lineItems: props.items
           .filter((it) => it.description.trim())
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -399,6 +413,11 @@ function ReviewForm(props: {
                 const prepared = await shrinkImageForUpload(chosen);
                 if (prepared.size > MAX_UPLOAD_BYTES) {
                   setAttachError(`Too large (${formatBytes(prepared.size)}).`);
+                  void reportOversizeReceiptAction({
+                    fileName: prepared.name,
+                    fileType: prepared.type,
+                    sizeBytes: prepared.size,
+                  }).catch(() => {});
                   input.value = "";
                   return;
                 }
@@ -414,7 +433,6 @@ function ReviewForm(props: {
             </SubmitButton>
           </form>
         )}
-        {!props.receiptPath && <span className="text-xs text-ink/40">Optional — never required.</span>}
         {attachError && <span className="text-xs text-red-700">{attachError}</span>}
         {uploadState.error && <span className="text-xs text-red-700">{uploadState.error}</span>}
       </div>
@@ -557,6 +575,24 @@ function ReviewForm(props: {
         <TotalRow label="GST" value={props.gstAmount} onChange={props.setGstAmount} />
         <TotalRow label="Total (incl. GST)" value={props.total} onChange={props.setTotal} bold />
       </div>
+
+      {/* Below the numbers, because it is usually written about them — a price
+          that looks wrong, a missing receipt, a part-delivered order. Kept out
+          of the line item descriptions on purpose: those are what receipt
+          matching learns wordings from (0023), so a note buried in one would
+          be remembered as a name for the product. */}
+      <label className="mt-6 flex flex-col gap-1 text-sm">
+        <span className="text-ink/70">
+          Comments <span className="text-ink/40">(optional)</span>
+        </span>
+        <textarea
+          value={props.submitterComment}
+          onChange={(e) => props.setSubmitterComment(e.target.value)}
+          rows={3}
+          placeholder="Anything the approver should know — a missing receipt, an unusual price, what the spend was for."
+          className="input resize-y"
+        />
+      </label>
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 

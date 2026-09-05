@@ -12,6 +12,11 @@
  * It proves the SQL is valid and does what it claims against this schema. It
  * cannot prove production matches this schema — if a migration was applied by
  * hand there, only running it there will tell you.
+ *
+ * Point it at maintenance scripts, not at migrations: every migration is
+ * applied before the target runs, so passing one re-applies it and it fails on
+ * the duplicate. A migration is proven by the "Applied N migrations" line
+ * counting it, which any run of this tool shows.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";

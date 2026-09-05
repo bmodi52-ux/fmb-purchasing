@@ -49,6 +49,7 @@ export function ColumnsDataTable<T extends { id: string }>({
   emptyLabel = "None.",
   bulkActions,
   renderExpanded,
+  deriveRows,
 }: {
   pageKey: string;
   title: string;
@@ -59,6 +60,16 @@ export function ColumnsDataTable<T extends { id: string }>({
   bulkActions?: BulkAction<T>[];
   /** When provided, rows get a chevron that expands an extra detail row in place. */
   renderExpanded?: (row: T) => React.ReactNode;
+  /**
+   * Lets the caller decide what a row *is* based on which columns are showing.
+   *
+   * The Pricelist needs this: its rows are vendor offers, so an item stocked by
+   * three vendors is three rows — which is noise when the Vendor column is
+   * hidden, because the three are then indistinguishable. Hiding that column
+   * collapses them to one row per item instead. Runs before filtering and
+   * sorting, so both operate on what is actually displayed.
+   */
+  deriveRows?: (rows: T[], visibleColumnKeys: Set<string>) => T[];
 }) {
   const [visible, setVisible] = useState<Set<string>>(new Set(initialVisible));
   const [open, setOpen] = useState(false);
@@ -110,11 +121,16 @@ export function ColumnsDataTable<T extends { id: string }>({
 
   const visibleColumns = columns.filter((c) => visible.has(c.key));
 
+  const displayedRows = useMemo(
+    () => (deriveRows ? deriveRows(rows, visible) : rows),
+    [deriveRows, rows, visible]
+  );
+
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const columnByKey = new Map(columns.map((c) => [c.key, c]));
 
-    let result = rows;
+    let result = displayedRows;
 
     if (q) {
       result = result.filter((row) =>
@@ -147,9 +163,12 @@ export function ColumnsDataTable<T extends { id: string }>({
     // columnFilters is replaced wholesale on every edit, so its identity is a
     // sufficient dependency
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, query, sort, columnFilters]);
+  }, [displayedRows, query, sort, columnFilters]);
 
-  const selectedRows = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected]);
+  const selectedRows = useMemo(
+    () => displayedRows.filter((r) => selected.has(r.id)),
+    [displayedRows, selected]
+  );
   const exportSourceRows = selected.size > 0 ? selectedRows : filteredRows;
 
   const exportRows = useMemo(
