@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { revalidateReports } from "../reports/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
@@ -11,6 +12,7 @@ import { matchOrCreateVendor, matchOrCreateOffer } from "@/lib/expense-matching"
 import { fiscalYearHijri } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
 import { leafCategories } from "@/lib/categories";
+import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
 import { reportError } from "@/lib/errors";
 
 export type ExtractState = {
@@ -169,10 +171,11 @@ export async function searchPricelistItemsAction(query: string): Promise<ItemLoo
 
   const admin = createAdminClient();
 
+  const retiredMatchIds = await itemIdsByRetiredNumber(admin, trimmed);
   const { data: matchedItems } = await admin
     .from("items")
     .select("id, item_number, name, category_id")
-    .or(`item_number.ilike.%${trimmed}%,name.ilike.%${trimmed}%`)
+    .or(itemMatchFilter(trimmed, retiredMatchIds))
     .limit(20);
   const itemById = new Map((matchedItems ?? []).map((i) => [i.id, i]));
   const itemIds = [...itemById.keys()];
@@ -337,6 +340,7 @@ export async function createExpense(
 
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
+  revalidateReports();
   return { expenseId: expense.id };
 }
 
@@ -471,5 +475,6 @@ export async function updateExpense(
 
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
+  revalidateReports();
   return { expenseId };
 }

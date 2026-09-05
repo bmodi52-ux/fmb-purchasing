@@ -6,7 +6,6 @@ import { getUserPermissions, can, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getColumnPreference } from "@/lib/column-prefs";
 import { AddItemModal } from "./add-item-modal";
-import { UnitsManager } from "./units-manager";
 import { ItemsTable, type OfferRow } from "./items-table";
 import { dismissDuplicatePair } from "./actions";
 import { leafCategories, categoryLabelsById } from "@/lib/categories";
@@ -83,7 +82,7 @@ export default async function PricelistPage() {
         .select("offer_id, pack_price, cost_per_base_unit, base_unit_code")
         .returns<OfferCostRow[]>(),
       admin.from("vendors").select("id, name, vendor_number").order("name"),
-      admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
+      admin.from("categories").select("id, name, parent_category_id, code").order("sort_order"),
       admin.from("units").select("id, code, label").order("sort_order"),
       getColumnPreference(user.id, PAGE_KEY, DEFAULT_VISIBLE),
     ]);
@@ -158,6 +157,22 @@ export default async function PricelistPage() {
             vendor offers. Click an item for the full breakdown, its pack
             sizes and offers, and change history.
           </p>
+          {/* The reference lists behind the pricelist. Their own pages rather
+              than disclosures here: Categories has grown into real master data
+              since 0024 made its code the prefix on every item number, and
+              nineteen rows of it pushed the offers table off the screen. */}
+          {canEdit && (
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-ink/50">
+              <span>Manage</span>
+              <Link href="/pricelist/categories" className="text-ink/70 underline hover:text-ink">
+                Categories
+              </Link>
+              <span aria-hidden="true">·</span>
+              <Link href="/pricelist/units" className="text-ink/70 underline hover:text-ink">
+                Units
+              </Link>
+            </p>
+          )}
         </div>
         {canEdit && (
           <AddItemModal
@@ -167,8 +182,6 @@ export default async function PricelistPage() {
           />
         )}
       </div>
-
-      {canEdit && <UnitsManager units={units ?? []} />}
 
       {canEdit && duplicatePairs.length > 0 && (
         <details className="rounded-lg border border-gold/40 bg-gold/5 px-4 py-3">

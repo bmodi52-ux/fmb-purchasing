@@ -65,3 +65,15 @@ export function canonicalUnitCode(raw: string | null | undefined): string | null
   if (!cleaned) return null;
   return UNIT_ALIASES[cleaned] ?? null;
 }
+
+/**
+ * The dimensions units.dimension accepts, mirroring the units_dimension_check
+ * constraint in migration 0009.
+ *
+ * Here rather than beside the server action that validates against it: a
+ * "use server" module may only export async functions, so a plain constant
+ * shared with the client form has to live outside one.
+ */
+export const UNIT_DIMENSIONS = ["mass", "volume", "count", "length"] as const;
+
+export type UnitDimension = (typeof UNIT_DIMENSIONS)[number];
