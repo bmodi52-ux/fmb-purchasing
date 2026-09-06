@@ -54,6 +54,10 @@ no realistic retention covers that — see *Reconstructing from the audit trail*
    deployment back to the commit that matches.
 4. Re-enable writes.
 5. **Check storage.** See below.
+6. **Reports needs no manual step.** It checks the expense count and the most
+   recent change before trusting its cache, so a restore is picked up on the
+   next page load. There is a forced re-read under Admin → System errors if you
+   ever need it — for changes that check cannot see, like a renamed category.
 
 ## Restoring receipt files
 

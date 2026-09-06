@@ -26,6 +26,10 @@
 -- Receipt files in the `receipts` storage bucket are NOT touched by this
 -- script — storage is not in the database. Run scripts/cleanup-data.mjs
 -- to empty the bucket, or every uploaded receipt is left orphaned.
+--
+-- Reports picks this up on its own: it checks the expense count and the most
+-- recent change before trusting its cache, and truncating moves both. There is
+-- no manual refresh step.
 
 begin;
 

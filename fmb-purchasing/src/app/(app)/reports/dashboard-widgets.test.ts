@@ -108,7 +108,13 @@ const fyOf = new Map<string, number>([
   ["e-old", 1446],
 ]);
 
-const raw: ReportRawData = { allExpenses: expenses, allLines: lines, paidCosts, fyOf };
+const raw: ReportRawData = {
+  allExpenses: expenses,
+  allLines: lines,
+  paidCosts,
+  fyOf,
+  computedAt: "2026-09-06T00:00:00.000Z",
+};
 
 const BASE_CONFIG: WidgetConfig = {
   fy: 1447,
