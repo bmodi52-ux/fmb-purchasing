@@ -8,23 +8,86 @@ import {
   lookupAbnAction,
   uploadReceiptFileAction,
   reportOversizeReceiptAction,
+  findPossibleDuplicates,
   createExpense,
   updateExpense,
   type ExtractState,
   type UploadFileState,
+  type AttachmentInput,
   type LineItemInput,
   type ItemLookupSuggestion,
   type ExpenseForEdit,
+  type DuplicateWarning,
 } from "./actions";
-import type { ExtractedReceipt } from "@/lib/receipt-extraction";
+import type { ExtractedReceipt, StoredLineKind } from "@/lib/receipt-extraction";
+import type { PayeeChoice } from "@/lib/payees";
 import { VendorLookupFields } from "./vendor-lookup-fields";
 import { ItemLookupCells } from "./item-lookup-cells";
+import { PayeePicker } from "./payee-picker";
+import { ReconciliationStrip, CHARGE_KIND_LABELS } from "./reconciliation-strip";
 import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image-resize";
+import { normalizeReceiptDate } from "@/lib/format";
+import { round2, sumLines, residualFor } from "@/lib/expense-money";
 
-const initialExtractState: ExtractState = { data: null, receiptPath: null, error: null };
-const initialUploadState: UploadFileState = { path: null, fileName: null, error: null };
+const initialExtractState: ExtractState = { data: null, attachment: null, error: null };
+const initialUploadState: UploadFileState = { attachment: null, error: null };
 
-type ReviewItem = LineItemInput & { key: string; itemNumber: string };
+type ReviewItem = LineItemInput & {
+  key: string;
+  itemNumber: string;
+  /** Added by the app to account for the receipt total, not read from the receipt. */
+  autoAdded?: boolean;
+};
+
+/**
+ * An unfinished submission, kept in this browser.
+ *
+ * All of this state was React-local, so a phone that backgrounded the tab
+ * mid-review lost everything typed. That is worst on exactly the submissions
+ * that take the most typing: nearly a fifth of them arrive with no receipt at
+ * all and every line is entered by hand.
+ *
+ * localStorage rather than the server: a draft is per-person and per-device,
+ * it has no meaning to anyone else, and it should not become a row that
+ * someone later has to clean up.
+ */
+const DRAFT_KEY = "fmb-expense-draft";
+
+type Draft = {
+  vendorName: string;
+  abn: string;
+  invoiceNumber: string;
+  receiptDate: string;
+  total: number;
+  printedGst: number | null;
+  submitterComment: string;
+  attachments: AttachmentInput[];
+  items: ReviewItem[];
+  payee: PayeeChoice | null;
+  savedAt: number;
+};
+
+function readDraft(): Draft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw) as Draft;
+    // A fortnight-old draft is far more likely to be forgotten litter than
+    // something someone still wants.
+    if (Date.now() - draft.savedAt > 14 * 24 * 60 * 60 * 1000) return null;
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // A browser refusing storage is not a reason to fail a submission.
+  }
+}
 
 function toReviewItems(items: ExtractedReceipt["lineItems"]): ReviewItem[] {
   return items.map((item, i) => ({
@@ -34,42 +97,78 @@ function toReviewItems(items: ExtractedReceipt["lineItems"]): ReviewItem[] {
     // Frozen at extraction time: editing the row never touches this, so a
     // corrected line still knows what the receipt was originally read as.
     originalDescription: item.description,
+    kind: item.kind,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
     lineTotal: item.lineTotal ?? (item.quantity && item.unitPrice ? round2(item.quantity * item.unitPrice) : 0),
     categoryName: item.category,
+    gstApplicable: item.gstApplicable,
     normalizedQuantity: item.normalizedQuantity,
     normalizedUnit: item.normalizedUnit,
   }));
 }
 
-function round2(n: number) {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
-}
-
-function blankItem(): ReviewItem {
+function blankItem(kind: StoredLineKind = "goods", lineTotal = 0): ReviewItem {
   return {
     key: String(Math.random()),
     itemNumber: "",
-    description: "",
+    description: kind === "goods" ? "" : CHARGE_KIND_LABELS[kind as Exclude<StoredLineKind, "goods">],
     // Typed by hand, so there is no earlier reading to compare against.
     originalDescription: null,
+    kind,
     quantity: null,
     unitPrice: null,
-    lineTotal: 0,
+    lineTotal,
     categoryName: null,
+    // A charge is usually taxable even when the goods are not — a card
+    // surcharge on GST-free groceries still carries GST.
+    gstApplicable: kind !== "goods" && kind !== "rounding",
     normalizedQuantity: null,
     normalizedUnit: null,
   };
 }
 
+/**
+ * Adds a line for whatever the extracted lines do not account for.
+ *
+ * A 56c gap on a $100 grocery receipt is the card surcharge, and nobody
+ * should have to tell the app that. A $1,097 gap on a $3,021 invoice is not
+ * a surcharge — it is line items nobody read — so that one is booked as
+ * unallocated and stays visible for a person. residualFor draws the line.
+ */
+function withBookedResidual(items: ReviewItem[], receiptTotal: number): ReviewItem[] {
+  const residual = residualFor(
+    items.map((i) => ({ kind: i.kind, lineTotal: i.lineTotal, gstApplicable: i.gstApplicable })),
+    receiptTotal
+  );
+  if (!residual) return items;
+
+  const line = blankItem(residual.kind, residual.amount);
+  return [
+    ...items,
+    {
+      ...line,
+      autoAdded: true,
+      description:
+        residual.reason === "unitemised"
+          ? "Not itemised on the receipt"
+          : line.description,
+      // An unallocated remainder has no way of knowing whether GST applies,
+      // and guessing yes would invent a credit.
+      gstApplicable: residual.reason === "charge" ? line.gstApplicable : false,
+    },
+  ];
+}
+
 export function SubmitForm({
   categories,
   vendorNames,
+  myName,
   editExpense,
 }: {
   categories: string[];
   vendorNames: string[];
+  myName: string;
   editExpense?: ExpenseForEdit | null;
 }) {
   const router = useRouter();
@@ -80,8 +179,7 @@ export function SubmitForm({
   const [mode, setMode] = useState<"start" | "review">(editExpense ? "review" : "start");
   const [preparing, setPreparing] = useState(false);
   const [sizeError, setSizeError] = useState<string | null>(null);
-  const [receiptPath, setReceiptPath] = useState<string | null>(editExpense?.receiptPath ?? null);
-  const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentInput[]>(editExpense?.attachments ?? []);
 
   const [vendorName, setVendorName] = useState(editExpense?.vendorName ?? "");
   const [vendorNumber, setVendorNumber] = useState("");
@@ -89,14 +187,45 @@ export function SubmitForm({
   const [invoiceNumber, setInvoiceNumber] = useState(editExpense?.invoiceNumber ?? "");
   const [receiptDate, setReceiptDate] = useState(editExpense?.receiptDate ?? "");
   const [total, setTotal] = useState(editExpense?.total ?? 0);
-  const [subtotal, setSubtotal] = useState(editExpense?.subtotal ?? 0);
-  const [gstAmount, setGstAmount] = useState(editExpense?.gstAmount ?? 0);
+  const [printedGst, setPrintedGst] = useState<number | null>(null);
   const [submitterComment, setSubmitterComment] = useState(editExpense?.submitterComment ?? "");
+  const [payee, setPayee] = useState<PayeeChoice | null>(
+    editExpense?.payee ?? (editExpense ? null : { kind: "me" })
+  );
+  const [extractedPayeeName, setExtractedPayeeName] = useState<string | null>(null);
+  const [extractionNote, setExtractionNote] = useState<string | null>(null);
   const [items, setItems] = useState<ReviewItem[]>(() =>
     editExpense
       ? editExpense.lineItems.map((it, i) => ({ ...it, key: `edit-${i}`, itemNumber: "" }))
       : []
   );
+  const [restoredDraft, setRestoredDraft] = useState(false);
+
+  // Offer an unfinished submission back, once, on a fresh form only. Editing an
+  // existing expense is a different job and must never be seeded from a draft.
+  useEffect(() => {
+    if (editExpense || mode === "review") return;
+    const draft = readDraft();
+    if (!draft || draft.items.length === 0) return;
+    // localStorage is an external system, and it cannot be read during render
+    // because this component also renders on the server. Seeding from it is
+    // exactly what an effect is for, even though the rule cannot tell.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setVendorName(draft.vendorName);
+    setAbn(draft.abn);
+    setInvoiceNumber(draft.invoiceNumber);
+    setReceiptDate(draft.receiptDate);
+    setTotal(draft.total);
+    setPrintedGst(draft.printedGst);
+    setSubmitterComment(draft.submitterComment);
+    setAttachments(draft.attachments);
+    setItems(draft.items);
+    setPayee(draft.payee);
+    setRestoredDraft(true);
+    setMode("review");
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Populates local form state from the AI-extraction server action's
   // result — an external system, not a derivable value — so an effect is
@@ -104,38 +233,69 @@ export function SubmitForm({
   useEffect(() => {
     if (extractState.data) {
       const d = extractState.data;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      /* eslint-disable react-hooks/set-state-in-effect */
       setVendorName(d.vendor ?? "");
       setAbn(d.abn ?? "");
       setInvoiceNumber(d.invoiceNumber ?? "");
-      setReceiptDate(normalizeDateInput(d.date));
+      setReceiptDate(normalizeReceiptDate(d.date));
       const reviewItems = toReviewItems(d.lineItems);
-      setItems(reviewItems.length ? reviewItems : [blankItem()]);
-      const computedTotal = d.total ?? reviewItems.reduce((s, it) => s + (it.lineTotal || 0), 0);
-      // If the AI couldn't determine a GST breakdown, assume prices are
-      // GST-inclusive (standard 10% AU GST) rather than GST-free.
-      const computedGst = d.gstAmount ?? round2(computedTotal / 11);
-      setTotal(round2(computedTotal));
-      setSubtotal(round2(d.subtotal ?? computedTotal - computedGst));
-      setGstAmount(round2(computedGst));
-      setReceiptPath(extractState.receiptPath);
+      // The receipt total is what the receipt says, not what the lines sum to.
+      // When extraction could not read one, the lines are the best available
+      // starting point — and the strip then shows it as balanced, which is
+      // honest: there is nothing yet to disagree with.
+      const receiptTotal = round2(d.total ?? sumLines(reviewItems));
+      // Extraction reads most charges itself — surcharge, delivery and discount
+      // lines all come back with their own kind. When it misses one, the
+      // arithmetic still says what it was, so the app books it rather than
+      // handing the submitter a subtraction to do. Only a gap too large to be a
+      // charge is left visibly unresolved.
+      const withResidual = withBookedResidual(reviewItems, receiptTotal);
+      setItems(withResidual.length ? withResidual : [blankItem()]);
+      setTotal(receiptTotal);
+      setPrintedGst(d.gstAmount);
+      setExtractedPayeeName(d.payee?.name ?? null);
+      setExtractionNote(d.note);
+      if (d.payee?.name) {
+        setPayee({
+          kind: "new",
+          displayName: d.payee.name,
+          bankAccountName: d.payee.bankAccountName,
+          bsb: d.payee.bsb,
+          accountNumber: d.payee.accountNumber,
+        });
+      }
+      if (extractState.attachment) setAttachments([extractState.attachment]);
       setMode("review");
-    } else if (extractState.receiptPath && extractState.error) {
+      /* eslint-enable react-hooks/set-state-in-effect */
+    } else if (extractState.attachment && extractState.error) {
       // extraction failed but the file uploaded fine — fall back to a blank manual form
-      setReceiptPath(extractState.receiptPath);
+      setAttachments([extractState.attachment]);
       setItems([blankItem()]);
       setMode("review");
     }
   }, [extractState]);
 
-  /**
-   * Phone photos are far larger than the Server Action body limit, so they're
-   * downscaled here before the form is submitted. Anything still too large
-   * (a big multi-page PDF, which can't be shrunk client-side) is reported
-   * plainly instead of being sent and coming back as a server error.
-   */
-  async function handleReceiptChosen(event: React.ChangeEvent<HTMLInputElement>) {
-    const input = event.currentTarget;
+  // Keep the draft current. Debounced so typing a description is one write at
+  // the end rather than one per keystroke.
+  useEffect(() => {
+    if (editExpense || mode !== "review" || items.length === 0) return;
+    const timer = setTimeout(() => {
+      try {
+        const draft: Draft = {
+          vendorName, abn, invoiceNumber, receiptDate, total, printedGst,
+          submitterComment, attachments, items, payee, savedAt: Date.now(),
+        };
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      } catch {
+        // Private browsing, or storage full. The form still works.
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [editExpense, mode, vendorName, abn, invoiceNumber, receiptDate, total,
+      printedGst, submitterComment, attachments, items, payee]);
+
+  async function handleReceiptChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
     const form = input.form;
     const chosen = input.files?.[0];
     if (!chosen || !form) return;
@@ -144,7 +304,6 @@ export function SubmitForm({
     setPreparing(true);
     try {
       const prepared = await shrinkImageForUpload(chosen);
-
       if (prepared.size > MAX_UPLOAD_BYTES) {
         setSizeError(
           `That file is ${formatBytes(prepared.size)}, which is too large to upload. ` +
@@ -179,24 +338,33 @@ export function SubmitForm({
     setInvoiceNumber("");
     setReceiptDate("");
     setTotal(0);
-    setSubtotal(0);
-    setGstAmount(0);
+    setPrintedGst(null);
     setItems([blankItem()]);
-    setReceiptPath(null);
-    setReceiptFileName(null);
+    setAttachments([]);
+    setPayee({ kind: "me" });
     setMode("review");
   }
 
+  function discard() {
+    clearDraft();
+    router.push("/my-submissions");
+  }
+
   if (mode === "start") {
+    const busy = preparing || extracting;
     return (
       <div className="flex flex-col gap-4">
         <form action={extractAction} className="flex flex-col gap-3 rounded-lg border-2 border-dashed border-ink/20 bg-white/50 p-8 text-center">
-          <label className="cursor-pointer">
+          {/* The control is disabled while a request is in flight. It was not,
+              which on a slow connection meant an impatient second tap ran the
+              whole upload and the model call again. */}
+          <label className={busy ? "cursor-progress opacity-60" : "cursor-pointer"}>
             <input
               type="file"
               name="file"
               accept="image/*,application/pdf"
               required
+              disabled={busy}
               className="hidden"
               onChange={handleReceiptChosen}
             />
@@ -225,6 +393,7 @@ export function SubmitForm({
     <ReviewForm
       categories={categories}
       vendorNames={vendorNames}
+      myName={myName}
       vendorName={vendorName}
       setVendorName={setVendorName}
       vendorNumber={vendorNumber}
@@ -237,35 +406,29 @@ export function SubmitForm({
       setReceiptDate={setReceiptDate}
       items={items}
       setItems={setItems}
-      subtotal={subtotal}
-      setSubtotal={setSubtotal}
-      gstAmount={gstAmount}
-      setGstAmount={setGstAmount}
       total={total}
       setTotal={setTotal}
+      printedGst={printedGst}
       submitterComment={submitterComment}
       setSubmitterComment={setSubmitterComment}
-      receiptPath={receiptPath}
-      setReceiptPath={setReceiptPath}
-      receiptFileName={receiptFileName}
-      setReceiptFileName={setReceiptFileName}
-      extractionNote={extractState.error && receiptPath ? extractState.error : null}
-      onDiscard={() => (editExpense ? router.push("/my-submissions") : setMode("start"))}
+      attachments={attachments}
+      setAttachments={setAttachments}
+      payee={payee}
+      setPayee={setPayee}
+      extractedPayeeName={extractedPayeeName}
+      extractionNote={extractionNote}
+      restoredDraft={restoredDraft}
+      onDiscard={discard}
+      onSubmitted={clearDraft}
       editExpenseId={editExpense?.id ?? null}
     />
   );
 }
 
-function normalizeDateInput(raw: string | null): string {
-  if (!raw) return "";
-  const parsed = new Date(raw);
-  if (isNaN(parsed.getTime())) return "";
-  return parsed.toISOString().slice(0, 10);
-}
-
 function ReviewForm(props: {
   categories: string[];
   vendorNames: string[];
+  myName: string;
   vendorName: string;
   setVendorName: (v: string) => void;
   vendorNumber: string;
@@ -278,20 +441,20 @@ function ReviewForm(props: {
   setReceiptDate: (v: string) => void;
   items: ReviewItem[];
   setItems: React.Dispatch<React.SetStateAction<ReviewItem[]>>;
-  subtotal: number;
-  setSubtotal: (v: number) => void;
-  gstAmount: number;
-  setGstAmount: (v: number) => void;
   total: number;
   setTotal: (v: number) => void;
+  printedGst: number | null;
   submitterComment: string;
   setSubmitterComment: (v: string) => void;
-  receiptPath: string | null;
-  setReceiptPath: (v: string | null) => void;
-  receiptFileName: string | null;
-  setReceiptFileName: (v: string | null) => void;
+  attachments: AttachmentInput[];
+  setAttachments: React.Dispatch<React.SetStateAction<AttachmentInput[]>>;
+  payee: PayeeChoice | null;
+  setPayee: (p: PayeeChoice | null) => void;
+  extractedPayeeName: string | null;
   extractionNote: string | null;
+  restoredDraft: boolean;
   onDiscard: () => void;
+  onSubmitted: () => void;
   editExpenseId: string | null;
 }) {
   const router = useRouter();
@@ -300,14 +463,48 @@ function ReviewForm(props: {
   const [error, setError] = useState<string | null>(null);
   const [uploadState, uploadAction, uploading] = useActionState(uploadReceiptFileAction, initialUploadState);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [duplicates, setDuplicates] = useState<DuplicateWarning[]>([]);
+  const [duplicatesAcknowledged, setDuplicatesAcknowledged] = useState(false);
 
   useEffect(() => {
-    if (uploadState.path) {
-      props.setReceiptPath(uploadState.path);
-      props.setReceiptFileName(uploadState.fileName);
+    if (uploadState.attachment) {
+      const added = uploadState.attachment;
+      props.setAttachments((prev) =>
+        // Content-addressed, so re-attaching the same file is a no-op rather
+        // than a second identical row.
+        prev.some((a) => a.storagePath === added.storagePath) ? prev : [...prev, added]
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadState]);
+
+  // Look for an earlier submission of the same thing, once the fields that
+  // could identify one have settled.
+  useEffect(() => {
+    const shaList = props.attachments.map((a) => a.sha256).filter((s): s is string => !!s);
+    const nothingToMatchOn = shaList.length === 0 && !props.invoiceNumber.trim();
+
+    // Both branches settle inside the timer rather than in the effect body, so
+    // clearing a stale warning is a callback like any other.
+    const timer = setTimeout(() => {
+      if (nothingToMatchOn) {
+        setDuplicates([]);
+        return;
+      }
+      findPossibleDuplicates({
+        sha256List: shaList,
+        vendorName: props.vendorName,
+        invoiceNumber: props.invoiceNumber,
+        excludeExpenseId: props.editExpenseId,
+      })
+        .then((found) => {
+          setDuplicates(found);
+          if (found.length === 0) setDuplicatesAcknowledged(false);
+        })
+        .catch(() => setDuplicates([]));
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [props.attachments, props.invoiceNumber, props.vendorName, props.editExpenseId]);
 
   function updateItem(key: string, patch: Partial<ReviewItem>) {
     props.setItems((prev) =>
@@ -325,17 +522,12 @@ function ReviewForm(props: {
   }
 
   function selectItemSuggestion(key: string, s: ItemLookupSuggestion) {
-    updateItem(key, {
-      categoryName: s.categoryName ?? undefined,
-    });
+    updateItem(key, { categoryName: s.categoryName ?? undefined });
   }
 
-  useEffect(() => {
-    const sum = round2(props.items.reduce((s, it) => s + (it.lineTotal || 0), 0));
-    props.setTotal(sum);
-    props.setSubtotal(round2(sum - props.gstAmount));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.items]);
+  function addCharge(kind: StoredLineKind, amount: number) {
+    props.setItems((prev) => [...prev, blankItem(kind, amount)]);
+  }
 
   function handleAbnLookup() {
     setError(null);
@@ -346,10 +538,20 @@ function ReviewForm(props: {
     });
   }
 
+  const moneyLines = props.items.map((it) => ({
+    kind: it.kind,
+    lineTotal: it.lineTotal,
+    gstApplicable: it.gstApplicable,
+  }));
+
   function handleSubmit() {
     setError(null);
     if (!props.vendorName.trim()) {
       setError("Vendor is required.");
+      return;
+    }
+    if (duplicates.length > 0 && !duplicatesAcknowledged) {
+      setError("This looks like something already submitted — confirm below, or change the details.");
       return;
     }
     startSubmit(async () => {
@@ -358,11 +560,10 @@ function ReviewForm(props: {
         abn: props.abn || null,
         invoiceNumber: props.invoiceNumber || null,
         receiptDate: props.receiptDate || null,
-        receiptPath: props.receiptPath,
-        subtotal: props.subtotal,
-        gstAmount: props.gstAmount,
+        attachments: props.attachments,
         total: props.total,
         submitterComment: props.submitterComment.trim() || null,
+        payee: props.payee,
         lineItems: props.items
           .filter((it) => it.description.trim())
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -372,7 +573,10 @@ function ReviewForm(props: {
         ? await updateExpense(props.editExpenseId, payload)
         : await createExpense(payload);
       if ("error" in result) setError(result.error);
-      else router.push("/my-submissions");
+      else {
+        props.onSubmitted();
+        router.push("/my-submissions");
+      }
     });
   }
 
@@ -381,66 +585,54 @@ function ReviewForm(props: {
       <h2 className="section-title text-ink">Review details</h2>
       <p className="mb-5 text-sm text-ink/60">Check and correct anything before submitting.</p>
 
+      {props.restoredDraft && (
+        <p className="mb-4 rounded-md bg-palm/10 px-3 py-2 text-sm text-ink/75">
+          Picked up where you left off. Nothing has been submitted yet.
+        </p>
+      )}
+
       {props.extractionNote && (
         <p className="mb-4 rounded-md bg-gold/10 px-3 py-2 text-sm text-ink/70">{props.extractionNote}</p>
       )}
 
-      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-md border border-dashed border-ink/20 p-3 text-sm">
-        <span className="text-ink/70">Receipt:</span>
-        {props.receiptPath ? (
-          <>
-            <span className="text-ink">{props.receiptFileName ?? "attached"} ✓</span>
-            <button
-              type="button"
-              onClick={() => {
-                props.setReceiptPath(null);
-                props.setReceiptFileName(null);
-              }}
-              className="text-xs text-maroon/70 hover:underline"
-            >
-              remove
-            </button>
-          </>
-        ) : (
-          <form action={uploadAction} className="flex flex-wrap items-center gap-2">
+      {duplicates.length > 0 && (
+        <div className="mb-5 rounded-md border border-maroon/30 bg-maroon/5 px-4 py-3">
+          <p className="text-sm font-medium text-maroon">
+            {duplicates.length === 1 ? "This may already have been submitted" : "These may already have been submitted"}
+          </p>
+          <ul className="mt-2 flex flex-col gap-1 text-sm text-ink/75">
+            {duplicates.map((d) => (
+              <li key={d.expenseId}>
+                <span className="font-mono text-xs text-ink/60">{d.expenseNumber ?? "—"}</span>{" "}
+                {d.vendorName} ·{" "}
+                {d.total.toLocaleString("en-AU", { style: "currency", currency: "AUD" })} ·{" "}
+                {d.status} · submitted by {d.submittedByName}
+                <span className="ml-1 text-xs text-ink/50">
+                  ({d.reason === "same-file" ? "identical file" : "same invoice number"})
+                </span>
+              </li>
+            ))}
+          </ul>
+          <label className="mt-2.5 flex items-center gap-2 text-sm text-ink/75">
             <input
-              type="file"
-              name="file"
-              accept="image/*,application/pdf"
-              className="min-w-0 max-w-full text-xs"
-              // same downscale as the main upload — this path hits the identical
-              // Server Action body limit
-              onChange={async (e) => {
-                const input = e.currentTarget;
-                const chosen = input.files?.[0];
-                if (!chosen) return;
-                setAttachError(null);
-                const prepared = await shrinkImageForUpload(chosen);
-                if (prepared.size > MAX_UPLOAD_BYTES) {
-                  setAttachError(`Too large (${formatBytes(prepared.size)}).`);
-                  void reportOversizeReceiptAction({
-                    fileName: prepared.name,
-                    fileType: prepared.type,
-                    sizeBytes: prepared.size,
-                  }).catch(() => {});
-                  input.value = "";
-                  return;
-                }
-                if (prepared !== chosen) {
-                  const transfer = new DataTransfer();
-                  transfer.items.add(prepared);
-                  input.files = transfer.files;
-                }
-              }}
+              type="checkbox"
+              checked={duplicatesAcknowledged}
+              onChange={(e) => setDuplicatesAcknowledged(e.target.checked)}
             />
-            <SubmitButton disabled={uploading} className="rounded-md border border-ink/15 px-3 py-1 text-xs hover:border-ink/30 disabled:opacity-60">
-              {uploading ? "Attaching…" : "Attach"}
-            </SubmitButton>
-          </form>
-        )}
-        {attachError && <span className="text-xs text-red-700">{attachError}</span>}
-        {uploadState.error && <span className="text-xs text-red-700">{uploadState.error}</span>}
-      </div>
+            This is a separate expense — submit it anyway
+          </label>
+        </div>
+      )}
+
+      <Attachments
+        attachments={props.attachments}
+        setAttachments={props.setAttachments}
+        uploadAction={uploadAction}
+        uploading={uploading}
+        uploadError={uploadState.error}
+        attachError={attachError}
+        setAttachError={setAttachError}
+      />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
         <VendorLookupFields
@@ -483,70 +675,132 @@ function ReviewForm(props: {
         </Field>
       </div>
 
+      <div className="mb-6">
+        <PayeePicker
+          value={props.payee}
+          onChange={props.setPayee}
+          myName={props.myName}
+          extractedName={props.extractedPayeeName}
+        />
+      </div>
+
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-ink/50">
-              <th className="p-1">Item #</th>
-              <th className="p-1">Description</th>
-              <th className="p-1">Category</th>
-              <th className="p-1">Qty</th>
-              <th className="p-1">Unit price</th>
-              <th className="p-1">Line total</th>
-              <th className="p-1">Per-unit</th>
-              <th className="p-1" />
+              <th scope="col" className="p-1">Item #</th>
+              <th scope="col" className="p-1">Description</th>
+              <th scope="col" className="p-1">Category</th>
+              <th scope="col" className="p-1">Qty</th>
+              <th scope="col" className="p-1">Unit price</th>
+              <th scope="col" className="p-1">Line total</th>
+              <th scope="col" className="p-1" title="Whether GST applies to this line">GST</th>
+              <th scope="col" className="p-1">Per-unit</th>
+              <th scope="col" className="p-1" />
             </tr>
           </thead>
           <tbody>
             {props.items.map((item) => (
-              <tr key={item.key} className="border-t border-ink/5">
-                <ItemLookupCells
-                  itemNumber={item.itemNumber}
-                  setItemNumber={(v) => updateItem(item.key, { itemNumber: v })}
-                  description={item.description}
-                  setDescription={(v) => updateItem(item.key, { description: v })}
-                  onSelect={(s) => selectItemSuggestion(item.key, s)}
-                />
+              <tr
+                key={item.key}
+                // A line the app added to make the receipt add up is tinted, so
+                // the submitter is confirming something rather than hunting for
+                // what changed.
+                className={`border-t border-ink/5 ${item.autoAdded ? "bg-gold/10" : ""}`}
+              >
+                {item.kind === "goods" ? (
+                  <ItemLookupCells
+                    itemNumber={item.itemNumber}
+                    setItemNumber={(v) => updateItem(item.key, { itemNumber: v })}
+                    description={item.description}
+                    setDescription={(v) => updateItem(item.key, { description: v })}
+                    onSelect={(s) => selectItemSuggestion(item.key, s)}
+                  />
+                ) : (
+                  <>
+                    {/* A charge is not a product, so it gets no item number and
+                        no Pricelist lookup — matching one would file "CREDIT
+                        SURCHARGE" as a pending item under the vendor. */}
+                    <td className="p-1 text-xs text-ink/35">—</td>
+                    <td className="p-1">
+                      <input
+                        value={item.description}
+                        onChange={(e) => updateItem(item.key, { description: e.target.value })}
+                        className="w-full min-w-[10rem] rounded border border-ink/10 bg-white px-2 py-1"
+                      />
+                    </td>
+                  </>
+                )}
                 <td className="p-1">
-                  <select
-                    value={item.categoryName ?? ""}
-                    onChange={(e) => updateItem(item.key, { categoryName: e.target.value || null })}
-                    className="rounded border border-ink/10 bg-white px-2 py-1"
-                  >
-                    <option value="">—</option>
-                    {props.categories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                  {item.kind === "goods" ? (
+                    <select
+                      value={item.categoryName ?? ""}
+                      onChange={(e) => updateItem(item.key, { categoryName: e.target.value || null })}
+                      className="rounded border border-ink/10 bg-white px-2 py-1"
+                      aria-label="Category"
+                    >
+                      <option value="">—</option>
+                      {props.categories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      value={item.kind}
+                      onChange={(e) => updateItem(item.key, { kind: e.target.value as StoredLineKind })}
+                      className="rounded border border-ink/10 bg-white px-2 py-1"
+                      aria-label="Charge type"
+                    >
+                      {Object.entries(CHARGE_KIND_LABELS).map(([k, label]) => (
+                        <option key={k} value={k}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </td>
                 <td className="p-1">
                   <input
                     type="number"
                     value={item.quantity ?? ""}
+                    disabled={item.kind !== "goods"}
                     onChange={(e) =>
                       updateItem(item.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })
                     }
-                    className="w-16 rounded border border-ink/10 bg-white px-2 py-1 font-mono"
+                    className="w-16 rounded border border-ink/10 bg-white px-2 py-1 font-mono disabled:bg-ink/5"
+                    aria-label="Quantity"
                   />
                 </td>
                 <td className="p-1">
                   <input
                     type="number"
                     value={item.unitPrice ?? ""}
+                    disabled={item.kind !== "goods"}
                     onChange={(e) =>
                       updateItem(item.key, { unitPrice: e.target.value === "" ? null : Number(e.target.value) })
                     }
-                    className="w-20 rounded border border-ink/10 bg-white px-2 py-1 font-mono"
+                    className="w-20 rounded border border-ink/10 bg-white px-2 py-1 font-mono disabled:bg-ink/5"
+                    aria-label="Unit price"
                   />
                 </td>
                 <td className="p-1">
                   <input
                     type="number"
+                    step="0.01"
                     value={item.lineTotal}
                     onChange={(e) => updateItem(item.key, { lineTotal: Number(e.target.value) })}
-                    className="w-20 rounded border border-ink/10 bg-white px-2 py-1 font-mono"
+                    className="w-24 rounded border border-ink/10 bg-white px-2 py-1 font-mono"
+                    aria-label="Line total"
+                  />
+                </td>
+                <td className="p-1 text-center">
+                  <input
+                    type="checkbox"
+                    checked={item.gstApplicable}
+                    onChange={(e) => updateItem(item.key, { gstApplicable: e.target.checked })}
+                    aria-label={`GST applies to ${item.description || "this line"}`}
                   />
                 </td>
                 <td className="p-1 whitespace-nowrap font-mono text-xs text-ink/60">
@@ -557,7 +811,7 @@ function ReviewForm(props: {
                     type="button"
                     onClick={() => props.setItems(props.items.filter((it) => it.key !== item.key))}
                     className="text-ink/40 hover:text-maroon"
-                    aria-label="Remove line"
+                    aria-label={`Remove ${item.description || "line"}`}
                   >
                     ×
                   </button>
@@ -567,19 +821,32 @@ function ReviewForm(props: {
           </tbody>
         </table>
       </div>
-      <button
-        type="button"
-        onClick={() => props.setItems([...props.items, blankItem()])}
-        className="mt-2 rounded-md border border-dashed border-ink/20 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/40"
-      >
-        + Add line item
-      </button>
 
-      <div className="mt-6 flex flex-col items-end gap-1 border-t-2 border-ink/20 pt-4 font-mono text-sm">
-        <TotalRow label="Subtotal (excl. GST)" value={props.subtotal} onChange={props.setSubtotal} />
-        <TotalRow label="GST" value={props.gstAmount} onChange={props.setGstAmount} />
-        <TotalRow label="Total (incl. GST)" value={props.total} onChange={props.setTotal} bold />
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => props.setItems([...props.items, blankItem()])}
+          className="rounded-md border border-dashed border-ink/20 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/40"
+        >
+          + Add line item
+        </button>
+        <button
+          type="button"
+          onClick={() => addCharge("surcharge", 0)}
+          className="rounded-md border border-dashed border-ink/20 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/40"
+        >
+          + Add a charge or discount
+        </button>
       </div>
+
+      <ReconciliationStrip
+        lines={moneyLines}
+        receiptTotal={props.total}
+        onReceiptTotalChange={props.setTotal}
+        printedGst={props.printedGst}
+        onAddCharge={addCharge}
+        autoAddedCount={props.items.filter((i) => i.autoAdded).length}
+      />
 
       {/* Below the numbers, because it is usually written about them — a price
           that looks wrong, a missing receipt, a part-delivered order. Kept out
@@ -622,35 +889,106 @@ function ReviewForm(props: {
   );
 }
 
+/**
+ * Files supporting the expense. More than one, because a real submission is
+ * routinely a receipt plus a delivery docket, or a two-page invoice
+ * photographed twice because it would not fit in one frame.
+ */
+function Attachments({
+  attachments,
+  setAttachments,
+  uploadAction,
+  uploading,
+  uploadError,
+  attachError,
+  setAttachError,
+}: {
+  attachments: AttachmentInput[];
+  setAttachments: React.Dispatch<React.SetStateAction<AttachmentInput[]>>;
+  uploadAction: (formData: FormData) => void;
+  uploading: boolean;
+  uploadError: string | null;
+  attachError: string | null;
+  setAttachError: (v: string | null) => void;
+}) {
+  return (
+    <div className="mb-6 flex flex-col gap-2 rounded-md border border-dashed border-ink/20 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-ink/70">Attachments:</span>
+        {attachments.length === 0 && <span className="text-ink/45">none</span>}
+      </div>
+
+      {attachments.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {attachments.map((a) => (
+            <li key={a.storagePath} className="flex items-center gap-2">
+              <span className="truncate text-ink">{a.fileName}</span>
+              {a.sizeBytes != null && (
+                <span className="shrink-0 text-xs text-ink/45">{formatBytes(a.sizeBytes)}</span>
+              )}
+              <button
+                type="button"
+                onClick={() => setAttachments((prev) => prev.filter((x) => x.storagePath !== a.storagePath))}
+                className="shrink-0 text-xs text-maroon/70 hover:underline"
+              >
+                remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form action={uploadAction} className="flex flex-wrap items-center gap-2">
+        <input
+          type="file"
+          name="file"
+          accept="image/*,application/pdf"
+          disabled={uploading}
+          className="min-w-0 max-w-full text-xs"
+          // same downscale as the main upload — this path hits the identical
+          // Server Action body limit
+          onChange={async (e) => {
+            const input = e.currentTarget;
+            const chosen = input.files?.[0];
+            if (!chosen) return;
+            setAttachError(null);
+            const prepared = await shrinkImageForUpload(chosen);
+            if (prepared.size > MAX_UPLOAD_BYTES) {
+              setAttachError(`Too large (${formatBytes(prepared.size)}).`);
+              void reportOversizeReceiptAction({
+                fileName: prepared.name,
+                fileType: prepared.type,
+                sizeBytes: prepared.size,
+              }).catch(() => {});
+              input.value = "";
+              return;
+            }
+            if (prepared !== chosen) {
+              const transfer = new DataTransfer();
+              transfer.items.add(prepared);
+              input.files = transfer.files;
+            }
+          }}
+        />
+        <SubmitButton
+          disabled={uploading}
+          className="rounded-md border border-ink/15 px-3 py-1 text-xs hover:border-ink/30 disabled:opacity-60"
+        >
+          {uploading ? "Attaching…" : "Attach"}
+        </SubmitButton>
+      </form>
+
+      {attachError && <span className="text-xs text-red-700">{attachError}</span>}
+      {uploadError && <span className="text-xs text-red-700">{uploadError}</span>}
+    </div>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1 text-sm">
       <span className="text-ink/70">{label}</span>
       {children}
     </label>
-  );
-}
-
-function TotalRow({
-  label,
-  value,
-  onChange,
-  bold,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  bold?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-ink/60">{label}</span>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className={`w-28 rounded border border-ink/15 bg-white px-2 py-1 text-right ${bold ? "text-lg font-semibold" : ""}`}
-      />
-    </div>
   );
 }

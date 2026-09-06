@@ -6,6 +6,9 @@ import { canViewExpense } from "@/lib/expense-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { ReceiptViewer } from "@/components/receipt-viewer";
+import { ReversePanel } from "./reverse-panel";
+import { reopenExpense } from "../../approvals/actions";
+import { reversePayment } from "../../payments/actions";
 
 const money = (n: number) =>
   n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
@@ -57,7 +60,7 @@ export default async function ExpenseDetailPage({
   const { data: expense } = await admin
     .from("expenses")
     .select(
-      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, created_at"
+      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, created_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -70,6 +73,11 @@ export default async function ExpenseDetailPage({
   if (!(await canViewExpense(user, expense.submitted_by))) redirect("/");
 
   const permissions = await getUserPermissions(user.teamIds);
+
+  const { count: attachmentCount } = await admin
+    .from("expense_attachments")
+    .select("id", { count: "exact", head: true })
+    .eq("expense_id", id);
 
   const [{ data: lineItems }, { data: history }, { data: vendor }] = await Promise.all([
     admin
@@ -145,6 +153,14 @@ export default async function ExpenseDetailPage({
   const person = (personId: string | null) =>
     personId ? nameById.get(personId) ?? "Unknown" : "—";
 
+  // A decision can be unwound by whoever could make it. Paid is separate:
+  // money has already left the account, so that correction belongs to the
+  // person who made the payment.
+  const canReopen =
+    can(permissions, "approvals", "approve") &&
+    (expense.status === "approved" || expense.status === "declined");
+  const canUnpay = can(permissions, "payments", "mark_paid") && expense.status === "paid";
+
   const backHref = can(permissions, "all_expenses", "view") ? "/expenses" : "/my-submissions";
   const backLabel = backHref === "/expenses" ? "All expenses" : "My submissions";
 
@@ -202,7 +218,7 @@ export default async function ExpenseDetailPage({
             </Field>
           </dl>
 
-          {expense.receipt_file_path && (
+          {(attachmentCount ?? 0) > 0 && (
             <ReceiptViewer expenseId={expense.id} label="View receipt" />
           )}
         </div>
@@ -272,12 +288,12 @@ export default async function ExpenseDetailPage({
             <table className="w-full text-sm">
               <thead className="border-b border-ink/10 text-left text-ink/60">
                 <tr>
-                  <th className="px-4 py-2 font-medium">Description</th>
-                  <th className="px-4 py-2 font-medium">Category</th>
-                  <th className="px-4 py-2 font-medium">Pricelist item</th>
-                  <th className="px-4 py-2 text-right font-medium">Qty</th>
-                  <th className="px-4 py-2 text-right font-medium">Unit price</th>
-                  <th className="px-4 py-2 text-right font-medium">Total</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Description</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Category</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Pricelist item</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">Qty</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">Unit price</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -337,6 +353,31 @@ export default async function ExpenseDetailPage({
             </Field>
             <Field label="Marked paid by">{person(expense.paid_by)}</Field>
           </dl>
+        </section>
+      )}
+
+      {/* ---------------- corrections ---------------- */}
+      {(canReopen || canUnpay) && (
+        <section className="flex flex-col gap-3">
+          <h2 className="section-title text-ink">Correct this</h2>
+          {canReopen && (
+            <ReversePanel
+              expenseId={expense.id}
+              action={reopenExpense}
+              label={expense.status === "declined" ? "Reopen this decline" : "Reopen this approval"}
+              prompt="Reopen"
+              helpText={`This returns ${expense.expense_number ?? "the expense"} to awaiting review, and records who reopened it and why.`}
+            />
+          )}
+          {canUnpay && (
+            <ReversePanel
+              expenseId={expense.id}
+              action={reversePayment}
+              label="Undo this payment"
+              prompt="Undo payment"
+              helpText="Use this when the transfer did not happen, or the reference was wrong. The expense returns to approved so it can be paid again properly."
+            />
+          )}
         </section>
       )}
 

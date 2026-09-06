@@ -3,7 +3,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getColumnPreference } from "@/lib/column-prefs";
-import { fiscalYearHijri, formatFiscalYear, ALL_YEARS } from "@/lib/fiscal-year";
+import { currentFiscalYearHijri, formatFiscalYear, ALL_YEARS } from "@/lib/fiscal-year";
+import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { FiscalYearSelect } from "@/components/fiscal-year-select";
 import { ExpensesTable, type ExpenseRow } from "./expenses-table";
 
@@ -36,7 +37,7 @@ export default async function AllExpensesPage({
   await requirePermission(user, "all_expenses", "view");
 
   const { fy } = await searchParams;
-  const currentFy = fiscalYearHijri(new Date());
+  const currentFy = currentFiscalYearHijri();
   // Defaults to the current year rather than everything ever recorded: an
   // accounting page is almost always asked about a period, and it means the
   // query is bounded by an indexed column instead of growing without limit.
@@ -48,7 +49,7 @@ export default async function AllExpensesPage({
   let query = admin
     .from("expenses")
     .select(
-      "id, expense_number, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at",
+      "id, expense_number, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at",
       { count: "exact" }
     )
     .order("created_at", { ascending: false });
@@ -78,6 +79,9 @@ export default async function AllExpensesPage({
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
   const vendorNumberById = new Map((vendors ?? []).map((v) => [v.id, v.vendor_number]));
 
+  // One query for the whole page rather than one per row: the list only
+  // needs to know whether to offer a link.
+  const withFiles = await expenseIdsWithAttachments(admin, (expenses ?? []).map((e) => e.id));
   const rows: ExpenseRow[] = (expenses ?? []).map((e) => ({
     id: e.id,
     expenseNumber: e.expense_number,
@@ -87,7 +91,7 @@ export default async function AllExpensesPage({
     status: e.status,
     invoice_number: e.invoice_number,
     receipt_date: e.receipt_date,
-    hasReceipt: e.receipt_file_path != null,
+    hasReceipt: withFiles.has(e.id),
     subtotal: e.subtotal,
     gst_amount: e.gst_amount,
     total: e.total,

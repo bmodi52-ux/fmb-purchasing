@@ -12,6 +12,8 @@ export type PageKey =
   | "approvals"
   | "payments"
   | "reports"
+  | "review_queue"
+  | "budgets"
   | "admin_users"
   | "admin_teams";
 

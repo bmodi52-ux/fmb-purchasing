@@ -13,7 +13,9 @@ export const NAV_ITEMS: {
   { key: "vendors", label: "Vendors", href: "/vendors", action: "view" },
   { key: "approvals", label: "Approvals", href: "/approvals", action: "view" },
   { key: "payments", label: "Payments", href: "/payments", action: "view" },
+  { key: "review_queue", label: "Needs attention", href: "/review-queue", action: "view" },
   { key: "reports", label: "Reports", href: "/reports", action: "view" },
+  { key: "budgets", label: "Budgets", href: "/budgets", action: "view" },
   { key: "admin_users", label: "Users", href: "/admin/users", action: "manage_users" },
   { key: "admin_teams", label: "Teams & permissions", href: "/admin/teams", action: "manage_teams" },
   // Shares the users-admin grant rather than adding a page key nobody has

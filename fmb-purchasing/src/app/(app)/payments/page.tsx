@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { PaymentsTable, type PaymentRow } from "./payments-table";
 
 export default async function PaymentsPage() {
@@ -12,7 +13,7 @@ export default async function PaymentsPage() {
   const admin = createAdminClient();
   const { data: expenses } = await admin
     .from("expenses")
-    .select("id, expense_number, vendor_name_raw, invoice_number, total, decided_at, submitted_by, receipt_file_path")
+    .select("id, expense_number, vendor_name_raw, invoice_number, total, decided_at, submitted_by")
     .eq("status", "approved")
     .order("decided_at");
 
@@ -22,6 +23,9 @@ export default async function PaymentsPage() {
     : { data: [] };
   const submitterNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
 
+  // One query for the whole page rather than one per row: the list only
+  // needs to know whether to offer a link.
+  const withFiles = await expenseIdsWithAttachments(admin, (expenses ?? []).map((e) => e.id));
   const rows: PaymentRow[] = (expenses ?? []).map((e) => ({
     id: e.id,
     expense_number: e.expense_number,
@@ -30,7 +34,7 @@ export default async function PaymentsPage() {
     total: e.total,
     decided_at: e.decided_at,
     submittedByName: submitterNameById.get(e.submitted_by) ?? "—",
-    hasReceipt: e.receipt_file_path != null,
+    hasReceipt: withFiles.has(e.id),
   }));
 
   return (

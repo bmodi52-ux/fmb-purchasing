@@ -193,13 +193,21 @@ function SortableWidgetCard({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3 text-xs">
-          <button type="button" onClick={onEdit} className="text-ink/50 underline hover:text-ink">
+          <button
+            type="button"
+            onClick={onEdit}
+            // Announced with the widget it belongs to. Three cards in a row
+            // otherwise offer three identical "Edit" controls.
+            aria-label={`Edit ${widget.title}`}
+            className="text-ink/50 underline hover:text-ink"
+          >
             Edit
           </button>
           <button
             type="button"
             onClick={handleRemoveClick}
             disabled={removing}
+            aria-label={`Remove ${widget.title}`}
             className="text-ink/50 underline hover:text-maroon disabled:opacity-50"
           >
             {removing ? "…" : "Remove"}

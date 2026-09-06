@@ -15,6 +15,7 @@ import type { ReportRawData } from "./reports/data";
 import { fetchWidgetPreviewData, type WidgetPreviewData } from "./reports/preview-data-actions";
 import { addDashboardWidget, updateDashboardWidget } from "./reports/dashboard-widgets-actions";
 import { WidgetBody } from "./widget-body";
+import { Dialog } from "@/components/dialog";
 import type { SavedWidget } from "./home-dashboard";
 
 const STAT_METRICS: { value: StatMetric; label: string }[] = [
@@ -137,14 +138,11 @@ export function AddWidgetDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-y-auto rounded-xl border border-ink/15 bg-white p-5 shadow-lg">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <h2 className="section-title text-ink">{editing ? "Edit widget" : "Add a widget"}</h2>
-          <button type="button" onClick={onClose} className="text-ink/50 hover:text-ink" aria-label="Close">
-            ✕
-          </button>
-        </div>
+    <Dialog
+      title={editing ? "Edit widget" : "Add a widget"}
+      onClose={onClose}
+      className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-y-auto rounded-xl border border-ink/15 bg-white p-5 shadow-lg"
+    >
 
         <div className="flex flex-col gap-4">
           <label className="flex flex-col gap-1 text-xs">
@@ -332,7 +330,6 @@ export function AddWidgetDialog({
             {saving ? "Saving…" : editing ? "Save changes" : "Add to dashboard"}
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

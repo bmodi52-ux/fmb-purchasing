@@ -309,14 +309,14 @@ export function ColumnsDataTable<T extends { id: string }>({
           <table className="min-w-full text-sm">
             <thead>
               <tr className="text-left text-ink/60">
-                <th className="p-2">
+                <th scope="col" className="p-2">
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} aria-label="Select all" />
                 </th>
-                {renderExpanded && <th className="p-2" />}
+                {renderExpanded && <th scope="col" className="p-2" />}
                 {visibleColumns.map((c) => {
                   const sorted = sort?.key === c.key ? sort.direction : null;
                   return (
-                    <th key={c.key} className="p-0">
+                    <th scope="col" key={c.key} className="p-0">
                       <button
                         type="button"
                         onClick={() => toggleSort(c.key)}
@@ -334,10 +334,10 @@ export function ColumnsDataTable<T extends { id: string }>({
               </tr>
               {showColumnFilters && (
                 <tr className="text-left">
-                  <th className="p-1" />
-                  {renderExpanded && <th className="p-1" />}
+                  <th scope="col" className="p-1" />
+                  {renderExpanded && <th scope="col" className="p-1" />}
                   {visibleColumns.map((c) => (
-                    <th key={c.key} className="p-1">
+                    <th scope="col" key={c.key} className="p-1">
                       <input
                         value={columnFilters[c.key] ?? ""}
                         onChange={(e) => setColumnFilter(c.key, e.target.value)}

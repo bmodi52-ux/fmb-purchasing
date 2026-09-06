@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { Dialog } from "@/components/dialog";
 import { AddItemForm } from "./add-item-form";
 
 type Vendor = { id: string; name: string; vendor_number: string | null };
@@ -18,15 +19,6 @@ export function AddItemModal({
 }) {
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
   return (
     <>
       <button
@@ -37,34 +29,17 @@ export function AddItemModal({
         + Add item
       </button>
 
+      {/* Escape, the backdrop, focus trapping and focus restore all live in
+          Dialog — this used to handle only the first of those. */}
       {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 p-4 py-10"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            className="w-full max-w-xl rounded-lg border border-ink/10 bg-cream p-6 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="section-title text-ink">Add item</h2>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close"
-                className="text-ink/40 hover:text-ink"
-              >
-                ×
-              </button>
-            </div>
-            <AddItemForm
-              vendors={vendors}
-              categories={categories}
-              units={units}
-              onSuccess={() => setOpen(false)}
-            />
-          </div>
-        </div>
+        <Dialog title="Add item" align="start" onClose={() => setOpen(false)}>
+          <AddItemForm
+            vendors={vendors}
+            categories={categories}
+            units={units}
+            onSuccess={() => setOpen(false)}
+          />
+        </Dialog>
       )}
     </>
   );

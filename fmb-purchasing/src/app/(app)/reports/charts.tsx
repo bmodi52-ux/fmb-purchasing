@@ -176,6 +176,29 @@ export function StatTile({
 /* Columns — magnitude over a time axis                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * What a chart says, for someone who cannot see it.
+ *
+ * Every chart in this file carried role="img" and no accessible name, which
+ * announces as an unlabelled graphic — the screen-reader equivalent of a blank
+ * rectangle. A chart cannot be described exhaustively in a label, so these say
+ * the shape of the data and its extremes, which is what a sighted reader takes
+ * from a glance, and leave the detail to the table or legend beside it.
+ */
+function chartSummary(
+  kind: string,
+  points: { label: string; value: number }[],
+  format: (n: number) => string
+): string {
+  if (points.length === 0) return `${kind}, no data`;
+  const top = points.reduce((a, b) => (b.value > a.value ? b : a));
+  const total = points.reduce((sum, p) => sum + p.value, 0);
+  return (
+    `${kind}, ${points.length} ${points.length === 1 ? "value" : "values"}. ` +
+    `Highest ${top.label}, ${format(top.value)}. Total ${format(total)}.`
+  );
+}
+
 export type ColumnDatum = { key: string; label: string; value: number; count?: number };
 
 /**
@@ -187,11 +210,14 @@ export function ColumnChart({
   height = 200,
   valueFormat = formatCompact,
   emptyLabel = "No spend in this period.",
+  label,
 }: {
   data: ColumnDatum[];
   height?: number;
   valueFormat?: (n: number) => string;
   emptyLabel?: string;
+  /** Overrides the generated description when the caller knows better. */
+  label?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
 
@@ -214,7 +240,13 @@ export function ColumnChart({
 
   return (
     <div className="relative">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ height }} role="img">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full"
+        style={{ height }}
+        role="img"
+        aria-label={label ?? chartSummary("Column chart of spend", data, valueFormat)}
+      >
         <g transform={`translate(${pad.left},${pad.top})`}>
           {[0, 0.5, 1].map((t) => (
             <line key={t} x1={0} x2={plotW} y1={plotH * t} y2={plotH * t} stroke={GRID} strokeWidth={1} />
@@ -297,12 +329,14 @@ export function StackedColumnChart({
   height = 220,
   valueFormat = formatMoney,
   emptyLabel = "No spend in this period.",
+  label,
 }: {
   months: { key: string; label: string }[];
   series: StackedColumnSeries[];
   height?: number;
   valueFormat?: (n: number) => string;
   emptyLabel?: string;
+  label?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
 
@@ -323,7 +357,23 @@ export function StackedColumnChart({
 
   return (
     <div className="relative">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ height }} role="img">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full"
+        style={{ height }}
+        role="img"
+        aria-label={
+          label ??
+          // Described by month total rather than by series: the stack answers
+          // "how much, when" first, and the legend beside it already names the
+          // series with their own totals.
+          chartSummary(
+            `Stacked column chart of spend by ${series.length} ${series.length === 1 ? "item" : "items"}`,
+            months.map((m, i) => ({ label: m.label, value: columnTotals[i] ?? 0 })),
+            valueFormat
+          )
+        }
+      >
         <g transform={`translate(${pad.left},${pad.top})`}>
           {[0, 0.5, 1].map((t) => (
             <line key={t} x1={0} x2={plotW} y1={plotH * t} y2={plotH * t} stroke={GRID} strokeWidth={1} />
@@ -594,12 +644,14 @@ export function LineChart({
   height = 200,
   xLabel,
   valueFormat = (v: number) => v.toFixed(2),
+  label,
 }: {
   series: LineSeriesData[];
   area?: boolean;
   height?: number;
   xLabel?: (x: string) => string;
   valueFormat?: (v: number) => string;
+  label?: string;
 }) {
   const width = 600;
   const padding = { top: 10, right: 10, bottom: xLabel ? 22 : 6, left: 10 };
@@ -648,7 +700,23 @@ export function LineChart({
 
   return (
     <div className="relative">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ height }}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full"
+        style={{ height }}
+        role="img"
+        aria-label={
+          label ??
+          chartSummary(
+            `Line chart, ${series.length} ${series.length === 1 ? "series" : "series"}`,
+            series.map((s) => ({
+              label: s.name,
+              value: s.points.reduce((sum, p) => sum + p.y, 0),
+            })),
+            valueFormat
+          )
+        }
+      >
         <g transform={`translate(${padding.left},${padding.top})`}>
           {[0, 0.5, 1].map((t) => (
             <line key={t} x1={0} x2={plotW} y1={plotH * (1 - t)} y2={plotH * (1 - t)} stroke={GRID} strokeWidth={1} />

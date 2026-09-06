@@ -1,0 +1,71 @@
+# Runs on every pull request and every push to main.
+#
+# The repository already had 123 passing tests, a Postgres-backed integration
+# suite and a pull-request workflow — and nothing that ran any of it. A test
+# suite nobody runs is a test suite that quietly stops passing.
+#
+# Three jobs rather than one, so a failure names itself in the checks list:
+# "types" reads differently from "tests" when you are looking at a red PR from
+# a phone. They are independent, so they run in parallel.
+#
+# The app lives in a subdirectory of the repository, hence working-directory.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push to the same PR makes the first run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: fmb-purchasing
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: fmb-purchasing/package-lock.json
+      - run: npm ci
+      - run: npx eslint .
+
+  types:
+    name: Types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: fmb-purchasing/package-lock.json
+      - run: npm ci
+      # noEmit: tsconfig sets it, and nothing here needs the output. This is
+      # the check that catches what ESLint cannot.
+      - run: npx tsc --noEmit
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: fmb-purchasing/package-lock.json
+      - run: npm ci
+      # PGlite is Postgres compiled to WASM and runs in-process, so the
+      # migration and costing-view suites need no service container and no
+      # database credentials here.
+      - run: npm test

@@ -1,0 +1,63 @@
+{
+  "_readme": [
+    "Known-correct values for receipts in the FMB Receipts folder, keyed by filename.",
+    "",
+    "Partial by design: only the fields listed for a file are scored, so an entry can",
+    "state the three things someone has actually verified without having to assert a",
+    "full line-item breakdown. Add fields as they are confirmed against the paper.",
+    "",
+    "Entries below were read off the receipts themselves. Files whose contents could not",
+    "be identified from the filename alone are absent; for those the harness falls back to",
+    "reporting where the models disagree, which is where a person should look first.",
+    "",
+    "Fields understood: vendor (substring match, case-insensitive), abn (digits only),",
+    "invoiceNumber, date (YYYY-MM-DD), subtotal, gstAmount, total, lineCount,",
+    "payeeName (substring match), notes (free text, never scored)."
+  ],
+
+  "Fresh_Poultry_Invoice.pdf": {
+    "vendor": "Fresh Poultry",
+    "abn": "65620358429",
+    "gstAmount": 0,
+    "notes": "CORRECTED — this entry was wrong, not the models. It originally asserted total 975.00 and invoice 433964 from the one invoice that had been read by eye. Both models independently returned 1845.00, and Sonnet reported the date as '11/07/2026 and 16/07/2026' — the PDF holds TWO invoices, and 975.00 is only the second. Total, date and invoiceNumber are now unset until someone opens the file and confirms both. Kept as a reminder that a ground-truth file is an assertion by a person and can be the thing that is wrong."
+  },
+
+  "Foodworks_Invoice_02_07.pdf": {
+    "vendor": "Foodworks",
+    "abn": "37129853041",
+    "date": "2026-07-02",
+    "gstAmount": 0,
+    "total": 1164.54,
+    "lineCount": 1,
+    "notes": "THE CUT-2 TEST CASE. Foodworks Guildford, one line reading OPEN FRESH MEAT $1164.54, a subtotal and no GST line at all. The previous prompt's fallback ('no GST signal -> assume inclusive, total/11') invented $105.87 of GST here that does not exist. Correct answer is zero: this is fresh meat."
+  },
+
+  "Ashara_Sehori_-_Please_pay_Miqdad_Bhai_for_Fresh_Produce.pdf": {
+    "vendor": "Fruit",
+    "abn": "94637765050",
+    "invoiceNumber": "27099",
+    "date": "2026-06-27",
+    "gstAmount": 0,
+    "total": 720.0,
+    "lineCount": 1,
+    "payeeName": "Miqdad",
+    "notes": "Bankstown Lebanese Fruit & Mixed Business / Fruit Central. Line reads only 'GROCERY ITEM 12 x $60.00'. Covering email says to pay Miqdad Bhai — payeeName is the covering-email test."
+  },
+
+  "New_Vendor_Meat_Invoice_26_05.pdf": {
+    "vendor": "Hilal Butcher",
+    "abn": "70677876612",
+    "gstAmount": 0,
+    "total": 1600.0,
+    "lineCount": 1,
+    "payeeName": "Ali Abbas Amir",
+    "notes": "No receipt at all — the invoice exists only as text inside a forwarded email: '100 kg Lamb Leg @ $16/kg, Amount $1600.00'. Also carries reimbursement details (NAB, BSB 082112, ACC 971464641), so this exercises both covering-email extraction and the payee bank fields."
+  },
+
+  "Khamiri_roti.pdf": {
+    "gstAmount": 0,
+    "total": 162.0,
+    "payeeName": "Huzaif",
+    "notes": "'Paid $162 for khamiri rotis for thali to b paid to my account thanks / No reciept'. No vendor, no ABN, no invoice number — the model should return nulls rather than inventing them. Plain bread is GST-free."
+  }
+}

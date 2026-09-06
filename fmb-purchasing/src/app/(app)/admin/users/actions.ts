@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { generateTemporaryPassword, normalizeEmail, isValidEmail } from "@/lib/auth/password";
 import { sendWelcomeEmail, sendTemporaryPasswordEmail } from "@/lib/auth/emails";
+import { userIdsWithPermission } from "@/lib/notifications-inapp";
 
 /**
  * A temporary password exists in exactly two places: the email that carries
@@ -132,21 +133,53 @@ export async function adminResetPassword(
   };
 }
 
+/**
+ * Deactivating these people would leave nobody able to administer accounts.
+ *
+ * Nothing prevented that: an admin could disable themselves, or the last
+ * remaining holder of manage_users, and the only route back would be the
+ * Supabase dashboard. Returns the subset of `userIds` that must stay active.
+ */
+async function wouldStrandUserAdmin(
+  admin: ReturnType<typeof createAdminClient>,
+  userIds: string[]
+): Promise<string[]> {
+  const adminIds = await userIdsWithPermission(admin, "admin_users", "manage_users");
+  const remaining = adminIds.filter((id) => !userIds.includes(id));
+  return remaining.length > 0 ? [] : adminIds.filter((id) => userIds.includes(id));
+}
+
+/**
+ * Turns accounts on or off.
+ *
+ * Takes the state to apply, not the state to flip. The old pair took opposite
+ * things under near-identical names — setUserActive received the *current*
+ * value and inverted it, bulkSetUserActive received the *desired* value — which
+ * is the sort of thing a future caller gets wrong exactly once, silently, on
+ * the action that locks people out of the system.
+ */
+async function applyActive(userIds: string[], active: boolean): Promise<void> {
+  if (userIds.length === 0) return;
+  const admin = createAdminClient();
+
+  const protectedIds = active ? [] : await wouldStrandUserAdmin(admin, userIds);
+  const toChange = userIds.filter((id) => !protectedIds.includes(id));
+  if (toChange.length === 0) return;
+
+  await admin.from("profiles").update({ is_active: active }).in("id", toChange);
+  revalidatePath("/admin/users");
+}
+
 export async function setUserActive(formData: FormData) {
   await requireUsersAdmin();
   const userId = String(formData.get("user_id"));
+  // The form posts what the account should become, so this reads the same way
+  // as the bulk call and as the button the person clicked.
   const active = String(formData.get("active")) === "true";
-
-  const admin = createAdminClient();
-  await admin.from("profiles").update({ is_active: !active }).eq("id", userId);
-  revalidatePath("/admin/users");
+  if (userId) await applyActive([userId], active);
 }
 
 export async function bulkSetUserActive(userIds: string[], active: boolean) {
   await requireUsersAdmin();
-  if (userIds.length === 0) return;
-
-  const admin = createAdminClient();
-  await admin.from("profiles").update({ is_active: active }).in("id", userIds);
-  revalidatePath("/admin/users");
+  await applyActive(userIds, active);
 }
