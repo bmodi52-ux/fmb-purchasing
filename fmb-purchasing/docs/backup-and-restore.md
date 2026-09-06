@@ -54,6 +54,10 @@ no realistic retention covers that — see *Reconstructing from the audit trail*
    deployment back to the commit that matches.
 4. Re-enable writes.
 5. **Check storage.** See below.
+6. **Refresh the Reports cache.** Admin -> System errors -> "Refresh Reports data".
+   Reports reads a cached copy of the ledger that only in-app writes invalidate,
+   so after a restore it will otherwise report the figures from before it for
+   up to an hour.
 
 ## Restoring receipt files
 

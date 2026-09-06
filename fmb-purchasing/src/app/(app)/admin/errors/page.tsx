@@ -5,7 +5,7 @@ import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateTime } from "@/lib/format";
 import { SubmitButton } from "@/components/submit-button";
-import { resolveError, resolveAllErrors } from "./actions";
+import { resolveError, resolveAllErrors, refreshReportData } from "./actions";
 
 const RESOLVED_SHOWN = 20;
 
@@ -65,6 +65,29 @@ export default async function ErrorsPage() {
           the same fault are counted on one line rather than listed separately.
         </p>
       </div>
+
+      {/* Not an error, but it belongs on the page an admin reaches when
+          something looks wrong — and it is deliberately not somewhere a reader
+          would find it, since each refresh re-reads the whole ledger. */}
+      <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-ink/10 bg-white/60 px-4 py-3">
+        <div className="max-w-xl">
+          <h2 className="text-sm font-medium text-ink">Reports figures look stale?</h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink/60">
+            Reports reads a cached copy of the ledger. Anything done through the app updates it
+            immediately; a change made <em>outside</em> the app — the reset script, an edit in the
+            Supabase dashboard, a restored backup — does not, and the figures stay as they were for
+            up to an hour. This reads them again now.
+          </p>
+        </div>
+        <form action={refreshReportData}>
+          <SubmitButton
+            pendingLabel="Refreshing…"
+            className="whitespace-nowrap rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30"
+          >
+            Refresh Reports data
+          </SubmitButton>
+        </form>
+      </section>
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-4">

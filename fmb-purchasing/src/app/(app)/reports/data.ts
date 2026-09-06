@@ -18,6 +18,17 @@ export type ReportRawData = {
   allLines: LineRecord[];
   paidCosts: PaidCostRow[];
   fyOf: Map<string, number>;
+  /**
+   * When these figures were actually read out of the database.
+   *
+   * Reported so the page can say how fresh it is. Every write through the
+   * app revalidates this cache, so in normal use it is seconds old — but a
+   * change made outside the app (a maintenance script, an edit in the
+   * Supabase dashboard) does not, and the figures then stay wrong for up to
+   * an hour with nothing on screen to suggest it. Money that is confidently
+   * wrong is worse than money that is visibly old.
+   */
+  computedAt: string;
 };
 
 /** {@link ReportRawData} with `fyOf` flattened to entry pairs so it can be cached. */
@@ -58,8 +69,8 @@ export function revalidateReports(): void {
  */
 export async function loadReportRawData(fiscalYears: number[]): Promise<ReportRawData> {
   const years = [...new Set(fiscalYears)].sort((a, b) => a - b);
-  const { allExpenses, allLines, paidCosts, fyPairs } = await loadCachedReportRows(years);
-  return { allExpenses, allLines, paidCosts, fyOf: new Map(fyPairs) };
+  const { allExpenses, allLines, paidCosts, fyPairs, computedAt } = await loadCachedReportRows(years);
+  return { allExpenses, allLines, paidCosts, computedAt, fyOf: new Map(fyPairs) };
 }
 
 /**
@@ -151,6 +162,7 @@ const loadCachedReportRows = unstable_cache(
       allLines,
       paidCosts: (paidCosts ?? []) as PaidCostRow[],
       fyPairs,
+      computedAt: new Date().toISOString(),
     };
   },
   ["report-raw-data"],

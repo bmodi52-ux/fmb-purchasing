@@ -117,6 +117,9 @@ export function AddWidgetDialog({
         allLines: preview.lines,
         paidCosts: preview.paidCosts,
         fyOf: new Map(preview.expenses.map((e) => [e.id, fy])),
+        // Built here from a live preview fetch, so it is current by
+        // construction rather than read from the shared cache.
+        computedAt: new Date().toISOString(),
       }
     : null;
 

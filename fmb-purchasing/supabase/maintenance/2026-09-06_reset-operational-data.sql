@@ -26,6 +26,12 @@
 -- Receipt files in the `receipts` storage bucket are NOT touched by this
 -- script — storage is not in the database. Run scripts/cleanup-data.mjs
 -- to empty the bucket, or every uploaded receipt is left orphaned.
+--
+-- AFTERWARDS: open Admin -> System errors and press "Refresh Reports data".
+-- Reports serves a cached copy of the ledger that only in-app writes
+-- invalidate, so until then it keeps showing the figures from before this ran
+-- — for up to an hour, with nothing on screen to say the numbers are old
+-- rather than wrong.
 
 begin;
 
