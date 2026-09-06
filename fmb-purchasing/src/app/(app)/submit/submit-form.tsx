@@ -22,7 +22,8 @@ import {
   type DuplicateWarning,
   type ResolvedVendor,
 } from "./actions";
-import type { ExtractedReceipt, StoredLineKind } from "@/lib/receipt-extraction";
+import type { ExtractedReceipt } from "@/lib/receipt-extraction";
+import type { StoredLineKind } from "@/lib/line-kinds";
 import type { PayeeChoice } from "@/lib/payees";
 import { VendorLookupFields } from "./vendor-lookup-fields";
 import { ItemLookupCells } from "./item-lookup-cells";

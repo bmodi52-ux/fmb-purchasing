@@ -8,7 +8,8 @@ import {
   round2,
   type MoneyLine,
 } from "@/lib/expense-money";
-import type { StoredLineKind } from "@/lib/receipt-extraction";
+import { SUBSTANTIVE_KINDS } from "@/lib/line-kinds";
+import type { StoredLineKind } from "@/lib/line-kinds";
 
 const money = (n: number) =>
   n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
@@ -73,8 +74,11 @@ export function ReconciliationStrip({
   /** How many lines the app added itself, so the copy can say so. */
   autoAddedCount?: number;
 }) {
-  const goods = lines.filter((l) => l.kind === "goods");
-  const charges = lines.filter((l) => l.kind !== "goods");
+  // Services sit with goods, not with charges. Reading "Charges and discounts
+  // ×1 · $450.00" on a cleaning invoice would suggest the app had misread the
+  // whole thing.
+  const purchases = lines.filter((l) => (SUBSTANTIVE_KINDS as readonly string[]).includes(l.kind));
+  const charges = lines.filter((l) => !(SUBSTANTIVE_KINDS as readonly string[]).includes(l.kind));
   const balance = reconcile(lines, receiptTotal);
   const computedGst = sumLineGst(lines);
   const gstGap = printedGst == null ? null : round2(printedGst - computedGst);
@@ -83,7 +87,7 @@ export function ReconciliationStrip({
   return (
     <div className="mt-6 rounded-lg border border-ink/15 bg-white/70 p-4">
       <div className="flex flex-col gap-1.5 font-mono text-sm">
-        <Row label="Line items" value={sumLines(goods)} count={goods.length} />
+        <Row label="Line items" value={sumLines(purchases)} count={purchases.length} />
         {charges.length > 0 && (
           <Row label="Charges and discounts" value={sumLines(charges)} count={charges.length} />
         )}

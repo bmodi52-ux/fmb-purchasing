@@ -2,43 +2,19 @@ import Anthropic from "@anthropic-ai/sdk";
 import { isEmail, parseEmailReceipt } from "@/lib/email-receipt";
 
 /**
- * What a line represents. Only `goods` carries a unit cost and belongs in
- * price analytics; `service` is real spend with nothing to cost per unit; the
- * rest exist so that the lines add up to the total printed on the receipt.
- * Mirrors the `line_item_kind` enum in migrations 0026 and 0035 — keep them in
- * step.
- */
-export const LINE_KINDS = [
-  "goods",
-  "service",
-  "surcharge",
-  "delivery",
-  "discount",
-  "rounding",
-  "deposit",
-] as const;
-
-export type LineKind = (typeof LINE_KINDS)[number];
-
-/**
- * Lines that are something the organisation actually bought, as opposed to
- * charges bolted onto the purchase.
+ * The line kinds live in their own leaf module, and are re-exported here so
+ * existing imports keep working.
  *
- * The distinction decides whether an unexplained gap in a receipt can
- * plausibly be a fee — see residualFor. Adding services to it matters: a
- * cleaning invoice with a card surcharge has no goods on it at all, and
- * without this its surcharge would be booked as "not itemised" and sent to
- * the review queue for a person to look at.
+ * They cannot be declared in this file: client components need them as
+ * values, and importing a value from here drags the Anthropic client and the
+ * MIME parser into the browser bundle. A type import was always free; the
+ * first value import was not, and cost 160KB before anyone noticed.
  */
-export const SUBSTANTIVE_KINDS: readonly LineKind[] = ["goods", "service"];
+import { LINE_KINDS, SUBSTANTIVE_KINDS } from "@/lib/line-kinds";
+import type { LineKind, StoredLineKind } from "@/lib/line-kinds";
 
-/**
- * Every kind a stored line can have. `unallocated` is deliberately absent from
- * the enum offered to the model: it is not something a receipt says, it is what
- * the app records when the lines it read do not account for the total and the
- * shortfall is too large to be a charge — see residualFor in expense-money.
- */
-export type StoredLineKind = LineKind | "unallocated";
+export { LINE_KINDS, SUBSTANTIVE_KINDS };
+export type { LineKind, StoredLineKind };
 
 export type ExtractedLineItem = {
   description: string;

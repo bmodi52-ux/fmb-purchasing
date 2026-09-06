@@ -1,5 +1,8 @@
-import { SUBSTANTIVE_KINDS } from "@/lib/receipt-extraction";
-import type { LineKind, StoredLineKind } from "@/lib/receipt-extraction";
+// From the leaf module, not receipt-extraction: this file is reached by client
+// components, and a value imported from there pulls the Anthropic client and
+// the MIME parser into the browser bundle.
+import { SUBSTANTIVE_KINDS } from "@/lib/line-kinds";
+import type { LineKind, StoredLineKind } from "@/lib/line-kinds";
 
 /**
  * The arithmetic that decides what an expense is worth, and whether it adds
