@@ -20,9 +20,10 @@ export type SignedAttachment = {
  * per-request Supabase round-trip storm fixed earlier for getCurrentUser and
  * getUserPermissions.
  *
- * Reads expense_attachments (0028), falling back to the deprecated
- * expenses.receipt_file_path for anything recorded before it. Both are live
- * until every reader has moved and the column can be dropped.
+ * expense_attachments is the only source since migration 0033 dropped
+ * expenses.receipt_file_path. Everything that column held was carried across
+ * before it went — twice, once in 0028 and again in 0033 for anything written
+ * in between.
  */
 export async function getExpenseAttachments(expenseId: string): Promise<SignedAttachment[]> {
   const user = await getCurrentUser();
@@ -31,35 +32,20 @@ export async function getExpenseAttachments(expenseId: string): Promise<SignedAt
   const admin = createAdminClient();
   const { data: expense } = await admin
     .from("expenses")
-    .select("submitted_by, receipt_file_path")
+    .select("submitted_by")
     .eq("id", expenseId)
     .maybeSingle();
   if (!expense) return [];
 
   if (!(await canViewExpense(user, expense.submitted_by))) return [];
 
-  const { data: rows } = await admin
+  const { data: files } = await admin
     .from("expense_attachments")
     .select("storage_path, file_name, content_type")
     .eq("expense_id", expenseId)
     .order("sort_order");
 
-  const files =
-    rows && rows.length > 0
-      ? rows
-      : expense.receipt_file_path
-        ? [
-            {
-              storage_path: expense.receipt_file_path as string,
-              file_name: "Receipt",
-              content_type: expense.receipt_file_path.toLowerCase().endsWith(".pdf")
-                ? "application/pdf"
-                : "image/jpeg",
-            },
-          ]
-        : [];
-
-  if (files.length === 0) return [];
+  if (!files || files.length === 0) return [];
 
   // One call for all of them, rather than one round trip per file.
   const { data: signed } = await admin.storage

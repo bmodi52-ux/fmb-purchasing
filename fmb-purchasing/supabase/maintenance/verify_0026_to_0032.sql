@@ -46,21 +46,23 @@ begin
   if n < 3 then raise exception 'MISSING FUNCTIONS: expected 3, found %', n; end if;
   raise notice 'functions         OK  (atomic expense write present)';
 
-  -- The deprecated column the app still reads
+  -- The deprecated column.
+  --
+  -- When this file was written it had to still exist, because seven readers
+  -- named it in strings no type checker sees. Migration 0033 moved the last of
+  -- those readers and dropped it, so both states are now correct and which one
+  -- you see simply says how far the database has come. Verified by
+  -- verify_0033.sql, not here.
   select count(*) into n from information_schema.columns
   where table_name = 'expenses' and column_name = 'receipt_file_path';
-  if n <> 1 then
-    raise exception 'receipt_file_path is GONE — seven readers still depend on it';
+  if n = 1 then
+    raise notice 'receipt_file_path present  (0033 not applied yet)';
+  else
+    raise notice 'receipt_file_path dropped  (0033 applied)';
   end if;
-  raise notice 'receipt_file_path OK  (kept, deprecated as intended)';
 
-  -- Existing receipts carried into the new table
-  select count(*) into n from expenses where receipt_file_path is not null;
-  raise notice 'backfill          %  legacy receipt(s) to carry across', n;
-  if n > 0 then
-    select count(*) into n from expense_attachments;
-    raise notice 'backfill          %  row(s) now in expense_attachments', n;
-  end if;
+  select count(*) into n from expense_attachments;
+  raise notice 'attachments       %  row(s)', n;
 
   -- New pages, and whether anyone can actually see them
   select count(*) into n from app_pages where key in ('review_queue', 'budgets');

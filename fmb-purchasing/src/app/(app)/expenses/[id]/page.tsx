@@ -60,7 +60,7 @@ export default async function ExpenseDetailPage({
   const { data: expense } = await admin
     .from("expenses")
     .select(
-      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, created_at"
+      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, created_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -218,7 +218,7 @@ export default async function ExpenseDetailPage({
             </Field>
           </dl>
 
-          {((attachmentCount ?? 0) > 0 || expense.receipt_file_path) && (
+          {(attachmentCount ?? 0) > 0 && (
             <ReceiptViewer expenseId={expense.id} label="View receipt" />
           )}
         </div>

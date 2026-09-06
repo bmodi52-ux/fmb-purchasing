@@ -49,7 +49,7 @@ export default async function AllExpensesPage({
   let query = admin
     .from("expenses")
     .select(
-      "id, expense_number, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, receipt_file_path, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at",
+      "id, expense_number, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at",
       { count: "exact" }
     )
     .order("created_at", { ascending: false });
@@ -91,7 +91,7 @@ export default async function AllExpensesPage({
     status: e.status,
     invoice_number: e.invoice_number,
     receipt_date: e.receipt_date,
-    hasReceipt: withFiles.has(e.id) || e.receipt_file_path != null,
+    hasReceipt: withFiles.has(e.id),
     subtotal: e.subtotal,
     gst_amount: e.gst_amount,
     total: e.total,

@@ -28,7 +28,7 @@ export default async function MySubmissionsPage() {
   const { data: expenses, count } = await admin
     .from("expenses")
     .select(
-      "id, expense_number, vendor_name_raw, invoice_number, total, status, submitter_comment, decision_comment, decided_at, payment_reference, payment_date, created_at, receipt_file_path",
+      "id, expense_number, vendor_name_raw, invoice_number, total, status, submitter_comment, decision_comment, decided_at, payment_reference, payment_date, created_at",
       { count: "exact" }
     )
     .eq("submitted_by", user.id)
@@ -38,7 +38,7 @@ export default async function MySubmissionsPage() {
   // One query for the whole page rather than one per row: the list only
   // needs to know whether to offer a link.
   const withFiles = await expenseIdsWithAttachments(admin, (expenses ?? []).map((e) => e.id));
-  const rows = (expenses ?? []).map((e) => ({ ...e, hasReceipt: withFiles.has(e.id) || e.receipt_file_path != null }));
+  const rows = (expenses ?? []).map((e) => ({ ...e, hasReceipt: withFiles.has(e.id) }));
 
   return (
     <div className="flex flex-col gap-6">
