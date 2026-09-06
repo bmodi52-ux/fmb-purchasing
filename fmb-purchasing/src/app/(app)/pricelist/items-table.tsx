@@ -59,7 +59,13 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
     {
       key: "item_number",
       label: "Item #",
-      render: (r) => <span className="font-mono text-ink/60">{r.itemNumber ?? "—"}</span>,
+      // Followable, like Entry # on Expenses and Vendor # on Vendors. Item
+      // numbers get written on order sheets and read back here.
+      render: (r) => (
+        <Link href={`/pricelist/${r.itemId}`} className="font-mono text-ink underline">
+          {r.itemNumber ?? "View"}
+        </Link>
+      ),
       exportValue: (r) => r.itemNumber ?? "",
     },
     {

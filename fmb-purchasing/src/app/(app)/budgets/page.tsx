@@ -10,6 +10,8 @@ import { loadReportRawData } from "../reports/data";
 import { setCategoryBudget, copyBudgetsFromPreviousYear } from "./actions";
 import { BudgetInput } from "./budget-input";
 
+export const metadata = { title: "Budgets" };
+
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
 /**

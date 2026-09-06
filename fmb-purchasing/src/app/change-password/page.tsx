@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { signOut } from "@/app/login/actions";
 import { ChangePasswordForm } from "./change-password-form";
 
+export const metadata = { title: "Change password" };
+
 /**
  * Deliberately outside the (app) route group: that layout redirects here
  * while must_change_password is set, so this page must not be behind it.

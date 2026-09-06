@@ -23,6 +23,8 @@ import {
   type CompareDimension,
 } from "./report-filters";
 
+export const metadata = { title: "Reports" };
+
 export default async function ReportsPage({
   searchParams,
 }: {

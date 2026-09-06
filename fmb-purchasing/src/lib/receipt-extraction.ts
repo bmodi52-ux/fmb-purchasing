@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { isEmail, parseEmailReceipt } from "@/lib/email-receipt";
 
 /**
  * What a line represents. Only `goods` carries a unit cost and belongs in
@@ -371,6 +372,55 @@ export async function extractReceipt(
 }
 
 /**
+ * What the model is shown, which depends on what was uploaded.
+ *
+ * There used to be two shapes — a PDF document block or an image block — and a
+ * saved email is neither. An .eml has to be taken apart first: its body is
+ * text, and each attachment is its own image or document block. That ordering
+ * is deliberate, message before attachments, because the covering message is
+ * what explains the attachments ("pay Taj Mart directly as per attached
+ * invoices"), and occasionally is the whole receipt when nothing is attached
+ * at all.
+ */
+async function buildContent(
+  fileBase64: string,
+  mediaType: string
+): Promise<Anthropic.ContentBlockParam[]> {
+  if (isEmail(mediaType)) {
+    const email = await parseEmailReceipt(Buffer.from(fileBase64, "base64"));
+    return [
+      {
+        type: "text",
+        text: `This upload is a saved email. Its message follows, then any attachments.\n\n${email.text}`,
+      },
+      ...email.documents.map(documentBlock),
+      { type: "text", text: "Extract this receipt." },
+    ];
+  }
+
+  return [
+    documentBlock({ mediaType, base64: fileBase64 }),
+    { type: "text", text: "Extract this receipt." },
+  ];
+}
+
+function documentBlock(file: { mediaType: string; base64: string }): Anthropic.ContentBlockParam {
+  return file.mediaType === "application/pdf"
+    ? {
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: file.base64 },
+      }
+    : {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: file.mediaType as "image/jpeg" | "image/png" | "image/webp",
+          data: file.base64,
+        },
+      };
+}
+
+/**
  * The extraction call, with everything the harness needs to score and cost it.
  * The app itself only wants the receipt, and uses {@link extractReceipt}.
  */
@@ -383,17 +433,7 @@ export async function extractReceiptDetailed(
   const model = options?.model ?? MODEL;
   const effort = options?.effort ?? EFFORT;
   const startedAt = Date.now();
-  const isPdf = mediaType === "application/pdf";
-  const contentBlock: Anthropic.ContentBlockParam = isPdf
-    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: fileBase64 } }
-    : {
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: mediaType as "image/jpeg" | "image/png" | "image/webp",
-          data: fileBase64,
-        },
-      };
+  const content = await buildContent(fileBase64, mediaType);
 
   const response = await getClient().messages.create({
     model,
@@ -402,12 +442,7 @@ export async function extractReceiptDetailed(
     system: SYSTEM_PROMPT,
     tools: [buildTool(categoryNames)],
     tool_choice: { type: "tool", name: EXTRACT_TOOL_NAME },
-    messages: [
-      {
-        role: "user",
-        content: [contentBlock, { type: "text", text: "Extract this receipt." }],
-      },
-    ],
+    messages: [{ role: "user", content }],
   });
 
   // A truncated response can still carry a partial tool_use block, which would

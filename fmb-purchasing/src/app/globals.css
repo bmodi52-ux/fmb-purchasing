@@ -267,3 +267,68 @@ input[type="radio"] {
     opacity: 0.5;
   }
 }
+
+/* The loading state for a whole route. Deliberately almost empty: the moving
+   hairline says something is happening, and a page-shaped arrangement of grey
+   blocks turned out to read as breakage rather than progress. */
+.page-loading {
+  display: flex;
+  min-height: 40vh;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Held back so a fast page never flashes a word at you; only a wait long
+   enough to wonder about gets one. */
+.page-loading-label {
+  font-size: 0.875rem;
+  color: color-mix(in srgb, var(--color-ink) 45%, transparent);
+  opacity: 0;
+  animation: fmb-fade-in 200ms ease 450ms forwards;
+}
+
+@keyframes fmb-fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Inline sibling of the hairline, for a wait that belongs to one control
+   rather than to the page — reading a receipt, which takes ten to twenty
+   seconds and previously showed a line of static text. */
+.inline-progress {
+  position: relative;
+  display: block;
+  height: 2px;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 1px;
+  background-color: color-mix(in srgb, var(--color-ink) 8%, transparent);
+}
+
+.inline-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-gold) 45%,
+    var(--color-gold-deep) 55%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: fmb-progress 1.05s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-loading-label {
+    animation: none;
+    opacity: 1;
+  }
+  .inline-progress::after {
+    animation: none;
+    transform: none;
+    opacity: 0.5;
+  }
+}

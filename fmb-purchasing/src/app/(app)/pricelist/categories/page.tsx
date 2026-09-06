@@ -5,6 +5,8 @@ import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CategoriesManager, type ManagedCategory } from "../categories-manager";
 
+export const metadata = { title: "Categories" };
+
 /**
  * Its own page rather than a disclosure on the Pricelist: since 0024 a
  * category's code is the prefix on every item number filed under it, so this

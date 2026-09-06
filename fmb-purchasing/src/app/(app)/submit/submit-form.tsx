@@ -1,6 +1,7 @@
 "use client";
 
 import { SubmitButton } from "@/components/submit-button";
+import { useReportPending } from "@/components/pending";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -181,7 +182,14 @@ export function SubmitForm({
   const [mode, setMode] = useState<"start" | "review">(editExpense ? "review" : "start");
   const [preparing, setPreparing] = useState(false);
   const [sizeError, setSizeError] = useState<string | null>(null);
+  const [draggingOver, setDraggingOver] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentInput[]>(editExpense?.attachments ?? []);
+
+  // Reading a receipt is by far the longest wait here, and it was the one
+  // thing in the app that never reached the shared hairline — only navigations,
+  // submit buttons and table actions did. Now the same top-of-viewport cue
+  // appears for it as for everything else.
+  useReportPending(preparing || extracting);
 
   const [vendorName, setVendorName] = useState(editExpense?.vendorName ?? "");
   const [vendorNumber, setVendorNumber] = useState("");
@@ -346,11 +354,16 @@ export function SubmitForm({
   }, [editExpense, mode, vendorName, abn, invoiceNumber, receiptDate, total,
       printedGst, submitterComment, attachments, items, payee]);
 
-  async function handleReceiptChosen(e: React.ChangeEvent<HTMLInputElement>) {
-    const input = e.currentTarget;
-    const chosen = input.files?.[0];
-    if (!chosen) return;
-
+  /**
+   * Read a receipt, however it arrived.
+   *
+   * Takes a File rather than a change event so one path serves the file
+   * picker, a pasted screenshot and a dropped file. Plenty of receipts here
+   * are never photographed — they are screenshots or email attachments — and
+   * "save it somewhere, then find it again in a picker" was a detour around
+   * the clipboard the person was already holding it on.
+   */
+  async function readReceiptFile(chosen: File, onRejected?: () => void) {
     setSizeError(null);
     setPreparing(true);
     try {
@@ -367,7 +380,7 @@ export function SubmitForm({
           fileType: prepared.type,
           sizeBytes: prepared.size,
         }).catch(() => {});
-        input.value = "";
+        onRejected?.();
         return;
       }
 
@@ -382,6 +395,44 @@ export function SubmitForm({
       setPreparing(false);
     }
   }
+
+  async function handleReceiptChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
+    const chosen = input.files?.[0];
+    if (!chosen) return;
+    await readReceiptFile(chosen, () => {
+      input.value = "";
+    });
+  }
+
+  /**
+   * Paste a receipt straight onto the page.
+   *
+   * Bound to the document rather than to a focusable element, because there is
+   * nothing on this screen anyone would think to click first — the natural
+   * gesture is to arrive on Submit and press Ctrl+V. Only while the upload area
+   * is what is showing, so that pasting into a line item's description later
+   * cannot be mistaken for handing over a new receipt.
+   */
+  useEffect(() => {
+    if (mode !== "start" || preparing || extracting) return;
+
+    function onPaste(event: ClipboardEvent) {
+      // A screenshot arrives as an image item; a file copied out of a file
+      // manager or a mail client arrives as a file. Anything else — text,
+      // HTML — is somebody pasting into a field, and none of our business.
+      const file = Array.from(event.clipboardData?.items ?? [])
+        .find((i) => i.kind === "file")
+        ?.getAsFile();
+      if (!file) return;
+      event.preventDefault();
+      void readReceiptFile(file);
+    }
+
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, preparing, extracting]);
 
   function startManual() {
     setVendorName("");
@@ -406,7 +457,32 @@ export function SubmitForm({
     const busy = preparing || extracting;
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 rounded-lg border-2 border-dashed border-ink/20 bg-white/50 p-8 text-center">
+        <div
+          // The dashed border always promised a drop target; now it is one.
+          // dragover has to be cancelled or the browser navigates away to the
+          // dropped file instead, taking the half-filled form with it.
+          onDragOver={(e) => {
+            if (busy) return;
+            e.preventDefault();
+            setDraggingOver(true);
+          }}
+          onDragLeave={(e) => {
+            // Fires for every child the pointer crosses; only the crossing that
+            // actually leaves the zone should clear the highlight.
+            if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+            setDraggingOver(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDraggingOver(false);
+            if (busy) return;
+            const file = e.dataTransfer.files?.[0];
+            if (file) void readReceiptFile(file);
+          }}
+          className={`flex flex-col gap-3 rounded-lg border-2 border-dashed bg-white/50 p-8 text-center transition-colors ${
+            draggingOver ? "border-gold-deep bg-gold/10" : "border-ink/20"
+          }`}
+        >
           {/* The control is disabled while a request is in flight. It was not,
               which on a slow connection meant an impatient second tap ran the
               whole upload and the model call again. The chosen file is passed
@@ -414,16 +490,41 @@ export function SubmitForm({
           <label className={busy ? "cursor-progress opacity-60" : "cursor-pointer"}>
             <input
               type="file"
-              accept="image/*,application/pdf"
+              // .eml is listed by extension as well as by type: Windows often
+              // reports no MIME type for it at all, and an accept list it
+              // cannot match hides the file in the picker.
+              accept="image/*,application/pdf,message/rfc822,.eml"
               disabled={busy}
               className="hidden"
               onChange={handleReceiptChosen}
             />
             <span className="section-title text-ink">Upload or scan a receipt</span>
-            <p className="mt-1 text-sm text-ink/60">JPG, PNG, WebP, or PDF. Tap to choose a file.</p>
+            <p className="mt-1 text-sm text-ink/60">
+              Tap to choose a file, drag one here, or paste a screenshot.
+            </p>
+            <p className="mt-1 text-xs text-ink/45">
+              JPG, PNG, WebP, PDF, or a saved email (.eml).
+            </p>
           </label>
-          {preparing && <p className="font-mono text-sm text-ink/60">Preparing photo…</p>}
-          {extracting && <p className="font-mono text-sm text-ink/60">Reading receipt…</p>}
+          {/* Reading a receipt is the longest wait in the app — ten to twenty
+              seconds against the model — and it used to show one line of static
+              text, which after a few seconds is indistinguishable from a page
+              that has died. An indeterminate bar cannot claim progress it does
+              not know, but it can keep saying "still working", which is the
+              part that was missing. */}
+          {busy && (
+            <div className="flex flex-col gap-2" role="status" aria-live="polite">
+              <p className="font-mono text-sm text-ink/60">
+                {preparing ? "Preparing photo…" : "Reading receipt…"}
+              </p>
+              <span className="inline-progress" aria-hidden="true" />
+              {extracting && (
+                <p className="text-xs text-ink/45">
+                  Usually about ten seconds. You can leave this page open.
+                </p>
+              )}
+            </div>
+          )}
           {sizeError && !extracting && <p className="text-sm text-red-700">{sizeError}</p>}
           {extractState.error && !extracting && (
             <p className="text-sm text-red-700">{extractState.error}</p>
@@ -1001,7 +1102,7 @@ function Attachments({
         <input
           type="file"
           name="file"
-          accept="image/*,application/pdf"
+          accept="image/*,application/pdf,message/rfc822,.eml"
           disabled={uploading}
           className="min-w-0 max-w-full text-xs"
           // same downscale as the main upload — this path hits the identical

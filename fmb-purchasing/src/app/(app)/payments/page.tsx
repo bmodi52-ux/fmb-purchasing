@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { PaymentsTable, type PaymentRow } from "./payments-table";
 
+export const metadata = { title: "Payments" };
+
 export default async function PaymentsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");

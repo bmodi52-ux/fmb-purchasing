@@ -5,6 +5,8 @@ import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createTeam, addTeamMember, removeTeamMember, togglePermission } from "./actions";
 
+export const metadata = { title: "Teams & permissions" };
+
 export default async function TeamsAdminPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");

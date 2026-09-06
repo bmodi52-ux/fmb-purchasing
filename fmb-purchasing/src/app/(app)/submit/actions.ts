@@ -27,6 +27,7 @@ import {
 import {
   ACCEPTED_TYPES,
   expenseIdsWithFile,
+  receiptContentType,
   storeReceiptFile,
   type StoredFile,
 } from "@/lib/receipt-storage";
@@ -56,12 +57,18 @@ async function readUpload(
 ): Promise<{ file: File; bytes: Uint8Array } | { error: string }> {
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
-    return { error: "Choose a receipt photo or PDF first." };
+    return { error: "Choose a receipt photo, PDF or saved email first." };
   }
-  if (!ACCEPTED_TYPES.has(file.type)) {
-    return { error: "Only JPG, PNG, WebP, or PDF files are supported." };
+  // Windows reports no type at all for .eml when nothing is registered to open
+  // it, so the extension is consulted before the file is turned away.
+  const contentType = receiptContentType(file.name, file.type);
+  if (!ACCEPTED_TYPES.has(contentType)) {
+    return { error: "Only JPG, PNG, WebP, PDF, or .eml files are supported." };
   }
-  return { file, bytes: new Uint8Array(await file.arrayBuffer()) };
+  return {
+    file: contentType === file.type ? file : new File([file], file.name, { type: contentType }),
+    bytes: new Uint8Array(await file.arrayBuffer()),
+  };
 }
 
 export async function extractReceiptAction(

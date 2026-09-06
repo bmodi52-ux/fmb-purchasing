@@ -6,6 +6,8 @@ import { SubmitForm } from "./submit-form";
 import { getExpenseForEdit } from "./actions";
 import { leafCategories } from "@/lib/categories";
 
+export const metadata = { title: "Submit expense" };
+
 export default async function SubmitExpensePage({
   searchParams,
 }: {

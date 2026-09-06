@@ -20,7 +20,14 @@ function buildColumns(canApprove: boolean): ColumnDef<VendorRow>[] {
     {
       key: "vendor_number",
       label: "Vendor #",
-      render: (v) => <span className="font-mono text-ink/60">{v.vendor_number ?? "—"}</span>,
+      // The reference number exists to be followed; make it the way in, as
+      // Entry # already is on Expenses. Reading a vendor number off paperwork
+      // and then having to hunt for the name to click is the wrong way round.
+      render: (v) => (
+        <Link href={`/vendors/${v.id}`} className="font-mono text-ink underline">
+          {v.vendor_number ?? "View"}
+        </Link>
+      ),
       exportValue: (v) => v.vendor_number ?? "",
     },
     {

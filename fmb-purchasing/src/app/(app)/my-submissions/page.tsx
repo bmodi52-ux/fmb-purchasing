@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { SubmissionsList } from "./submissions-list";
 
+export const metadata = { title: "My submissions" };
+
 /**
  * How many of a person's own submissions to load.
  *

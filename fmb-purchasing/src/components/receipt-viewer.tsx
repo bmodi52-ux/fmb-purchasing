@@ -81,6 +81,12 @@ export function ReceiptViewer({ expenseId, label = "View receipt" }: { expenseId
 
   const current = files?.[active] ?? null;
   const isPdf = current ? /pdf/i.test(current.contentType) || /\.pdf(\?|$)/i.test(current.url) : false;
+  // A saved email has no rendering here — it would fall through to <img> and
+  // show a broken-image icon, which reads as a lost receipt rather than as a
+  // file this viewer cannot draw.
+  const isEmailFile = current
+    ? /rfc822/i.test(current.contentType) || /\.eml(\?|$)/i.test(current.url)
+    : false;
   const headingId = `receipt-title-${expenseId}`;
 
   return (
@@ -150,7 +156,17 @@ export function ReceiptViewer({ expenseId, label = "View receipt" }: { expenseId
               {loading && <p className="p-6 text-sm text-ink/50">Loading…</p>}
               {failed && <p className="p-6 text-sm text-maroon/70">Couldn&apos;t load this receipt.</p>}
               {current &&
-                (isPdf ? (
+                (isEmailFile ? (
+                  <div className="flex flex-col items-start gap-2 p-6 text-sm">
+                    <p className="text-ink/70">
+                      This receipt was submitted as a saved email. Its message and any
+                      attachments were read when it was uploaded.
+                    </p>
+                    <a href={current.url} download={current.fileName} className="text-ink underline">
+                      Download {current.fileName}
+                    </a>
+                  </div>
+                ) : isPdf ? (
                   <PdfPages url={current.url} />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element

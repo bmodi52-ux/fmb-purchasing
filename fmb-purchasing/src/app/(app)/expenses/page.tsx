@@ -8,6 +8,8 @@ import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { FiscalYearSelect } from "@/components/fiscal-year-select";
 import { ExpensesTable, type ExpenseRow } from "./expenses-table";
 
+export const metadata = { title: "All expenses" };
+
 const PAGE_KEY = "all_expenses";
 const DEFAULT_VISIBLE = [
   "expense_number",

@@ -1,5 +1,5 @@
-import { CardsSkeleton } from "@/components/skeleton";
+import { PageLoading } from "@/components/page-loading";
 
 export default function Loading() {
-  return <CardsSkeleton cards={4} />;
+  return <PageLoading />;
 }

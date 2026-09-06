@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { loadReviewQueue, type QueueItemKind } from "./data";
 
+export const metadata = { title: "Needs attention" };
+
 const GROUPS: { kind: QueueItemKind; heading: string; why: string }[] = [
   {
     kind: "unallocated_line",

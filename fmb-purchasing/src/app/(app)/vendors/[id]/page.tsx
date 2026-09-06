@@ -13,6 +13,16 @@ import {
   updateVendorPaymentDetails,
 } from "./actions";
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const { data } = await createAdminClient()
+    .from("vendors")
+    .select("name")
+    .eq("id", id)
+    .maybeSingle();
+  return { title: (data?.name as string | null) ?? "Vendor" };
+}
+
 export default async function VendorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCurrentUser();

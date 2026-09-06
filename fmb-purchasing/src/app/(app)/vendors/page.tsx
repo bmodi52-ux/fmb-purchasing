@@ -6,6 +6,8 @@ import { getColumnPreference } from "@/lib/column-prefs";
 import { AddVendorModal } from "./add-vendor-modal";
 import { VendorsTable, type VendorRow } from "./vendors-table";
 
+export const metadata = { title: "Vendors" };
+
 const PAGE_KEY = "vendors";
 const DEFAULT_VISIBLE = ["vendor_number", "name", "abn", "billing_address", "contact", "status", "actions"];
 

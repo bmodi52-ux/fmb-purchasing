@@ -10,6 +10,27 @@ import { ReversePanel } from "./reverse-panel";
 import { reopenExpense } from "../../approvals/actions";
 import { reversePayment } from "../../payments/actions";
 
+/**
+ * The tab carries the entry number, not the word "Expense".
+ *
+ * Reviewing a run of submissions means several of these open at once, and the
+ * entry number is how they are referred to everywhere else — in notifications,
+ * on the payments run, in conversation. A tab reading "Expense" for all of them
+ * is the problem this was meant to solve, one level down.
+ *
+ * Deliberately says nothing about who or how much: a title is readable over a
+ * shoulder and on a shared screen.
+ */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const { data } = await createAdminClient()
+    .from("expenses")
+    .select("expense_number")
+    .eq("id", id)
+    .maybeSingle();
+  return { title: (data?.expense_number as string | null) ?? "Expense" };
+}
+
 const money = (n: number) =>
   n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
