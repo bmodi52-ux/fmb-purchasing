@@ -1,7 +1,7 @@
 "use client";
 
 import { SubmitButton } from "@/components/submit-button";
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   extractReceiptAction,
@@ -9,6 +9,7 @@ import {
   uploadReceiptFileAction,
   reportOversizeReceiptAction,
   findPossibleDuplicates,
+  resolveVendorAction,
   createExpense,
   updateExpense,
   type ExtractState,
@@ -18,6 +19,7 @@ import {
   type ItemLookupSuggestion,
   type ExpenseForEdit,
   type DuplicateWarning,
+  type ResolvedVendor,
 } from "./actions";
 import type { ExtractedReceipt, StoredLineKind } from "@/lib/receipt-extraction";
 import type { PayeeChoice } from "@/lib/payees";
@@ -200,6 +202,56 @@ export function SubmitForm({
       : []
   );
   const [restoredDraft, setRestoredDraft] = useState(false);
+  const [resolvedVendor, setResolvedVendor] = useState<ResolvedVendor | null>(null);
+  const [resolvingVendor, setResolvingVendor] = useState(false);
+
+  // Work out which vendor on file this receipt belongs to, whether the name
+  // arrived from extraction, a restored draft, or typing. Read-only: nothing is
+  // created until the expense is submitted.
+  //
+  // Debounced and sequence-guarded, because it runs on every keystroke in the
+  // vendor field and answers cross the Pacific — without the guard, a slow
+  // reply for "Foodwo" can land after the fast one for "Foodworks" and put the
+  // wrong vendor on screen.
+  const vendorResolveSeq = useRef(0);
+  useEffect(() => {
+    const name = vendorName.trim();
+    const cleanAbn = abn.replace(/\D/g, "");
+    // A server action is an external system; querying one and storing what it
+    // says is what effects exist for, even though the rule sees only setState.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!name && !cleanAbn) {
+      setResolvedVendor(null);
+      setResolvingVendor(false);
+      return;
+    }
+    const seq = ++vendorResolveSeq.current;
+    setResolvingVendor(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    const handle = setTimeout(async () => {
+      try {
+        const found = await resolveVendorAction(name, cleanAbn || null);
+        if (seq !== vendorResolveSeq.current) return;
+        setResolvedVendor(found);
+      } catch {
+        // A failed lookup must not block the submission; the write path does
+        // its own matching regardless of what this managed to show.
+        if (seq === vendorResolveSeq.current) setResolvedVendor(null);
+      } finally {
+        if (seq === vendorResolveSeq.current) setResolvingVendor(false);
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [vendorName, abn]);
+
+  // Fill the Vendor # the submitter did not have to know, once matching has
+  // found it. Only when blank, so it never fights a number they typed.
+  useEffect(() => {
+    if (resolvedVendor?.vendorNumber && !vendorNumber) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setVendorNumber(resolvedVendor.vendorNumber);
+    }
+  }, [resolvedVendor, vendorNumber]);
 
   // Offer an unfinished submission back, once, on a fresh form only. Editing an
   // existing expense is a different job and must never be seeded from a draft.
@@ -417,6 +469,8 @@ export function SubmitForm({
       extractedPayeeName={extractedPayeeName}
       extractionNote={extractionNote}
       restoredDraft={restoredDraft}
+      resolvedVendor={resolvedVendor}
+      resolvingVendor={resolvingVendor}
       onDiscard={discard}
       onSubmitted={clearDraft}
       editExpenseId={editExpense?.id ?? null}
@@ -432,6 +486,8 @@ function ReviewForm(props: {
   setVendorName: (v: string) => void;
   vendorNumber: string;
   setVendorNumber: (v: string) => void;
+  resolvedVendor: ResolvedVendor | null;
+  resolvingVendor: boolean;
   abn: string;
   setAbn: (v: string) => void;
   invoiceNumber: string;
@@ -639,6 +695,8 @@ function ReviewForm(props: {
           setVendorName={props.setVendorName}
           vendorNumber={props.vendorNumber}
           setVendorNumber={props.setVendorNumber}
+          resolved={props.resolvedVendor}
+          resolving={props.resolvingVendor}
         />
         <Field label="Date">
           <input
@@ -679,6 +737,8 @@ function ReviewForm(props: {
           value={props.payee}
           onChange={props.setPayee}
           myName={props.myName}
+          vendorName={props.vendorName}
+          vendorHasPaymentDetails={props.resolvedVendor?.hasPaymentDetails ?? false}
           extractedName={props.extractedPayeeName}
         />
       </div>

@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission, userCan } from "@/lib/permissions";
 import { extractReceipt, type ExtractedReceipt, type StoredLineKind } from "@/lib/receipt-extraction";
 import { lookupAbn, type AbnLookupResult } from "@/lib/abn-lookup";
-import { matchOrCreateVendor, matchOrCreateOffer } from "@/lib/expense-matching";
+import { matchOrCreateVendor, matchOrCreateOffer, preferredVendor } from "@/lib/expense-matching";
 import { fiscalYearForReceipt } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
 import { leafCategories } from "@/lib/categories";
@@ -20,6 +20,7 @@ import {
   resolvePayee,
   searchPayees,
   getPayee,
+  vendorPaymentDetails,
   type PayeeChoice,
   type PayeeSuggestion,
 } from "@/lib/payees";
@@ -242,6 +243,84 @@ export async function searchVendorsAction(query: string): Promise<VendorLookupSu
     .limit(8);
 
   return (data ?? []).map((v) => ({ id: v.id, vendorNumber: v.vendor_number, name: v.name }));
+}
+
+export type ResolvedVendor = {
+  id: string;
+  vendorNumber: string | null;
+  name: string;
+  /** 'pending' while nobody has reviewed it yet. */
+  status: string;
+  /**
+   * Whether this vendor can be paid directly without retyping bank details —
+   * and deliberately not the details themselves.
+   *
+   * Migration 0027 put bank details behind `payments:mark_paid`, and this
+   * action answers to anyone who can submit an expense. A submitter needs to
+   * know the account is on file so they do not type it again; they do not need
+   * to be told the number to know that.
+   */
+  hasPaymentDetails: boolean;
+};
+
+/**
+ * Which vendor the receipt just read actually belongs to.
+ *
+ * The typeahead only ever fired on a keystroke, so a name filled in by
+ * extraction was never looked up: Vendor # stayed blank, nothing said the shop
+ * was already on file, and the form looked exactly as it would for a vendor
+ * nobody had ever entered. Submitters reasonably concluded a duplicate was
+ * about to be created — and while the write path would in fact have matched,
+ * being unable to tell is its own defect, and it hid the real duplicate bug
+ * that migration 0034 fixes.
+ *
+ * Runs the same lookup as matchOrCreateVendor, in the same preference order,
+ * so what the form shows is what the submission will be filed against. Never
+ * writes: an unrecognised vendor stays unrecognised until the expense is
+ * actually submitted.
+ */
+export async function resolveVendorAction(
+  name: string,
+  abn: string | null
+): Promise<ResolvedVendor | null> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "submit_expense", "submit");
+
+  const cleanAbn = abn?.replace(/\D/g, "") || null;
+  const trimmed = name.trim();
+  if (!cleanAbn && !trimmed) return null;
+
+  const admin = createAdminClient();
+  const select = "id, vendor_number, name, status, created_at";
+
+  let match = cleanAbn
+    ? preferredVendor(
+        (await admin.from("vendors").select(select).eq("abn", cleanAbn).limit(20)).data ?? []
+      )
+    : null;
+
+  if (!match && trimmed) {
+    match = preferredVendor(
+      (
+        await admin
+          .from("vendors")
+          .select(select)
+          .ilike("name", trimmed.toLowerCase().replace(/\s+/g, " "))
+          .limit(20)
+      ).data ?? []
+    );
+  }
+
+  if (!match) return null;
+
+  return {
+    id: match.id,
+    vendorNumber: match.vendor_number,
+    name: match.name,
+    status: match.status,
+    hasPaymentDetails: (await vendorPaymentDetails(admin, match.id)) !== null,
+  };
 }
 
 export type ItemLookupSuggestion = {
@@ -491,7 +570,10 @@ export async function createExpense(
   });
 
   const lines = await buildLineRows(admin, input, vendor.id, user.id);
-  const payeeId = await resolvePayee(admin, input.payee, user);
+  const payeeId = await resolvePayee(admin, input.payee, user, {
+    id: vendor.id,
+    name: input.vendorName.trim(),
+  });
   const gstAmount = sumLineGst(lines.map((l) => ({
     kind: l.kind,
     lineTotal: l.line_total,
@@ -635,7 +717,10 @@ export async function updateExpense(
   });
 
   const lines = await buildLineRows(admin, input, vendor.id, user.id);
-  const payeeId = await resolvePayee(admin, input.payee, user);
+  const payeeId = await resolvePayee(admin, input.payee, user, {
+    id: vendor.id,
+    name: input.vendorName.trim(),
+  });
   const gstAmount = sumLineGst(lines.map((l) => ({
     kind: l.kind,
     lineTotal: l.line_total,

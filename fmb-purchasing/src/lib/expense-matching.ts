@@ -5,6 +5,61 @@ function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+type VendorCandidate = { id: string; status: string; created_at: string };
+
+/**
+ * Which of several matching vendors is *the* vendor.
+ *
+ * Exported so the read-only resolver behind the submit form agrees with the
+ * write path by construction: the row the form tells the submitter it matched
+ * has to be the row the submission is then filed against.
+ *
+ * A reviewed vendor wins over a provisional one — somebody looked at it, and
+ * its vendor_number is the one already written on paperwork — then the oldest,
+ * then lowest id so the answer never depends on what order Postgres felt like
+ * returning. Migration 0034 merges duplicates on this same ordering, so the
+ * winner here is the row that survives a merge.
+ */
+export function preferredVendor<T extends VendorCandidate>(candidates: T[]): T | null {
+  if (candidates.length === 0) return null;
+  return [...candidates].sort((a, b) => {
+    const reviewed = Number(b.status === "approved") - Number(a.status === "approved");
+    if (reviewed !== 0) return reviewed;
+    if (a.created_at !== b.created_at) return a.created_at < b.created_at ? -1 : 1;
+    return a.id < b.id ? -1 : 1;
+  })[0]!;
+}
+
+/**
+ * One vendor, or null — never an error because several rows matched.
+ *
+ * Deliberately not .maybeSingle(): PostgREST fails that outright on more than
+ * one row, and matchOrCreateVendor used to discard the failure, so a vendor
+ * recorded twice matched zero times and a third copy was inserted. A genuine
+ * query error still throws, so a dropped connection cannot pass itself off as
+ * "no such vendor" and quietly create one.
+ */
+async function findVendor(
+  admin: SupabaseClient,
+  column: "abn" | "name",
+  value: string
+): Promise<string | null> {
+  const base = admin.from("vendors").select("id, status, created_at");
+  const { data, error } = await (column === "abn"
+    ? base.eq("abn", value)
+    : base.ilike("name", value)
+  ).limit(VENDOR_MATCH_CANDIDATES);
+  if (error) throw error;
+  return preferredVendor((data ?? []) as VendorCandidate[])?.id ?? null;
+}
+
+/**
+ * Enough rows to choose sensibly among duplicates, few enough that a
+ * pathological name ("Foodworks") cannot drag the whole table across the
+ * Pacific. Once 0034 has run there is normally exactly one.
+ */
+const VENDOR_MATCH_CANDIDATES = 20;
+
 /**
  * Match the extracted/typed vendor against the Vendors table (§3.1.1).
  * ABN is the strongest signal when present; otherwise falls back to a
@@ -17,23 +72,30 @@ export async function matchOrCreateVendor(
   const cleanAbn = abn?.replace(/\D/g, "") || null;
 
   if (cleanAbn) {
-    const { data } = await admin.from("vendors").select("id").eq("abn", cleanAbn).maybeSingle();
-    if (data) return { id: data.id, status: "matched" };
+    const byAbn = await findVendor(admin, "abn", cleanAbn);
+    if (byAbn) return { id: byAbn, status: "matched" };
   }
 
-  const { data: byName } = await admin
-    .from("vendors")
-    .select("id")
-    .ilike("name", normalize(name))
-    .maybeSingle();
-  if (byName) return { id: byName.id, status: "matched" };
+  const byName = await findVendor(admin, "name", normalize(name));
+  if (byName) return { id: byName, status: "matched" };
 
   const { data: created, error } = await admin
     .from("vendors")
     .insert({ name: name.trim(), abn: cleanAbn, status: "pending", created_by: userId })
     .select("id")
     .single();
-  if (error) throw error;
+
+  // Two submissions of the same new vendor can race between the lookups above
+  // and this insert. The unique index from 0034 is what makes that safe: the
+  // loser is told the ABN is taken, and the vendor it wanted is now there to
+  // be found.
+  if (error) {
+    if (cleanAbn && error.code === "23505") {
+      const raced = await findVendor(admin, "abn", cleanAbn);
+      if (raced) return { id: raced, status: "matched" };
+    }
+    throw error;
+  }
   return { id: created.id, status: "created" };
 }
 

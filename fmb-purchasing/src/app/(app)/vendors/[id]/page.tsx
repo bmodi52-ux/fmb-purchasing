@@ -10,6 +10,7 @@ import {
   removeCollectionAddress,
   addContact,
   removeContact,
+  updateVendorPaymentDetails,
 } from "./actions";
 
 export default async function VendorDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -20,15 +21,36 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
 
   const permissions = await getUserPermissions(user.teamIds);
   const canEdit = can(permissions, "vendors", "edit_master_data");
+  // The trust boundary 0027 drew: bank details belong to whoever transfers the
+  // money, not to everyone who can read a vendor record.
+  const canSeeBankDetails = can(permissions, "payments", "mark_paid");
 
   const admin = createAdminClient();
-  const [{ data: vendor }, { data: addresses }, { data: contacts }] = await Promise.all([
+  const [{ data: vendor }, { data: addresses }, { data: contacts }, paymentRow] = await Promise.all([
     admin.from("vendors").select("*").eq("id", id).maybeSingle(),
     admin.from("vendor_collection_addresses").select("*").eq("vendor_id", id).order("created_at"),
     admin.from("vendor_contacts").select("*").eq("vendor_id", id).order("created_at"),
+    admin
+      .from("payees")
+      .select("id, bank_account_name, bank_bsb, bank_account_number, notes")
+      .eq("vendor_id", id)
+      .order("created_at", { ascending: true })
+      .limit(1),
   ]);
 
   if (!vendor) notFound();
+
+  const stored = paymentRow.data?.[0];
+  // Nothing but presence leaves the server unless the viewer may see the
+  // numbers — an unused field in a payload is still a disclosure.
+  const payment = stored
+    ? {
+        bankAccountName: canSeeBankDetails ? ((stored.bank_account_name as string | null) ?? "") : null,
+        bsb: canSeeBankDetails ? ((stored.bank_bsb as string | null) ?? "") : null,
+        accountNumber: canSeeBankDetails ? ((stored.bank_account_number as string | null) ?? "") : null,
+        notes: canSeeBankDetails ? ((stored.notes as string | null) ?? "") : null,
+      }
+    : null;
 
   const billing = (vendor.billing_address ?? {}) as Record<string, string | null>;
 
@@ -75,6 +97,60 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
             </SubmitButton>
           )}
         </form>
+      </section>
+
+      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <h2 className="mb-1 section-title text-ink">Payment details</h2>
+        <p className="mb-4 text-sm text-ink/55">
+          Where to transfer when an invoice from this vendor is paid directly rather than
+          reimbursed to whoever bought it.
+        </p>
+
+        {canSeeBankDetails ? (
+          <form action={updateVendorPaymentDetails} className="grid gap-4 sm:grid-cols-2">
+            <input type="hidden" name="vendor_id" value={vendor.id} />
+            <Field label="Account name">
+              <input name="bank_account_name" defaultValue={payment?.bankAccountName ?? ""} className="input" />
+            </Field>
+            <Field label="BSB">
+              <input
+                name="bank_bsb"
+                defaultValue={payment?.bsb ?? ""}
+                inputMode="numeric"
+                placeholder="082112"
+                className="input font-mono"
+              />
+            </Field>
+            <Field label="Account number">
+              <input
+                name="bank_account_number"
+                defaultValue={payment?.accountNumber ?? ""}
+                inputMode="numeric"
+                className="input font-mono"
+              />
+            </Field>
+            <Field label="Notes">
+              <input
+                name="payment_notes"
+                defaultValue={payment?.notes ?? ""}
+                placeholder="e.g. pays by PayID"
+                className="input"
+              />
+            </Field>
+            <SubmitButton className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
+              Save payment details
+            </SubmitButton>
+          </form>
+        ) : (
+          // Deliberately not the numbers: 0027 put those behind
+          // payments:mark_paid, and whether an account is on file is the only
+          // part anyone else needs in order to know it is not missing.
+          <p className="text-sm text-ink/70">
+            {payment
+              ? "Bank details are on file. They are visible only to whoever makes the payment."
+              : "No bank details on file for this vendor."}
+          </p>
+        )}
       </section>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
