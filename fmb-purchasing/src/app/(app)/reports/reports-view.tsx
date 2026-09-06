@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { gregorianToHijri, formatHijri } from "@/lib/hijri/hijri";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import {
   ReportFilters,
   SectionTabs,
@@ -134,8 +134,6 @@ export function ReportsView({
   perUnitRows,
   unitCostByItem,
   hasCategoryOrItemFilter,
-  computedAt,
-  dataAgeMinutes,
 }: {
   query: ReportQuery;
   fiscalYears: number[];
@@ -151,16 +149,6 @@ export function ReportsView({
   perUnitRows: PerUnitRow[];
   unitCostByItem: Record<string, { average: number; unit: string }>;
   hasCategoryOrItemFilter: boolean;
-  /** When the underlying ledger was last read — see reports/data.ts. */
-  computedAt: string;
-  /**
-   * How old that read is, in minutes, measured on the server.
-   *
-   * Measured there rather than here because this is a client component: a
-   * clock read during render is impure, and would give the server and the
-   * browser two different answers for the same page.
-   */
-  dataAgeMinutes: number;
 }) {
   const [calendar, setCalendar] = useState<"gregorian" | "hijri">("gregorian");
 
@@ -193,7 +181,6 @@ export function ReportsView({
           <p className="page-description mt-1">
             Fiscal year runs Shawwal → the following Ramadan on the Fatimi/Misri Hijri calendar.
           </p>
-          <StaleNotice computedAt={computedAt} ageMinutes={dataAgeMinutes} />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -941,16 +928,3 @@ function Panel({
  * Ten minutes, because anything shorter would fire during ordinary use — a
  * page left open over a cup of tea is not stale, it is just open.
  */
-/** Below this, a page simply left open is not stale. */
-const STALE_AFTER_MINUTES = 10;
-
-function StaleNotice({ computedAt, ageMinutes }: { computedAt: string; ageMinutes: number }) {
-  if (ageMinutes < STALE_AFTER_MINUTES) return null;
-  const minutes = ageMinutes;
-  return (
-    <p className="mt-1.5 text-xs text-ink/50">
-      Figures as at {formatDateTime(computedAt)} ({minutes} minutes ago). Anything submitted,
-      approved or paid since then is included; a change made outside the app may not be.
-    </p>
-  );
-}

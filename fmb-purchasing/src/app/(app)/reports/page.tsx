@@ -52,7 +52,7 @@ export default async function ReportsPage({
   // The previous year comes back in the same fetch so the dashboard can show
   // change without a second round trip — the function runs a long way from
   // the database, so each one is expensive.
-  const [{ allExpenses, allLines, paidCosts, fyOf, computedAt }, { data: fyRows }] = await Promise.all([
+  const [{ allExpenses, allLines, paidCosts, fyOf }, { data: fyRows }] = await Promise.all([
     loadReportRawData([selectedFy, selectedFy - 1]),
     admin.from("expense_fiscal_years").select("fiscal_year_hijri"),
   ]);
@@ -220,8 +220,6 @@ export default async function ReportsPage({
       perUnitRows={perUnitRows}
       unitCostByItem={Object.fromEntries(unitCostByItem)}
       hasCategoryOrItemFilter={selectedCategories.length > 0 || selectedItems.length > 0}
-      computedAt={computedAt}
-      dataAgeMinutes={Math.max(0, Math.round((Date.now() - new Date(computedAt).getTime()) / 60000))}
     />
   );
 }

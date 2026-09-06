@@ -51,6 +51,35 @@ export function revalidateReports(): void {
 }
 
 /**
+ * A cheap fingerprint of the ledger for these years.
+ *
+ * How many expenses there are, and when one was last touched. Any change moves
+ * one or the other: a submission or an edit moves the timestamp, a deletion or
+ * a reset moves the count.
+ *
+ * This is what makes the cache correct rather than merely fast. It is passed
+ * as an argument to the cached function, so it forms part of the cache key —
+ * when the ledger changes the key changes, and the next read is a miss. That
+ * holds for changes made *outside* the app too, which nothing else here can
+ * detect: a maintenance script, an edit in the Supabase dashboard, a restored
+ * backup. Before this, those left the figures wrong for up to an hour.
+ *
+ * Two indexed columns and no join. In-region that is a few milliseconds
+ * against the full-ledger read it decides whether to skip.
+ */
+async function ledgerFingerprint(years: number[]): Promise<string> {
+  const admin = createAdminClient();
+  const { data, count } = await admin
+    .from("expenses")
+    .select("updated_at", { count: "exact" })
+    .in("fiscal_year_hijri", years)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  return `${count ?? 0}:${data?.[0]?.updated_at ?? "empty"}`;
+}
+
+/**
  * Expenses/lines/paid-costs for a set of fiscal years, mapped into the
  * shapes aggregate.ts expects. Shared by the Reports page (which always asks
  * for the selected year plus the prior one, for the built-in comparison) and
@@ -63,13 +92,19 @@ export function revalidateReports(): void {
  * data does. Every action that can move a figure or rename something a report
  * displays calls revalidateReports(), so in-app edits show up immediately.
  *
- * The one-hour ceiling only covers writes that never pass through an action —
- * a maintenance script, or an edit made straight from the Supabase dashboard.
- * Nothing a person does in the app waits on it.
+ * Freshness comes from the fingerprint below rather than from the TTL: any
+ * change to the ledger changes the cache key, including one made outside the
+ * app entirely. The one-hour revalidate is a backstop for the case the
+ * fingerprint cannot see — a category renamed, a vendor merged — and nothing
+ * a person does waits on it.
  */
 export async function loadReportRawData(fiscalYears: number[]): Promise<ReportRawData> {
   const years = [...new Set(fiscalYears)].sort((a, b) => a - b);
-  const { allExpenses, allLines, paidCosts, fyPairs, computedAt } = await loadCachedReportRows(years);
+  const fingerprint = await ledgerFingerprint(years);
+  const { allExpenses, allLines, paidCosts, fyPairs, computedAt } = await loadCachedReportRows(
+    years,
+    fingerprint
+  );
   return { allExpenses, allLines, paidCosts, computedAt, fyOf: new Map(fyPairs) };
 }
 
@@ -79,7 +114,12 @@ export async function loadReportRawData(fiscalYears: number[]): Promise<ReportRa
  * payload through serialization and a Map would not survive it.
  */
 const loadCachedReportRows = unstable_cache(
-  async (years: number[]): Promise<CachedReportRows> => {
+  // `fingerprint` is never read. It is here because arguments form part of the
+  // cache key, so a changed ledger produces a different key and therefore a
+  // miss — which is what makes this cache correct for writes that never pass
+  // through a Server Action.
+  async (years: number[], fingerprint: string): Promise<CachedReportRows> => {
+    void fingerprint;
     const admin = createAdminClient();
 
     const [{ data: rawExpenses }, { data: categoryRows }, { data: vendorRows }] = await Promise.all([
