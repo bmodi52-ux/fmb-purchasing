@@ -3,10 +3,11 @@
 Internal expense system for FMB Sydney (Faiz ul Mawaid il Burhaniyah) — receipt
 submission, approval, reimbursement and reporting, at **www.fmbpurchasing.com.au**.
 
-A submitter photographs a receipt; Claude reads it into line items with GST and
-per-unit quantities; the Procurement Head approves it; the Treasurer records the
-transfer. Reporting then answers what the kitchen is spending, per category, per
-vendor, and per kilo.
+A submitter photographs a receipt — or pastes a screenshot, drops a PDF, or
+hands over the forwarded email as a `.eml`; Claude reads it into line items with
+GST and per-unit quantities; the Procurement Head approves it; the Treasurer
+records the transfer. Reporting then answers what the kitchen is spending, per
+category, per vendor, and per kilo.
 
 ## Stack
 
@@ -37,7 +38,7 @@ Needs a `.env.local` — copy `.env.local.example` and fill it in:
 | `NEXT_PUBLIC_SITE_URL` | only to make reset links point somewhere local |
 
 ```bash
-npm test          # 189 tests, incl. migrations applied to a real Postgres
+npm test          # 248 tests, incl. migrations applied to a real Postgres
 npx tsc --noEmit  # the check ESLint cannot do
 npx eslint .
 ```
