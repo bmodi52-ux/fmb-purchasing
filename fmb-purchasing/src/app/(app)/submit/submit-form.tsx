@@ -296,9 +296,8 @@ export function SubmitForm({
 
   async function handleReceiptChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.currentTarget;
-    const form = input.form;
     const chosen = input.files?.[0];
-    if (!chosen || !form) return;
+    if (!chosen) return;
 
     setSizeError(null);
     setPreparing(true);
@@ -320,12 +319,13 @@ export function SubmitForm({
         return;
       }
 
-      if (prepared !== chosen) {
-        const transfer = new DataTransfer();
-        transfer.items.add(prepared);
-        input.files = transfer.files;
-      }
-      form.requestSubmit();
+      // Sent as an explicit payload rather than by asking the form to read its
+      // own fields: the input is disabled while this runs, and a disabled
+      // control is left out of the FormData a native submit builds, so the
+      // action saw no file at all and rejected every upload.
+      const payload = new FormData();
+      payload.append("file", prepared);
+      extractAction(payload);
     } finally {
       setPreparing(false);
     }
@@ -354,16 +354,15 @@ export function SubmitForm({
     const busy = preparing || extracting;
     return (
       <div className="flex flex-col gap-4">
-        <form action={extractAction} className="flex flex-col gap-3 rounded-lg border-2 border-dashed border-ink/20 bg-white/50 p-8 text-center">
+        <div className="flex flex-col gap-3 rounded-lg border-2 border-dashed border-ink/20 bg-white/50 p-8 text-center">
           {/* The control is disabled while a request is in flight. It was not,
               which on a slow connection meant an impatient second tap ran the
-              whole upload and the model call again. */}
+              whole upload and the model call again. The chosen file is passed
+              to the action by hand, so being disabled cannot hide it. */}
           <label className={busy ? "cursor-progress opacity-60" : "cursor-pointer"}>
             <input
               type="file"
-              name="file"
               accept="image/*,application/pdf"
-              required
               disabled={busy}
               className="hidden"
               onChange={handleReceiptChosen}
@@ -377,7 +376,7 @@ export function SubmitForm({
           {extractState.error && !extracting && (
             <p className="text-sm text-red-700">{extractState.error}</p>
           )}
-        </form>
+        </div>
         <button
           type="button"
           onClick={startManual}
