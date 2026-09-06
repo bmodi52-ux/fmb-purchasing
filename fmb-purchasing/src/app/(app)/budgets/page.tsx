@@ -8,6 +8,7 @@ import { FiscalYearSelect } from "@/components/fiscal-year-select";
 import { SubmitButton } from "@/components/submit-button";
 import { loadReportRawData } from "../reports/data";
 import { setCategoryBudget, copyBudgetsFromPreviousYear } from "./actions";
+import { BudgetInput } from "./budget-input";
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
@@ -82,6 +83,23 @@ export default async function BudgetsPage({
   const totalBudget = rows.reduce((s, r) => s + (r.budget ?? 0), 0);
   const totalSpent = rows.reduce((s, r) => s + r.spent, 0);
 
+  /**
+   * Spend that belongs to no category, and so appears in no budget.
+   *
+   * Card surcharges, delivery and rounding carry no category by design — a
+   * surcharge is not a kind of food — and a line the reader could not classify
+   * carries none either. Both are real money, so leaving them out silently
+   * would make this page disagree with Reports by an amount nobody could
+   * account for. Stated instead.
+   */
+  const categorisedIds = new Set(categories.map((c) => c.id));
+  const uncategorisedSpend =
+    Math.round(
+      report.allLines
+        .filter((l) => idsThisYear.has(l.expenseId) && (!l.categoryId || !categorisedIds.has(l.categoryId)))
+        .reduce((s, l) => s + l.lineTotal, 0) * 100
+    ) / 100;
+
   const fiscalYears = [...new Set((fyRows ?? []).map((r) => r.fiscal_year_hijri))].sort((a, b) => b - a);
   if (!fiscalYears.includes(currentFy)) fiscalYears.unshift(currentFy);
 
@@ -106,7 +124,25 @@ export default async function BudgetsPage({
           value={totalBudget > 0 ? money(totalBudget - totalSpent) : "—"}
           tone={totalBudget > 0 && totalSpent > totalBudget ? "over" : "normal"}
         />
+        {uncategorisedSpend !== 0 && (
+          <div>
+            <p className="text-xs text-ink/55">Not in any category</p>
+            <p className="mt-0.5 text-xl font-semibold tabular-figures text-ink/60">
+              {money(uncategorisedSpend)}
+            </p>
+          </div>
+        )}
       </div>
+
+      {uncategorisedSpend !== 0 && (
+        <p className="-mt-3 max-w-2xl text-xs leading-relaxed text-ink/55">
+          {money(uncategorisedSpend)} of this year&rsquo;s spend sits in no category — surcharges,
+          delivery and rounding carry none by design, and neither does a line nobody has
+          classified yet. It is real money and counts in Reports; it simply cannot be budgeted
+          against. Anything classifiable is listed on{" "}
+          <a href="/review-queue" className="underline">Needs attention</a>.
+        </p>
+      )}
 
       {canEdit && totalBudget === 0 && (
         <form action={copyBudgetsFromPreviousYear}>
@@ -144,21 +180,13 @@ export default async function BudgetsPage({
                       <form action={setCategoryBudget} className="flex justify-end">
                         <input type="hidden" name="category_id" value={row.id} />
                         <input type="hidden" name="fiscal_year" value={selectedFy} />
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          name="amount"
-                          defaultValue={row.budget ?? ""}
-                          placeholder="—"
-                          aria-label={`Budget for ${row.label}`}
-                          className="w-28 rounded border border-ink/15 bg-white px-2 py-1 text-right font-mono"
+                        <BudgetInput
+                          defaultValue={row.budget}
+                          ariaLabel={`Budget for ${row.label}`}
                         />
-                        {/* Enter saves the row, which is how someone setting
-                            eighteen of these in one sitting will work. The
-                            button exists so the form is submittable without a
-                            keyboard and so the action has an accessible name;
-                            it is not the intended route. */}
+                        {/* Kept so the form has a real submit target and the
+                            action has an accessible name. The field saves on
+                            blur; this is not the route anyone takes. */}
                         <SubmitButton className="sr-only">Save {row.label} budget</SubmitButton>
                       </form>
                     ) : (
