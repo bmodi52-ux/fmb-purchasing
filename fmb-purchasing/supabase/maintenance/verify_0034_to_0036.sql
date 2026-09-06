@@ -1,85 +1,62 @@
--- Run this in the Supabase SQL editor BEFORE and AFTER
--- 2026-09-07_apply_0034_to_0036.sql. It is read-only and safe to run at any
--- time.
+-- Run this AFTER 2026-09-07_apply_0034_to_0036.sql. Read-only, safe any time.
 --
--- BEFORE, it answers the question the apply script cannot: how much data is
--- 0034 actually going to rewrite? That migration merges duplicate vendors and
--- repoints their expenses, offers, addresses, contacts and payees onto a
--- survivor, then deletes the losers. On a database with no duplicates it is a
--- no-op that adds an index. On one with a handful it is a small, targeted
--- cleanup. Nobody should have to find out which afterwards.
+-- For the BEFORE run, use preflight_0034_vendor_merge.sql instead — it shows
+-- which vendors the merge will collapse, which is what you want to know first.
+-- Running this one early is harmless: it detects that the migrations have not
+-- landed yet and says so rather than failing.
 --
--- AFTER, it confirms the three migrations landed and — more usefully — that
--- the things which would be quietly wrong rather than loudly broken are right:
+-- What it checks is not "did the SQL run" — the apply script is one
+-- transaction, so it either ran or it did not. It is the things that would be
+-- quietly wrong rather than loudly broken:
 --
---   * every expense still points at a vendor that exists;
---   * no vendor got orphaned children in the merge;
---   * the enum gained 'service' without disturbing existing lines;
---   * app_pages gained a preference-only row that the permissions matrix
---     will not offer as a grant.
-
--- ============================================================
--- 1. What 0034 will merge  (meaningful BEFORE; should be empty AFTER)
--- ============================================================
-
--- Vendors sharing an ABN. These merge first, keeping an approved row over a
--- pending one, then the oldest.
-select
-  'duplicate abn' as finding,
-  abn,
-  count(*) as copies,
-  string_agg(coalesce(vendor_number, '?') || ' ' || name || ' (' || status || ')', ' | '
-             order by (status = 'approved') desc, created_at) as rows_involved
-from vendors
-where abn is not null and btrim(abn) <> ''
-group by abn
-having count(*) > 1
-
-union all
-
--- Vendors sharing a name, case- and whitespace-insensitively. These merge
--- second, and only among rows the ABN pass did not already claim.
-select
-  'duplicate name' as finding,
-  lower(btrim(name)) as abn,
-  count(*) as copies,
-  string_agg(coalesce(vendor_number, '?') || ' ' || name || ' (' || status || ')', ' | '
-             order by (status = 'approved') desc, created_at) as rows_involved
-from vendors
-group by lower(btrim(name))
-having count(*) > 1
-
-order by finding, copies desc;
-
--- ============================================================
--- 2. ABNs stored in the form printed on a tax invoice
--- ============================================================
--- 0034 strips these to digits before comparing anything. Rows listed here are
--- ones that could never have matched an extracted ABN, which is one way the
--- duplicates got created in the first place.
-
-select vendor_number, name, abn as stored_abn, regexp_replace(abn, '\D', '', 'g') as will_become
-from vendors
-where abn is not null
-  and abn <> regexp_replace(abn, '\D', '', 'g')
-order by vendor_number;
-
--- ============================================================
--- 3. Post-apply checks  (all of these should print OK)
--- ============================================================
+--   * no expense or offer left pointing at a vendor the merge deleted;
+--   * no ABN still duplicated, and none still holding punctuation;
+--   * the enum gained 'service' without reclassifying any existing line;
+--   * expense_lines is flagged as a preference scope, not a permission — the
+--     other way round would show an administrator a grant that decides
+--     nothing.
+--
+-- Read the NOTICE output, not the result grid: the grid shows only the summary
+-- at the end.
 
 do $$
 declare
   n int;
   txt text;
+  applied_0034 boolean;
+  applied_0035 boolean;
+  applied_0036 boolean;
 begin
-  -- --- 0034 -------------------------------------------------
-  if not exists (
+  applied_0034 := exists (
     select 1 from pg_indexes
     where schemaname = 'public' and indexname = 'vendors_abn_unique_idx'
-  ) then
-    raise exception '0034 NOT APPLIED: vendors_abn_unique_idx is missing';
+  );
+  applied_0035 := exists (
+    select 1 from pg_enum e
+    join pg_type t on t.oid = e.enumtypid
+    where t.typname = 'line_item_kind' and e.enumlabel = 'service'
+  );
+  applied_0036 := exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'app_pages'
+      and column_name = 'is_permission_scope'
+  );
+
+  -- Running this before the apply script is a reasonable thing to do by
+  -- mistake, and raising on it teaches nothing. Say which are outstanding and
+  -- stop.
+  if not (applied_0034 and applied_0035 and applied_0036) then
+    raise notice '--- NOT APPLIED YET ---';
+    raise notice '0034 vendor identity      %', case when applied_0034 then 'applied' else 'OUTSTANDING' end;
+    raise notice '0035 service line kind    %', case when applied_0035 then 'applied' else 'OUTSTANDING' end;
+    raise notice '0036 expense lines view   %', case when applied_0036 then 'applied' else 'OUTSTANDING' end;
+    raise notice '';
+    raise notice 'Run 2026-09-07_apply_0034_to_0036.sql, then run this again.';
+    raise notice 'For the before-picture, run preflight_0034_vendor_merge.sql.';
+    return;
   end if;
+
+  -- --- 0034 -------------------------------------------------
   raise notice '0034 index        OK  (vendors_abn_unique_idx present)';
 
   select count(*) into n
@@ -118,13 +95,6 @@ begin
   raise notice '0034 offers       OK  (every offer vendor still exists)';
 
   -- --- 0035 -------------------------------------------------
-  if not exists (
-    select 1 from pg_enum e
-    join pg_type t on t.oid = e.enumtypid
-    where t.typname = 'line_item_kind' and e.enumlabel = 'service'
-  ) then
-    raise exception '0035 NOT APPLIED: line_item_kind has no ''service'' value';
-  end if;
   raise notice '0035 enum         OK  (line_item_kind includes ''service'')';
 
   -- Nothing should have been reclassified by the migration itself; 'service'
@@ -133,13 +103,6 @@ begin
   raise notice '0035 lines        OK  (% existing lines are service — expect 0 on first run)', n;
 
   -- --- 0036 -------------------------------------------------
-  if not exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'app_pages'
-      and column_name = 'is_permission_scope'
-  ) then
-    raise exception '0036 NOT APPLIED: app_pages.is_permission_scope is missing';
-  end if;
   raise notice '0036 column       OK  (app_pages.is_permission_scope present)';
 
   select count(*) into n from app_pages where key = 'expense_lines';
@@ -162,12 +125,10 @@ begin
   raise notice '--- all checks passed ---';
 end $$;
 
--- ============================================================
--- 4. What the merge actually did, for the record
--- ============================================================
-
+-- The state of things, for the record.
 select
-  (select count(*) from vendors) as vendors_now,
-  (select count(*) from vendors where status = 'approved') as approved_now,
+  (select count(*) from vendors) as vendors,
+  (select count(*) from vendors where status = 'approved') as approved,
   (select count(*) from expenses where vendor_id is null) as expenses_without_vendor,
-  (select count(*) from payees where vendor_id is not null) as vendor_payees;
+  (select count(*) from payees where vendor_id is not null) as payees_linked_to_a_vendor,
+  (select count(*) from payees where vendor_id is null and profile_id is null) as payees_still_unlinked;
