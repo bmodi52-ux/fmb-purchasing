@@ -6,6 +6,8 @@ import { formatDateTime } from "@/lib/format";
 import { SubmitButton } from "@/components/submit-button";
 import { markNotificationRead, markAllNotificationsRead, clearReadNotifications } from "./actions";
 
+export const metadata = { title: "Notifications" };
+
 /** Every signed-in user has notifications, so this page is not permission-gated. */
 export default async function NotificationsPage() {
   const user = await getCurrentUser();

@@ -7,6 +7,8 @@ import { formatDateTime } from "@/lib/format";
 import { SubmitButton } from "@/components/submit-button";
 import { resolveError, resolveAllErrors, refreshReportData } from "./actions";
 
+export const metadata = { title: "System errors" };
+
 const RESOLVED_SHOWN = 20;
 
 type ErrorRow = {

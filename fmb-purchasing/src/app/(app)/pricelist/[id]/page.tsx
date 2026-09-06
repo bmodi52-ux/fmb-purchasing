@@ -42,6 +42,16 @@ const OFFER_FIELD_LABELS: Record<string, string> = {
   per_unit_cost_unit_id: "Per-unit cost unit",
 };
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const { data } = await createAdminClient()
+    .from("items")
+    .select("name")
+    .eq("id", id)
+    .maybeSingle();
+  return { title: (data?.name as string | null) ?? "Item" };
+}
+
 export default async function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCurrentUser();

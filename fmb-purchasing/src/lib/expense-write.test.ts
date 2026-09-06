@@ -240,4 +240,77 @@ describe("charge lines and per-unit costing", () => {
     );
     assert.equal(inCosting, 0);
   });
+
+  /**
+   * The reason 'service' exists (migration 0035). Before it, a cleaning
+   * invoice had to be entered as goods, and plenty of service invoices print
+   * "Qty 1" — so a $450 clean would enter the per-unit cost trend as an item
+   * nobody will ever buy twice, intermittently, depending on whether that
+   * particular invoice happened to print a quantity.
+   */
+  test("a service never reaches the per-unit cost view, even with a quantity", async () => {
+    const result = await create(
+      450,
+      JSON.stringify([
+        {
+          pricelist_item_id: null,
+          category_id: null,
+          kind: "service",
+          // The shape that used to be dangerous: a quantity that passes the
+          // view's `quantity > 0` filter.
+          quantity: 1,
+          unit_price: 450,
+          line_subtotal: 409.09,
+          line_gst: 40.91,
+          gst_applicable: true,
+          normalized_quantity: null,
+          normalized_unit: null,
+          description_raw: "Monthly kitchen deep clean",
+          line_total: 450,
+        },
+      ])
+    );
+
+    const inCosting = await scalar<number>(
+      db,
+      "select count(*) from item_paid_unit_costs where expense_id = $1",
+      [result.rows[0]!.id]
+    );
+    assert.equal(inCosting, 0);
+  });
+
+  test("a service line is still recorded, with its category and its money", async () => {
+    const result = await create(
+      450,
+      JSON.stringify([
+        {
+          pricelist_item_id: null,
+          category_id: ids.category,
+          kind: "service",
+          quantity: null,
+          unit_price: null,
+          line_subtotal: 409.09,
+          line_gst: 40.91,
+          gst_applicable: true,
+          normalized_quantity: null,
+          normalized_unit: null,
+          description_raw: "Monthly kitchen deep clean",
+          line_total: 450,
+        },
+      ])
+    );
+
+    const row = await db.query<{ kind: string; category_id: string; line_total: string }>(
+      "select kind, category_id, line_total from expense_line_items where expense_id = $1",
+      [result.rows[0]!.id]
+    );
+    assert.equal(row.rows.length, 1);
+    assert.equal(row.rows[0]!.kind, "service");
+    assert.equal(
+      row.rows[0]!.category_id,
+      ids.category,
+      "staying out of the catalogue must not mean staying out of the reports"
+    );
+    assert.equal(Number(row.rows[0]!.line_total), 450);
+  });
 });

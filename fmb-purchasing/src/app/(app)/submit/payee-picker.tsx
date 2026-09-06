@@ -14,20 +14,34 @@ import type { PayeeChoice, PayeeSuggestion } from "@/lib/payees";
  * typed into the message body), and once submissions come through the site
  * there is nowhere for it to go unless it is asked for here.
  *
- * Three states, in the order they actually occur: me, someone already on file,
- * someone new. "Me" is the default because it is the common case, and because
- * a default of nothing would mean most expenses arriving with no payee at all.
+ * Four states, in the order they actually occur: me, the vendor on the receipt,
+ * someone already on file, someone new. "Me" is the default because it is the
+ * common case, and because a default of nothing would mean most expenses
+ * arriving with no payee at all.
+ *
+ * The vendor option covers the invoice nobody has paid yet — "pay Taj Mart
+ * directly $5065.76 as per attached invoices" — which is not a reimbursement
+ * at all and previously had to be entered as a stranger who happened to share
+ * the vendor's name. It works for a vendor being entered for the first time
+ * too: the expense matches or creates its vendor before the payee is resolved,
+ * so there is always a vendor to attach to by then.
  */
 export function PayeePicker({
   value,
   onChange,
   myName,
+  vendorName,
+  vendorHasPaymentDetails,
   extractedName,
   extractedBank,
 }: {
   value: PayeeChoice | null;
   onChange: (choice: PayeeChoice | null) => void;
   myName: string;
+  /** The vendor on this receipt, as currently entered. */
+  vendorName: string;
+  /** Whether that vendor already has bank details saved against it. */
+  vendorHasPaymentDetails: boolean;
   /** A name read out of the covering email, if there was one. */
   extractedName?: string | null;
   extractedBank?: { accountName: string | null; bsb: string | null; accountNumber: string | null } | null;
@@ -42,7 +56,27 @@ export function PayeePicker({
   const [chosenLabel, setChosenLabel] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const mode: "me" | "existing" | "new" = value?.kind === "new" ? "new" : value?.kind === "existing" ? "existing" : "me";
+  const [vendorBsb, setVendorBsb] = useState("");
+  const [vendorAccountNumber, setVendorAccountNumber] = useState("");
+  const [vendorAccountName, setVendorAccountName] = useState("");
+
+  const mode: "me" | "vendor" | "existing" | "new" =
+    value?.kind === "new"
+      ? "new"
+      : value?.kind === "vendor"
+        ? "vendor"
+        : value?.kind === "existing"
+          ? "existing"
+          : "me";
+
+  function pushVendor(patch: Partial<Extract<PayeeChoice, { kind: "vendor" }>>) {
+    onChange({
+      kind: "vendor",
+      bankAccountName: patch.bankAccountName ?? vendorAccountName,
+      bsb: patch.bsb ?? vendorBsb,
+      accountNumber: patch.accountNumber ?? vendorAccountNumber,
+    });
+  }
 
   // Debounced so a name typed at speed is one request, not eight.
   useEffect(() => {
@@ -84,6 +118,13 @@ export function PayeePicker({
         />
         <Radio
           name="payee-mode"
+          checked={mode === "vendor"}
+          onChange={() => pushVendor({})}
+          disabled={!vendorName.trim()}
+          label={vendorName.trim() ? `Pay the vendor (${vendorName.trim()})` : "Pay the vendor"}
+        />
+        <Radio
+          name="payee-mode"
           checked={mode === "existing"}
           onChange={() => {
             setOpen(true);
@@ -103,6 +144,67 @@ export function PayeePicker({
         <p className="mt-2 text-xs text-ink/55">
           The covering message says to pay <span className="font-medium text-ink/80">{extractedName}</span>.
         </p>
+      )}
+
+      {mode === "vendor" && (
+        <div className="mt-3">
+          {vendorHasPaymentDetails ? (
+            // The numbers themselves stay server-side. 0027 put bank details
+            // behind payments:mark_paid, and knowing an account is on file is
+            // all a submitter needs in order not to type it again.
+            <p className="rounded-md bg-palm/10 px-3 py-2 text-sm text-ink/75">
+              Bank details for {vendorName.trim()} are already on file. The Treasurer will
+              use them — nothing to enter here.
+            </p>
+          ) : (
+            <>
+              <p className="mb-3 text-xs text-ink/55">
+                No bank details saved for this vendor yet. Add them from the invoice if you
+                have them; they are needed once and reused from then on.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+                  <span className="text-ink/70">
+                    Account name <span className="text-ink/40">(optional)</span>
+                  </span>
+                  <input
+                    value={vendorAccountName}
+                    onChange={(e) => {
+                      setVendorAccountName(e.target.value);
+                      pushVendor({ bankAccountName: e.target.value });
+                    }}
+                    className="input"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-ink/70">BSB</span>
+                  <input
+                    value={vendorBsb}
+                    inputMode="numeric"
+                    onChange={(e) => {
+                      setVendorBsb(e.target.value);
+                      pushVendor({ bsb: e.target.value });
+                    }}
+                    placeholder="082112"
+                    className="input font-mono"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-ink/70">Account number</span>
+                  <input
+                    value={vendorAccountNumber}
+                    inputMode="numeric"
+                    onChange={(e) => {
+                      setVendorAccountNumber(e.target.value);
+                      pushVendor({ accountNumber: e.target.value });
+                    }}
+                    className="input font-mono"
+                  />
+                </label>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {mode === "existing" && (
@@ -211,15 +313,18 @@ function Radio({
   checked,
   onChange,
   label,
+  disabled = false,
 }: {
   name: string;
   checked: boolean;
   onChange: () => void;
   label: string;
+  /** "Pay the vendor" means nothing until a vendor has been named. */
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-2">
-      <input type="radio" name={name} checked={checked} onChange={onChange} />
+    <label className={`flex items-center gap-2 ${disabled ? "opacity-40" : ""}`}>
+      <input type="radio" name={name} checked={checked} onChange={onChange} disabled={disabled} />
       <span className="text-ink/80">{label}</span>
     </label>
   );

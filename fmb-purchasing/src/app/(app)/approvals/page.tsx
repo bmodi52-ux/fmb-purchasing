@@ -6,6 +6,8 @@ import { ApprovalsList, type ApprovalRow } from "./approvals-list";
 import { categoryLabelsById } from "@/lib/categories";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 
+export const metadata = { title: "Approvals" };
+
 export default async function ApprovalsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");

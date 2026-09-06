@@ -4,6 +4,14 @@ import { Fragment, useMemo, useState, useTransition } from "react";
 import { saveColumnPreference } from "@/lib/column-prefs-actions";
 import { ExportToolbar } from "./export-toolbar";
 import { useReportPending } from "./pending";
+import { ColumnFilterMenu } from "./column-filter-menu";
+import {
+  activeCount,
+  isActive,
+  matchesFilter,
+  type ColumnFilter,
+  type ColumnFilters,
+} from "./column-filter";
 
 export type ColumnDef<T> = {
   key: string;
@@ -17,6 +25,14 @@ export type ColumnDef<T> = {
    * Falls back to exportValue.
    */
   sortValue?: (row: T) => string | number;
+  /**
+   * Value the column filter groups and compares by, when the exported text is
+   * the wrong thing to tick in a list — a date column that exports
+   * "27/07/2026" but should offer a range over its ISO form. Falls back to
+   * exportValue, which is deliberately also what the filter matches against,
+   * so a filtered table and its CSV agree by construction.
+   */
+  filterValue?: (row: T) => string | number;
 };
 
 type SortState = { key: string; direction: "asc" | "desc" } | null;
@@ -81,8 +97,7 @@ export function ColumnsDataTable<T extends { id: string }>({
   useReportPending(busyAction !== null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<SortState>(null);
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
-  const [showColumnFilters, setShowColumnFilters] = useState(false);
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
   const [, startTransition] = useTransition();
 
   /** Click cycles ascending -> descending -> unsorted. */
@@ -94,11 +109,16 @@ export function ColumnsDataTable<T extends { id: string }>({
     });
   }
 
-  function setColumnFilter(key: string, value: string) {
-    setColumnFilters((current) => ({ ...current, [key]: value }));
+  function setColumnFilter(key: string, next: ColumnFilter | undefined) {
+    setColumnFilters((current) => {
+      const updated = { ...current };
+      if (next) updated[key] = next;
+      else delete updated[key];
+      return updated;
+    });
   }
 
-  const activeColumnFilters = Object.entries(columnFilters).filter(([, v]) => v.trim() !== "");
+  const activeFilterCount = activeCount(columnFilters);
 
   function toggleExpanded(id: string) {
     const next = new Set(expanded);
@@ -126,6 +146,30 @@ export function ColumnsDataTable<T extends { id: string }>({
     [deriveRows, rows, visible]
   );
 
+  /**
+   * What each column's filter menu offers to tick.
+   *
+   * Taken from every displayed row rather than from the rows surviving the
+   * other filters, so a menu never hides the value you are about to want:
+   * narrowing to one vendor must not empty the Status menu of the statuses
+   * that vendor happens not to have this year.
+   *
+   * These are the loaded rows, which for Expenses means one fiscal year — the
+   * page's own bound, not this component's, and the reason the menu is honest
+   * about listing "values in view" rather than every value ever recorded.
+   */
+  const valuesByColumn = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const column of visibleColumns) {
+      const valueOf = column.filterValue ?? column.exportValue;
+      map.set(
+        column.key,
+        displayedRows.map((row) => String(valueOf(row) ?? "").trim())
+      );
+    }
+    return map;
+  }, [visibleColumns, displayedRows]);
+
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const columnByKey = new Map(columns.map((c) => [c.key, c]));
@@ -138,13 +182,13 @@ export function ColumnsDataTable<T extends { id: string }>({
       );
     }
 
-    for (const [key, raw] of activeColumnFilters) {
+    for (const [key, filter] of Object.entries(columnFilters)) {
       const column = columnByKey.get(key);
-      if (!column) continue;
-      const needle = raw.trim().toLowerCase();
-      result = result.filter((row) =>
-        String(column.exportValue(row) ?? "").toLowerCase().includes(needle)
-      );
+      if (!column || !isActive(filter)) continue;
+      // Filtered on the same text the column exports, so what a filter matches
+      // and what lands in a CSV are the same thing by construction.
+      const valueOf = column.filterValue ?? column.exportValue;
+      result = result.filter((row) => matchesFilter(String(valueOf(row) ?? "").trim(), filter));
     }
 
     if (sort) {
@@ -225,20 +269,12 @@ export function ColumnsDataTable<T extends { id: string }>({
         {/* Wraps as one group so the controls stay together on a phone rather
             than scattering across several ragged lines. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <button
-            type="button"
-            onClick={() => setShowColumnFilters((v) => !v)}
-            aria-pressed={showColumnFilters}
-            className={`rounded-md border px-3 py-1 text-xs ${
-              showColumnFilters || activeColumnFilters.length > 0
-                ? "border-gold/50 bg-gold/10 text-ink"
-                : "border-ink/15 text-ink/70 hover:border-ink/30"
-            }`}
-          >
-            Filter columns
-            {activeColumnFilters.length > 0 && ` (${activeColumnFilters.length})`}
-          </button>
-          {(activeColumnFilters.length > 0 || sort) && (
+          {activeFilterCount > 0 && (
+            <span className="rounded-md border border-gold/50 bg-gold/10 px-3 py-1 text-xs text-ink">
+              {activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"}
+            </span>
+          )}
+          {(activeFilterCount > 0 || sort) && (
             <button
               type="button"
               onClick={() => {
@@ -317,38 +353,29 @@ export function ColumnsDataTable<T extends { id: string }>({
                   const sorted = sort?.key === c.key ? sort.direction : null;
                   return (
                     <th scope="col" key={c.key} className="p-0">
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(c.key)}
-                        title={`Sort by ${c.label}`}
-                        className="flex w-full items-center gap-1 p-2 text-left font-medium hover:text-ink"
-                      >
-                        <span>{c.label}</span>
-                        <span className={sorted ? "text-gold-deep" : "text-ink/25"}>
-                          {sorted === "asc" ? "▲" : sorted === "desc" ? "▼" : "↕"}
-                        </span>
-                      </button>
+                      <div className="flex items-center gap-0.5 pr-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(c.key)}
+                          title={`Sort by ${c.label}`}
+                          className="flex min-w-0 flex-1 items-center gap-1 p-2 text-left font-medium hover:text-ink"
+                        >
+                          <span className="truncate">{c.label}</span>
+                          <span className={sorted ? "text-gold-deep" : "text-ink/25"}>
+                            {sorted === "asc" ? "▲" : sorted === "desc" ? "▼" : "↕"}
+                          </span>
+                        </button>
+                        <ColumnFilterMenu
+                          label={c.label}
+                          values={valuesByColumn.get(c.key) ?? []}
+                          filter={columnFilters[c.key]}
+                          onChange={(next) => setColumnFilter(c.key, next)}
+                        />
+                      </div>
                     </th>
                   );
                 })}
               </tr>
-              {showColumnFilters && (
-                <tr className="text-left">
-                  <th scope="col" className="p-1" />
-                  {renderExpanded && <th scope="col" className="p-1" />}
-                  {visibleColumns.map((c) => (
-                    <th scope="col" key={c.key} className="p-1">
-                      <input
-                        value={columnFilters[c.key] ?? ""}
-                        onChange={(e) => setColumnFilter(c.key, e.target.value)}
-                        placeholder={c.label}
-                        aria-label={`Filter by ${c.label}`}
-                        className="w-full rounded border border-ink/15 bg-white px-2 py-1 text-xs font-normal"
-                      />
-                    </th>
-                  ))}
-                </tr>
-              )}
             </thead>
             <tbody>
               {filteredRows.map((row) => (

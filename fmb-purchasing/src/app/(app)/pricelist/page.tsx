@@ -10,6 +10,8 @@ import { ItemsTable, type OfferRow } from "./items-table";
 import { dismissDuplicatePair } from "./actions";
 import { leafCategories, categoryLabelsById } from "@/lib/categories";
 
+export const metadata = { title: "Pricelist" };
+
 const PAGE_KEY = "pricelist";
 // Vendor is deliberately off by default. A row is a vendor offer, so showing
 // that column is what splits an item into one row per vendor; with it hidden

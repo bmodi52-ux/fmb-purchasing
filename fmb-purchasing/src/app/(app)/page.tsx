@@ -7,6 +7,8 @@ import { loadReportRawData } from "./reports/data";
 import { computeWidgetData } from "./reports/dashboard-widgets";
 import { HomeDashboard, type SavedWidget } from "./home-dashboard";
 
+export const metadata = { title: "Home" };
+
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");

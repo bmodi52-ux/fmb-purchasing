@@ -1,7 +1,8 @@
 "use client";
 
 import { SubmitButton } from "@/components/submit-button";
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useReportPending } from "@/components/pending";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   extractReceiptAction,
@@ -9,6 +10,7 @@ import {
   uploadReceiptFileAction,
   reportOversizeReceiptAction,
   findPossibleDuplicates,
+  resolveVendorAction,
   createExpense,
   updateExpense,
   type ExtractState,
@@ -18,13 +20,20 @@ import {
   type ItemLookupSuggestion,
   type ExpenseForEdit,
   type DuplicateWarning,
+  type ResolvedVendor,
 } from "./actions";
-import type { ExtractedReceipt, StoredLineKind } from "@/lib/receipt-extraction";
+import type { ExtractedReceipt } from "@/lib/receipt-extraction";
+import type { StoredLineKind } from "@/lib/line-kinds";
 import type { PayeeChoice } from "@/lib/payees";
 import { VendorLookupFields } from "./vendor-lookup-fields";
 import { ItemLookupCells } from "./item-lookup-cells";
 import { PayeePicker } from "./payee-picker";
-import { ReconciliationStrip, CHARGE_KIND_LABELS } from "./reconciliation-strip";
+import {
+  ReconciliationStrip,
+  CHARGE_KIND_LABELS,
+  LINE_KIND_LABELS,
+  type ChargeKind,
+} from "./reconciliation-strip";
 import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image-resize";
 import { normalizeReceiptDate } from "@/lib/format";
 import { round2, sumLines, residualFor } from "@/lib/expense-money";
@@ -109,10 +118,14 @@ function toReviewItems(items: ExtractedReceipt["lineItems"]): ReviewItem[] {
 }
 
 function blankItem(kind: StoredLineKind = "goods", lineTotal = 0): ReviewItem {
+  const isCharge = kind !== "goods" && kind !== "service";
   return {
     key: String(Math.random()),
     itemNumber: "",
-    description: kind === "goods" ? "" : CHARGE_KIND_LABELS[kind as Exclude<StoredLineKind, "goods">],
+    // A charge names itself — "Card or service surcharge" is the whole of what
+    // that line is. Goods and services have to be described by the person,
+    // because "Service" tells a reviewer nothing about what was bought.
+    description: isCharge ? CHARGE_KIND_LABELS[kind as ChargeKind] : "",
     // Typed by hand, so there is no earlier reading to compare against.
     originalDescription: null,
     kind,
@@ -121,7 +134,9 @@ function blankItem(kind: StoredLineKind = "goods", lineTotal = 0): ReviewItem {
     lineTotal,
     categoryName: null,
     // A charge is usually taxable even when the goods are not — a card
-    // surcharge on GST-free groceries still carries GST.
+    // surcharge on GST-free groceries still carries GST. So is a service:
+    // cleaning and maintenance are not basic food, whatever the rest of the
+    // receipt is. Only rounding never carries any.
     gstApplicable: kind !== "goods" && kind !== "rounding",
     normalizedQuantity: null,
     normalizedUnit: null,
@@ -179,7 +194,14 @@ export function SubmitForm({
   const [mode, setMode] = useState<"start" | "review">(editExpense ? "review" : "start");
   const [preparing, setPreparing] = useState(false);
   const [sizeError, setSizeError] = useState<string | null>(null);
+  const [draggingOver, setDraggingOver] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentInput[]>(editExpense?.attachments ?? []);
+
+  // Reading a receipt is by far the longest wait here, and it was the one
+  // thing in the app that never reached the shared hairline — only navigations,
+  // submit buttons and table actions did. Now the same top-of-viewport cue
+  // appears for it as for everything else.
+  useReportPending(preparing || extracting);
 
   const [vendorName, setVendorName] = useState(editExpense?.vendorName ?? "");
   const [vendorNumber, setVendorNumber] = useState("");
@@ -200,6 +222,56 @@ export function SubmitForm({
       : []
   );
   const [restoredDraft, setRestoredDraft] = useState(false);
+  const [resolvedVendor, setResolvedVendor] = useState<ResolvedVendor | null>(null);
+  const [resolvingVendor, setResolvingVendor] = useState(false);
+
+  // Work out which vendor on file this receipt belongs to, whether the name
+  // arrived from extraction, a restored draft, or typing. Read-only: nothing is
+  // created until the expense is submitted.
+  //
+  // Debounced and sequence-guarded, because it runs on every keystroke in the
+  // vendor field and answers cross the Pacific — without the guard, a slow
+  // reply for "Foodwo" can land after the fast one for "Foodworks" and put the
+  // wrong vendor on screen.
+  const vendorResolveSeq = useRef(0);
+  useEffect(() => {
+    const name = vendorName.trim();
+    const cleanAbn = abn.replace(/\D/g, "");
+    // A server action is an external system; querying one and storing what it
+    // says is what effects exist for, even though the rule sees only setState.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!name && !cleanAbn) {
+      setResolvedVendor(null);
+      setResolvingVendor(false);
+      return;
+    }
+    const seq = ++vendorResolveSeq.current;
+    setResolvingVendor(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    const handle = setTimeout(async () => {
+      try {
+        const found = await resolveVendorAction(name, cleanAbn || null);
+        if (seq !== vendorResolveSeq.current) return;
+        setResolvedVendor(found);
+      } catch {
+        // A failed lookup must not block the submission; the write path does
+        // its own matching regardless of what this managed to show.
+        if (seq === vendorResolveSeq.current) setResolvedVendor(null);
+      } finally {
+        if (seq === vendorResolveSeq.current) setResolvingVendor(false);
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [vendorName, abn]);
+
+  // Fill the Vendor # the submitter did not have to know, once matching has
+  // found it. Only when blank, so it never fights a number they typed.
+  useEffect(() => {
+    if (resolvedVendor?.vendorNumber && !vendorNumber) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setVendorNumber(resolvedVendor.vendorNumber);
+    }
+  }, [resolvedVendor, vendorNumber]);
 
   // Offer an unfinished submission back, once, on a fresh form only. Editing an
   // existing expense is a different job and must never be seeded from a draft.
@@ -294,11 +366,16 @@ export function SubmitForm({
   }, [editExpense, mode, vendorName, abn, invoiceNumber, receiptDate, total,
       printedGst, submitterComment, attachments, items, payee]);
 
-  async function handleReceiptChosen(e: React.ChangeEvent<HTMLInputElement>) {
-    const input = e.currentTarget;
-    const chosen = input.files?.[0];
-    if (!chosen) return;
-
+  /**
+   * Read a receipt, however it arrived.
+   *
+   * Takes a File rather than a change event so one path serves the file
+   * picker, a pasted screenshot and a dropped file. Plenty of receipts here
+   * are never photographed — they are screenshots or email attachments — and
+   * "save it somewhere, then find it again in a picker" was a detour around
+   * the clipboard the person was already holding it on.
+   */
+  async function readReceiptFile(chosen: File, onRejected?: () => void) {
     setSizeError(null);
     setPreparing(true);
     try {
@@ -315,7 +392,7 @@ export function SubmitForm({
           fileType: prepared.type,
           sizeBytes: prepared.size,
         }).catch(() => {});
-        input.value = "";
+        onRejected?.();
         return;
       }
 
@@ -330,6 +407,44 @@ export function SubmitForm({
       setPreparing(false);
     }
   }
+
+  async function handleReceiptChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
+    const chosen = input.files?.[0];
+    if (!chosen) return;
+    await readReceiptFile(chosen, () => {
+      input.value = "";
+    });
+  }
+
+  /**
+   * Paste a receipt straight onto the page.
+   *
+   * Bound to the document rather than to a focusable element, because there is
+   * nothing on this screen anyone would think to click first — the natural
+   * gesture is to arrive on Submit and press Ctrl+V. Only while the upload area
+   * is what is showing, so that pasting into a line item's description later
+   * cannot be mistaken for handing over a new receipt.
+   */
+  useEffect(() => {
+    if (mode !== "start" || preparing || extracting) return;
+
+    function onPaste(event: ClipboardEvent) {
+      // A screenshot arrives as an image item; a file copied out of a file
+      // manager or a mail client arrives as a file. Anything else — text,
+      // HTML — is somebody pasting into a field, and none of our business.
+      const file = Array.from(event.clipboardData?.items ?? [])
+        .find((i) => i.kind === "file")
+        ?.getAsFile();
+      if (!file) return;
+      event.preventDefault();
+      void readReceiptFile(file);
+    }
+
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, preparing, extracting]);
 
   function startManual() {
     setVendorName("");
@@ -354,7 +469,32 @@ export function SubmitForm({
     const busy = preparing || extracting;
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 rounded-lg border-2 border-dashed border-ink/20 bg-white/50 p-8 text-center">
+        <div
+          // The dashed border always promised a drop target; now it is one.
+          // dragover has to be cancelled or the browser navigates away to the
+          // dropped file instead, taking the half-filled form with it.
+          onDragOver={(e) => {
+            if (busy) return;
+            e.preventDefault();
+            setDraggingOver(true);
+          }}
+          onDragLeave={(e) => {
+            // Fires for every child the pointer crosses; only the crossing that
+            // actually leaves the zone should clear the highlight.
+            if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+            setDraggingOver(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDraggingOver(false);
+            if (busy) return;
+            const file = e.dataTransfer.files?.[0];
+            if (file) void readReceiptFile(file);
+          }}
+          className={`flex flex-col gap-3 rounded-lg border-2 border-dashed bg-white/50 p-8 text-center transition-colors ${
+            draggingOver ? "border-gold-deep bg-gold/10" : "border-ink/20"
+          }`}
+        >
           {/* The control is disabled while a request is in flight. It was not,
               which on a slow connection meant an impatient second tap ran the
               whole upload and the model call again. The chosen file is passed
@@ -362,16 +502,41 @@ export function SubmitForm({
           <label className={busy ? "cursor-progress opacity-60" : "cursor-pointer"}>
             <input
               type="file"
-              accept="image/*,application/pdf"
+              // .eml is listed by extension as well as by type: Windows often
+              // reports no MIME type for it at all, and an accept list it
+              // cannot match hides the file in the picker.
+              accept="image/*,application/pdf,message/rfc822,.eml"
               disabled={busy}
               className="hidden"
               onChange={handleReceiptChosen}
             />
             <span className="section-title text-ink">Upload or scan a receipt</span>
-            <p className="mt-1 text-sm text-ink/60">JPG, PNG, WebP, or PDF. Tap to choose a file.</p>
+            <p className="mt-1 text-sm text-ink/60">
+              Tap to choose a file, drag one here, or paste a screenshot.
+            </p>
+            <p className="mt-1 text-xs text-ink/45">
+              JPG, PNG, WebP, PDF, or a saved email (.eml).
+            </p>
           </label>
-          {preparing && <p className="font-mono text-sm text-ink/60">Preparing photo…</p>}
-          {extracting && <p className="font-mono text-sm text-ink/60">Reading receipt…</p>}
+          {/* Reading a receipt is the longest wait in the app — ten to twenty
+              seconds against the model — and it used to show one line of static
+              text, which after a few seconds is indistinguishable from a page
+              that has died. An indeterminate bar cannot claim progress it does
+              not know, but it can keep saying "still working", which is the
+              part that was missing. */}
+          {busy && (
+            <div className="flex flex-col gap-2" role="status" aria-live="polite">
+              <p className="font-mono text-sm text-ink/60">
+                {preparing ? "Preparing photo…" : "Reading receipt…"}
+              </p>
+              <span className="inline-progress" aria-hidden="true" />
+              {extracting && (
+                <p className="text-xs text-ink/45">
+                  Usually about ten seconds. You can leave this page open.
+                </p>
+              )}
+            </div>
+          )}
           {sizeError && !extracting && <p className="text-sm text-red-700">{sizeError}</p>}
           {extractState.error && !extracting && (
             <p className="text-sm text-red-700">{extractState.error}</p>
@@ -417,6 +582,8 @@ export function SubmitForm({
       extractedPayeeName={extractedPayeeName}
       extractionNote={extractionNote}
       restoredDraft={restoredDraft}
+      resolvedVendor={resolvedVendor}
+      resolvingVendor={resolvingVendor}
       onDiscard={discard}
       onSubmitted={clearDraft}
       editExpenseId={editExpense?.id ?? null}
@@ -432,6 +599,8 @@ function ReviewForm(props: {
   setVendorName: (v: string) => void;
   vendorNumber: string;
   setVendorNumber: (v: string) => void;
+  resolvedVendor: ResolvedVendor | null;
+  resolvingVendor: boolean;
   abn: string;
   setAbn: (v: string) => void;
   invoiceNumber: string;
@@ -526,6 +695,40 @@ function ReviewForm(props: {
 
   function addCharge(kind: StoredLineKind, amount: number) {
     props.setItems((prev) => [...prev, blankItem(kind, amount)]);
+  }
+
+  /**
+   * Change what a line is, and clear what no longer applies to it.
+   *
+   * Only goods carry a per-unit cost, so a line that stops being goods has to
+   * shed its quantity, unit price and normalised units — otherwise a
+   * reclassified line keeps a "$450 per ea" that the inputs no longer show but
+   * the database would still be told about, and which the costing views are
+   * only kept away from by their kind filter.
+   *
+   * The item number goes too: it points at a Pricelist offer that a service or
+   * a charge will never be matched against.
+   */
+  function changeKind(key: string, kind: StoredLineKind) {
+    props.setItems((prev) =>
+      prev.map((it) =>
+        it.key !== key
+          ? it
+          : {
+              ...it,
+              kind,
+              ...(kind === "goods"
+                ? {}
+                : {
+                    itemNumber: "",
+                    quantity: null,
+                    unitPrice: null,
+                    normalizedQuantity: null,
+                    normalizedUnit: null,
+                  }),
+            }
+      )
+    );
   }
 
   function handleAbnLookup() {
@@ -639,6 +842,8 @@ function ReviewForm(props: {
           setVendorName={props.setVendorName}
           vendorNumber={props.vendorNumber}
           setVendorNumber={props.setVendorNumber}
+          resolved={props.resolvedVendor}
+          resolving={props.resolvingVendor}
         />
         <Field label="Date">
           <input
@@ -679,6 +884,8 @@ function ReviewForm(props: {
           value={props.payee}
           onChange={props.setPayee}
           myName={props.myName}
+          vendorName={props.vendorName}
+          vendorHasPaymentDetails={props.resolvedVendor?.hasPaymentDetails ?? false}
           extractedName={props.extractedPayeeName}
         />
       </div>
@@ -687,6 +894,12 @@ function ReviewForm(props: {
         <table className="min-w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-ink/50">
+              {/* What the line *is* used to be implicit — inferable only from
+                  whether the Category cell had turned into a charge picker.
+                  Now that a service is its own kind, and the difference decides
+                  whether the line reaches the Pricelist at all, it is worth a
+                  column of its own that can also be corrected. */}
+              <th scope="col" className="p-1">Type</th>
               <th scope="col" className="p-1">Item #</th>
               <th scope="col" className="p-1">Description</th>
               <th scope="col" className="p-1">Category</th>
@@ -707,6 +920,20 @@ function ReviewForm(props: {
                 // what changed.
                 className={`border-t border-ink/5 ${item.autoAdded ? "bg-gold/10" : ""}`}
               >
+                <td className="p-1">
+                  <select
+                    value={item.kind}
+                    onChange={(e) => changeKind(item.key, e.target.value as StoredLineKind)}
+                    className="rounded border border-ink/10 bg-white px-2 py-1"
+                    aria-label="Line type"
+                  >
+                    {Object.entries(LINE_KIND_LABELS).map(([k, label]) => (
+                      <option key={k} value={k}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </td>
                 {item.kind === "goods" ? (
                   <ItemLookupCells
                     itemNumber={item.itemNumber}
@@ -717,48 +944,42 @@ function ReviewForm(props: {
                   />
                 ) : (
                   <>
-                    {/* A charge is not a product, so it gets no item number and
-                        no Pricelist lookup — matching one would file "CREDIT
-                        SURCHARGE" as a pending item under the vendor. */}
+                    {/* Neither a charge nor a service is a product, so neither
+                        gets an item number or a Pricelist lookup. Matching a
+                        charge would file "CREDIT SURCHARGE" as a pending item
+                        under the vendor; matching a service would file
+                        "Monthly kitchen deep clean — August", and then
+                        September's separately (migration 0035). */}
                     <td className="p-1 text-xs text-ink/35">—</td>
                     <td className="p-1">
                       <input
                         value={item.description}
                         onChange={(e) => updateItem(item.key, { description: e.target.value })}
+                        placeholder={item.kind === "service" ? "What was done" : undefined}
                         className="w-full min-w-[10rem] rounded border border-ink/10 bg-white px-2 py-1"
                       />
                     </td>
                   </>
                 )}
                 <td className="p-1">
-                  {item.kind === "goods" ? (
-                    <select
-                      value={item.categoryName ?? ""}
-                      onChange={(e) => updateItem(item.key, { categoryName: e.target.value || null })}
-                      className="rounded border border-ink/10 bg-white px-2 py-1"
-                      aria-label="Category"
-                    >
-                      <option value="">—</option>
-                      {props.categories.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <select
-                      value={item.kind}
-                      onChange={(e) => updateItem(item.key, { kind: e.target.value as StoredLineKind })}
-                      className="rounded border border-ink/10 bg-white px-2 py-1"
-                      aria-label="Charge type"
-                    >
-                      {Object.entries(CHARGE_KIND_LABELS).map(([k, label]) => (
-                        <option key={k} value={k}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  {/* Every kind carries a category now, services included —
+                      that is how a repair reaches Maintenance & Repairs in the
+                      reports without ever touching the catalogue. Charges used
+                      to lose this cell to the kind picker, so a delivery fee
+                      could be categorised by extraction but never corrected. */}
+                  <select
+                    value={item.categoryName ?? ""}
+                    onChange={(e) => updateItem(item.key, { categoryName: e.target.value || null })}
+                    className="rounded border border-ink/10 bg-white px-2 py-1"
+                    aria-label="Category"
+                  >
+                    <option value="">—</option>
+                    {props.categories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="p-1">
                   <input
@@ -828,6 +1049,13 @@ function ReviewForm(props: {
           className="rounded-md border border-dashed border-ink/20 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/40"
         >
           + Add line item
+        </button>
+        <button
+          type="button"
+          onClick={() => addCharge("service", 0)}
+          className="rounded-md border border-dashed border-ink/20 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/40"
+        >
+          + Add a service
         </button>
         <button
           type="button"
@@ -941,7 +1169,7 @@ function Attachments({
         <input
           type="file"
           name="file"
-          accept="image/*,application/pdf"
+          accept="image/*,application/pdf,message/rfc822,.eml"
           disabled={uploading}
           className="min-w-0 max-w-full text-xs"
           // same downscale as the main upload — this path hits the identical

@@ -26,7 +26,19 @@ const amiri = Amiri({
 });
 
 export const metadata: Metadata = {
-  title: "FMB Sydney",
+  /**
+   * Every page names itself in the tab.
+   *
+   * Without the template each route inherited this one string, so anyone
+   * working across My submissions, Vendors and Pricelist at once had three
+   * tabs reading "FMB Sydney" and had to open each to tell them apart — which
+   * is most of the reason to have tabs at all. The page name leads because a
+   * tab is truncated from the right.
+   */
+  title: {
+    template: "%s · FMB Sydney",
+    default: "FMB Sydney",
+  },
   description: "Expense submission, approval and reporting for FMB.",
   // Named here as well as in the manifest: iOS reads this one when the site is
   // added to a home screen, and ignores the manifest's short_name.

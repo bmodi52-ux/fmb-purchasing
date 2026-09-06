@@ -1,29 +1,20 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { isEmail, parseEmailReceipt } from "@/lib/email-receipt";
 
 /**
- * What a line represents. Only `goods` carries a unit cost and belongs in
- * price analytics; everything else exists so that the lines add up to the
- * total printed on the receipt. Mirrors the `line_item_kind` enum in
- * migration 0026 — keep the two in step.
+ * The line kinds live in their own leaf module, and are re-exported here so
+ * existing imports keep working.
+ *
+ * They cannot be declared in this file: client components need them as
+ * values, and importing a value from here drags the Anthropic client and the
+ * MIME parser into the browser bundle. A type import was always free; the
+ * first value import was not, and cost 160KB before anyone noticed.
  */
-export const LINE_KINDS = [
-  "goods",
-  "surcharge",
-  "delivery",
-  "discount",
-  "rounding",
-  "deposit",
-] as const;
+import { LINE_KINDS, SUBSTANTIVE_KINDS } from "@/lib/line-kinds";
+import type { LineKind, StoredLineKind } from "@/lib/line-kinds";
 
-export type LineKind = (typeof LINE_KINDS)[number];
-
-/**
- * Every kind a stored line can have. `unallocated` is deliberately absent from
- * the enum offered to the model: it is not something a receipt says, it is what
- * the app records when the lines it read do not account for the total and the
- * shortfall is too large to be a charge — see residualFor in expense-money.
- */
-export type StoredLineKind = LineKind | "unallocated";
+export { LINE_KINDS, SUBSTANTIVE_KINDS };
+export type { LineKind, StoredLineKind };
 
 export type ExtractedLineItem = {
   description: string;
@@ -287,8 +278,14 @@ Every receipt must resolve to Subtotal (excl. GST) -> GST amount -> Total (incl.
 - If the receipt gives no GST signal at all, decide per line from what the line is: GST-free for basic food, GST-inclusive at 10% for anything else. Do NOT apply a blanket 10% to a receipt full of fresh food; a claimed credit that does not exist is a worse error than a missed one.
 - Set gstAmount to the total GST across the receipt, consistent with the per-line flags. If the receipt prints a GST total, use the printed figure.
 
+GOODS OR SERVICE
+Most of what this kitchen buys is stock, and those lines are kind "goods". Work bought rather than stock is kind "service": a cleaning contract, a plumbing repair, equipment servicing, pest control, a hired hand, a delivery driver's labour billed separately from the freight. Use it whenever the line is an activity someone performed, not an item that arrived.
+- The difference is not cosmetic. Goods lines are matched into a price catalogue and become part of a per-unit cost history, which is meaningless for a one-off "Monthly deep clean — August" and pollutes it. Services are recorded, categorised and reported, and stay out of that catalogue.
+- Labour billed by the hour is still a service, even with a quantity and a rate on the line: record what the invoice says in quantity and unitPrice, but leave normalizedQuantity and normalizedUnit null, since hours do not convert to a pack size.
+- An invoice can carry both: a plumber's parts are goods and their call-out labour is a service. Split them as the invoice does.
+
 EVERY DOLLAR OF THE TOTAL MUST APPEAR ON A LINE
-The line items must add up to the total printed on the receipt. When a receipt charges or credits something that is not a purchase, record it as its own line with the right kind:
+The line items must add up to the total printed on the receipt. When a receipt charges or credits something that is neither goods nor a service, record it as its own line with the right kind:
 - surcharge — card surcharge, service fee ("CREDIT SURCHARGE 0.56", "TOTAL SURCHARGE 0.50%")
 - delivery — freight, delivery, fuel levy
 - discount — always a negative amount ("10 % DISCOUNT ... 9.20-")
@@ -297,7 +294,7 @@ The line items must add up to the total printed on the receipt. When a receipt c
 Do not fold these into a goods line and do not leave them out. A genuine credit or return of goods stays kind "goods" with a negative amount.
 
 OTHER RULES
-- For each goods line, infer the canonical base unit and total quantity from the printed pack description (e.g. "Tomato Sauce Carton — 3x4L" -> normalizedQuantity 12, normalizedUnit "L"; "Chicken 10kg box" -> normalizedQuantity 10, normalizedUnit "kg"). Leave both null when no sensible conversion applies, and on any line that is not goods.
+- For each goods line, infer the canonical base unit and total quantity from the printed pack description (e.g. "Tomato Sauce Carton — 3x4L" -> normalizedQuantity 12, normalizedUnit "L"; "Chicken 10kg box" -> normalizedQuantity 10, normalizedUnit "kg"). Leave both null when no sensible conversion applies, and on every line that is not goods — a service included.
 - Assign each line the closest category from the provided enum. "Miscellaneous" is a real choice meaning the spend genuinely belongs to no other category — a one-off fee, a sundry charge. It is NOT a way of saying you are unsure.
 - When the line text does not say enough to classify it — "Sundries", "Item 4", an illegible or truncated description with no handwriting to clarify it — choose the "Unclear" option instead of guessing. An unclear line is put in front of a person to decide, which is far better than a confident wrong category nobody ever revisits.
 - Strip currency symbols from numbers. If a value is unreadable or absent, use null rather than guessing.
@@ -371,6 +368,55 @@ export async function extractReceipt(
 }
 
 /**
+ * What the model is shown, which depends on what was uploaded.
+ *
+ * There used to be two shapes — a PDF document block or an image block — and a
+ * saved email is neither. An .eml has to be taken apart first: its body is
+ * text, and each attachment is its own image or document block. That ordering
+ * is deliberate, message before attachments, because the covering message is
+ * what explains the attachments ("pay Taj Mart directly as per attached
+ * invoices"), and occasionally is the whole receipt when nothing is attached
+ * at all.
+ */
+async function buildContent(
+  fileBase64: string,
+  mediaType: string
+): Promise<Anthropic.ContentBlockParam[]> {
+  if (isEmail(mediaType)) {
+    const email = await parseEmailReceipt(Buffer.from(fileBase64, "base64"));
+    return [
+      {
+        type: "text",
+        text: `This upload is a saved email. Its message follows, then any attachments.\n\n${email.text}`,
+      },
+      ...email.documents.map(documentBlock),
+      { type: "text", text: "Extract this receipt." },
+    ];
+  }
+
+  return [
+    documentBlock({ mediaType, base64: fileBase64 }),
+    { type: "text", text: "Extract this receipt." },
+  ];
+}
+
+function documentBlock(file: { mediaType: string; base64: string }): Anthropic.ContentBlockParam {
+  return file.mediaType === "application/pdf"
+    ? {
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: file.base64 },
+      }
+    : {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: file.mediaType as "image/jpeg" | "image/png" | "image/webp",
+          data: file.base64,
+        },
+      };
+}
+
+/**
  * The extraction call, with everything the harness needs to score and cost it.
  * The app itself only wants the receipt, and uses {@link extractReceipt}.
  */
@@ -383,17 +429,7 @@ export async function extractReceiptDetailed(
   const model = options?.model ?? MODEL;
   const effort = options?.effort ?? EFFORT;
   const startedAt = Date.now();
-  const isPdf = mediaType === "application/pdf";
-  const contentBlock: Anthropic.ContentBlockParam = isPdf
-    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: fileBase64 } }
-    : {
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: mediaType as "image/jpeg" | "image/png" | "image/webp",
-          data: fileBase64,
-        },
-      };
+  const content = await buildContent(fileBase64, mediaType);
 
   const response = await getClient().messages.create({
     model,
@@ -402,12 +438,7 @@ export async function extractReceiptDetailed(
     system: SYSTEM_PROMPT,
     tools: [buildTool(categoryNames)],
     tool_choice: { type: "tool", name: EXTRACT_TOOL_NAME },
-    messages: [
-      {
-        role: "user",
-        content: [contentBlock, { type: "text", text: "Extract this receipt." }],
-      },
-    ],
+    messages: [{ role: "user", content }],
   });
 
   // A truncated response can still carry a partial tool_use block, which would

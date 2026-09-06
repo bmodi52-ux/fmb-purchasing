@@ -5,6 +5,8 @@ import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UnitsManager, type ManagedUnit } from "../units-manager";
 
+export const metadata = { title: "Units" };
+
 export default async function PricelistUnitsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");

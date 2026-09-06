@@ -8,12 +8,16 @@ import {
   round2,
   type MoneyLine,
 } from "@/lib/expense-money";
-import type { StoredLineKind } from "@/lib/receipt-extraction";
+import { SUBSTANTIVE_KINDS } from "@/lib/line-kinds";
+import type { StoredLineKind } from "@/lib/line-kinds";
 
 const money = (n: number) =>
   n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
-export const CHARGE_KIND_LABELS: Record<Exclude<StoredLineKind, "goods">, string> = {
+/** A line that is not something bought, but something charged on top of it. */
+export type ChargeKind = Exclude<StoredLineKind, "goods" | "service">;
+
+export const CHARGE_KIND_LABELS: Record<ChargeKind, string> = {
   surcharge: "Card or service surcharge",
   delivery: "Delivery or freight",
   discount: "Discount",
@@ -23,6 +27,19 @@ export const CHARGE_KIND_LABELS: Record<Exclude<StoredLineKind, "goods">, string
   // all still records the right total, with the ambiguity stated rather than
   // hidden inside a guessed line.
   unallocated: "Not itemised",
+};
+
+/**
+ * Every kind as it reads in the line-kind picker.
+ *
+ * Services sit at the top with goods because they are what was bought, not
+ * something added to it — the distinction that keeps a cleaning invoice out
+ * of the Pricelist and out of per-unit costing (migration 0035).
+ */
+export const LINE_KIND_LABELS: Record<StoredLineKind, string> = {
+  goods: "Goods",
+  service: "Service or labour",
+  ...CHARGE_KIND_LABELS,
 };
 
 /**
@@ -57,8 +74,11 @@ export function ReconciliationStrip({
   /** How many lines the app added itself, so the copy can say so. */
   autoAddedCount?: number;
 }) {
-  const goods = lines.filter((l) => l.kind === "goods");
-  const charges = lines.filter((l) => l.kind !== "goods");
+  // Services sit with goods, not with charges. Reading "Charges and discounts
+  // ×1 · $450.00" on a cleaning invoice would suggest the app had misread the
+  // whole thing.
+  const purchases = lines.filter((l) => (SUBSTANTIVE_KINDS as readonly string[]).includes(l.kind));
+  const charges = lines.filter((l) => !(SUBSTANTIVE_KINDS as readonly string[]).includes(l.kind));
   const balance = reconcile(lines, receiptTotal);
   const computedGst = sumLineGst(lines);
   const gstGap = printedGst == null ? null : round2(printedGst - computedGst);
@@ -67,7 +87,7 @@ export function ReconciliationStrip({
   return (
     <div className="mt-6 rounded-lg border border-ink/15 bg-white/70 p-4">
       <div className="flex flex-col gap-1.5 font-mono text-sm">
-        <Row label="Line items" value={sumLines(goods)} count={goods.length} />
+        <Row label="Line items" value={sumLines(purchases)} count={purchases.length} />
         {charges.length > 0 && (
           <Row label="Charges and discounts" value={sumLines(charges)} count={charges.length} />
         )}
@@ -125,7 +145,7 @@ export function ReconciliationStrip({
               onClick={() => onAddCharge(suggested, round2(balance.difference))}
               className="shrink-0 rounded-md border border-gold-deep/40 bg-white px-3 py-1.5 font-sans text-xs font-medium text-gold-deep hover:bg-gold/10"
             >
-              Add as {CHARGE_KIND_LABELS[suggested as Exclude<StoredLineKind, "goods">].toLowerCase()}
+              Add as {CHARGE_KIND_LABELS[suggested as ChargeKind].toLowerCase()}
             </button>
           )}
         </div>

@@ -3,11 +3,23 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const RECEIPTS_BUCKET = "receipts";
 
+/**
+ * What may be uploaded as a receipt.
+ *
+ * message/rfc822 is a saved email, and it is here because it is what people
+ * were already sending: the extraction prompt has always described "a
+ * forwarded email, printed to PDF, whose body carries the instruction", which
+ * is a manual conversion step someone was performing on every such receipt.
+ * The covering message routinely holds what the receipt does not — who to pay,
+ * what the payment is for, sometimes the amount, when there is no receipt at
+ * all — so the email is the document, not a wrapper around one.
+ */
 export const ACCEPTED_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
   "application/pdf",
+  "message/rfc822",
 ]);
 
 const EXTENSIONS: Record<string, string> = {
@@ -15,7 +27,22 @@ const EXTENSIONS: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
   "application/pdf": "pdf",
+  "message/rfc822": "eml",
 };
+
+/**
+ * The type a browser *should* have reported.
+ *
+ * Chrome gives a .eml file "message/rfc822", but Windows hands over an empty
+ * string when no application is registered for the extension, and dragging one
+ * out of some mail clients yields "application/octet-stream". Rejecting those
+ * would refuse the file for a reason the person cannot see or fix, so the
+ * extension decides when the browser declines to.
+ */
+export function receiptContentType(fileName: string, reportedType: string): string {
+  if (ACCEPTED_TYPES.has(reportedType)) return reportedType;
+  return /\.eml$/i.test(fileName) ? "message/rfc822" : reportedType;
+}
 
 export type StoredFile = {
   storagePath: string;

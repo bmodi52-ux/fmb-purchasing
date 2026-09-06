@@ -1,6 +1,8 @@
 import { AuthCard } from "@/components/auth-card";
 import { ResetPasswordForm } from "./reset-password-form";
 
+export const metadata = { title: "Choose a new password" };
+
 export default async function ResetPasswordPage({
   searchParams,
 }: {

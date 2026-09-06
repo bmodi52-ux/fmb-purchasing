@@ -178,6 +178,22 @@ describe("residualFor", () => {
     assert.equal(r?.kind, "unallocated");
   });
 
+  test("a service counts as itemisation, so its surcharge is still booked", () => {
+    // A cleaning invoice carries no goods at all. Before 'service' existed it
+    // had to be entered as goods; now that it need not, the rule has to treat
+    // it as substantive too — otherwise a 0.5% card fee on a $450 clean is
+    // sent to the review queue for a person to confirm.
+    const r = residualFor([{ kind: "service", lineTotal: 450, gstApplicable: true }], 452.25);
+    assert.equal(r?.kind, "surcharge");
+    assert.equal(r?.reason, "charge");
+    assert.equal(r?.amount, 2.25);
+  });
+
+  test("a service invoice missing most of its value is still left visible", () => {
+    const r = residualFor([{ kind: "service", lineTotal: 200, gstApplicable: true }], 900);
+    assert.equal(r?.kind, "unallocated", "being substantive does not make a gap plausible");
+  });
+
   test("the boundary sits between a plausible discount and missing goods", () => {
     // 10% — a real bulk discount, booked automatically.
     assert.equal(residualFor([goods(100)], 90)?.kind, "discount");

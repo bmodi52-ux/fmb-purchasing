@@ -5,6 +5,8 @@ import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createTeam, addTeamMember, removeTeamMember, togglePermission } from "./actions";
 
+export const metadata = { title: "Teams & permissions" };
+
 export default async function TeamsAdminPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -14,7 +16,16 @@ export default async function TeamsAdminPage() {
   const [{ data: teams }, { data: pages }, { data: actions }, { data: grants }, { data: profiles }, { data: members }] =
     await Promise.all([
       admin.from("teams").select("id, name, is_default").order("name"),
-      admin.from("app_pages").select("key, label, sort_order").order("sort_order"),
+      // Only rows that are actually permission boundaries. Some app_pages
+      // entries exist purely as a column-preference scope for a second view of
+      // a page that is already permissioned — the expense-lines ledger inside
+      // All expenses — and listing those here would offer a grant that decides
+      // nothing (migration 0036).
+      admin
+        .from("app_pages")
+        .select("key, label, sort_order")
+        .eq("is_permission_scope", true)
+        .order("sort_order"),
       admin.from("app_actions").select("key, label"),
       admin.from("team_permissions").select("team_id, page_key, action_key"),
       admin.from("profiles").select("id, email, full_name").order("full_name"),

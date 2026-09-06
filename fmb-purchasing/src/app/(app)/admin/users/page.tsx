@@ -6,6 +6,8 @@ import { getColumnPreference } from "@/lib/column-prefs";
 import { CreateUserForm } from "./create-user-form";
 import { UsersTable, type UserRow } from "./users-table";
 
+export const metadata = { title: "Users" };
+
 const PAGE_KEY = "admin_users";
 const DEFAULT_VISIBLE = ["full_name", "email", "teams", "status", "actions"];
 
