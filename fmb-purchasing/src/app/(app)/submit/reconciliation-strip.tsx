@@ -13,7 +13,10 @@ import type { StoredLineKind } from "@/lib/receipt-extraction";
 const money = (n: number) =>
   n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
-export const CHARGE_KIND_LABELS: Record<Exclude<StoredLineKind, "goods">, string> = {
+/** A line that is not something bought, but something charged on top of it. */
+export type ChargeKind = Exclude<StoredLineKind, "goods" | "service">;
+
+export const CHARGE_KIND_LABELS: Record<ChargeKind, string> = {
   surcharge: "Card or service surcharge",
   delivery: "Delivery or freight",
   discount: "Discount",
@@ -23,6 +26,19 @@ export const CHARGE_KIND_LABELS: Record<Exclude<StoredLineKind, "goods">, string
   // all still records the right total, with the ambiguity stated rather than
   // hidden inside a guessed line.
   unallocated: "Not itemised",
+};
+
+/**
+ * Every kind as it reads in the line-kind picker.
+ *
+ * Services sit at the top with goods because they are what was bought, not
+ * something added to it — the distinction that keeps a cleaning invoice out
+ * of the Pricelist and out of per-unit costing (migration 0035).
+ */
+export const LINE_KIND_LABELS: Record<StoredLineKind, string> = {
+  goods: "Goods",
+  service: "Service or labour",
+  ...CHARGE_KIND_LABELS,
 };
 
 /**
@@ -125,7 +141,7 @@ export function ReconciliationStrip({
               onClick={() => onAddCharge(suggested, round2(balance.difference))}
               className="shrink-0 rounded-md border border-gold-deep/40 bg-white px-3 py-1.5 font-sans text-xs font-medium text-gold-deep hover:bg-gold/10"
             >
-              Add as {CHARGE_KIND_LABELS[suggested as Exclude<StoredLineKind, "goods">].toLowerCase()}
+              Add as {CHARGE_KIND_LABELS[suggested as ChargeKind].toLowerCase()}
             </button>
           )}
         </div>

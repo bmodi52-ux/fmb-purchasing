@@ -27,7 +27,12 @@ import type { PayeeChoice } from "@/lib/payees";
 import { VendorLookupFields } from "./vendor-lookup-fields";
 import { ItemLookupCells } from "./item-lookup-cells";
 import { PayeePicker } from "./payee-picker";
-import { ReconciliationStrip, CHARGE_KIND_LABELS } from "./reconciliation-strip";
+import {
+  ReconciliationStrip,
+  CHARGE_KIND_LABELS,
+  LINE_KIND_LABELS,
+  type ChargeKind,
+} from "./reconciliation-strip";
 import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image-resize";
 import { normalizeReceiptDate } from "@/lib/format";
 import { round2, sumLines, residualFor } from "@/lib/expense-money";
@@ -112,10 +117,14 @@ function toReviewItems(items: ExtractedReceipt["lineItems"]): ReviewItem[] {
 }
 
 function blankItem(kind: StoredLineKind = "goods", lineTotal = 0): ReviewItem {
+  const isCharge = kind !== "goods" && kind !== "service";
   return {
     key: String(Math.random()),
     itemNumber: "",
-    description: kind === "goods" ? "" : CHARGE_KIND_LABELS[kind as Exclude<StoredLineKind, "goods">],
+    // A charge names itself — "Card or service surcharge" is the whole of what
+    // that line is. Goods and services have to be described by the person,
+    // because "Service" tells a reviewer nothing about what was bought.
+    description: isCharge ? CHARGE_KIND_LABELS[kind as ChargeKind] : "",
     // Typed by hand, so there is no earlier reading to compare against.
     originalDescription: null,
     kind,
@@ -124,7 +133,9 @@ function blankItem(kind: StoredLineKind = "goods", lineTotal = 0): ReviewItem {
     lineTotal,
     categoryName: null,
     // A charge is usually taxable even when the goods are not — a card
-    // surcharge on GST-free groceries still carries GST.
+    // surcharge on GST-free groceries still carries GST. So is a service:
+    // cleaning and maintenance are not basic food, whatever the rest of the
+    // receipt is. Only rounding never carries any.
     gstApplicable: kind !== "goods" && kind !== "rounding",
     normalizedQuantity: null,
     normalizedUnit: null,
@@ -685,6 +696,40 @@ function ReviewForm(props: {
     props.setItems((prev) => [...prev, blankItem(kind, amount)]);
   }
 
+  /**
+   * Change what a line is, and clear what no longer applies to it.
+   *
+   * Only goods carry a per-unit cost, so a line that stops being goods has to
+   * shed its quantity, unit price and normalised units — otherwise a
+   * reclassified line keeps a "$450 per ea" that the inputs no longer show but
+   * the database would still be told about, and which the costing views are
+   * only kept away from by their kind filter.
+   *
+   * The item number goes too: it points at a Pricelist offer that a service or
+   * a charge will never be matched against.
+   */
+  function changeKind(key: string, kind: StoredLineKind) {
+    props.setItems((prev) =>
+      prev.map((it) =>
+        it.key !== key
+          ? it
+          : {
+              ...it,
+              kind,
+              ...(kind === "goods"
+                ? {}
+                : {
+                    itemNumber: "",
+                    quantity: null,
+                    unitPrice: null,
+                    normalizedQuantity: null,
+                    normalizedUnit: null,
+                  }),
+            }
+      )
+    );
+  }
+
   function handleAbnLookup() {
     setError(null);
     startAbnLookup(async () => {
@@ -848,6 +893,12 @@ function ReviewForm(props: {
         <table className="min-w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-ink/50">
+              {/* What the line *is* used to be implicit — inferable only from
+                  whether the Category cell had turned into a charge picker.
+                  Now that a service is its own kind, and the difference decides
+                  whether the line reaches the Pricelist at all, it is worth a
+                  column of its own that can also be corrected. */}
+              <th scope="col" className="p-1">Type</th>
               <th scope="col" className="p-1">Item #</th>
               <th scope="col" className="p-1">Description</th>
               <th scope="col" className="p-1">Category</th>
@@ -868,6 +919,20 @@ function ReviewForm(props: {
                 // what changed.
                 className={`border-t border-ink/5 ${item.autoAdded ? "bg-gold/10" : ""}`}
               >
+                <td className="p-1">
+                  <select
+                    value={item.kind}
+                    onChange={(e) => changeKind(item.key, e.target.value as StoredLineKind)}
+                    className="rounded border border-ink/10 bg-white px-2 py-1"
+                    aria-label="Line type"
+                  >
+                    {Object.entries(LINE_KIND_LABELS).map(([k, label]) => (
+                      <option key={k} value={k}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </td>
                 {item.kind === "goods" ? (
                   <ItemLookupCells
                     itemNumber={item.itemNumber}
@@ -878,48 +943,42 @@ function ReviewForm(props: {
                   />
                 ) : (
                   <>
-                    {/* A charge is not a product, so it gets no item number and
-                        no Pricelist lookup — matching one would file "CREDIT
-                        SURCHARGE" as a pending item under the vendor. */}
+                    {/* Neither a charge nor a service is a product, so neither
+                        gets an item number or a Pricelist lookup. Matching a
+                        charge would file "CREDIT SURCHARGE" as a pending item
+                        under the vendor; matching a service would file
+                        "Monthly kitchen deep clean — August", and then
+                        September's separately (migration 0035). */}
                     <td className="p-1 text-xs text-ink/35">—</td>
                     <td className="p-1">
                       <input
                         value={item.description}
                         onChange={(e) => updateItem(item.key, { description: e.target.value })}
+                        placeholder={item.kind === "service" ? "What was done" : undefined}
                         className="w-full min-w-[10rem] rounded border border-ink/10 bg-white px-2 py-1"
                       />
                     </td>
                   </>
                 )}
                 <td className="p-1">
-                  {item.kind === "goods" ? (
-                    <select
-                      value={item.categoryName ?? ""}
-                      onChange={(e) => updateItem(item.key, { categoryName: e.target.value || null })}
-                      className="rounded border border-ink/10 bg-white px-2 py-1"
-                      aria-label="Category"
-                    >
-                      <option value="">—</option>
-                      {props.categories.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <select
-                      value={item.kind}
-                      onChange={(e) => updateItem(item.key, { kind: e.target.value as StoredLineKind })}
-                      className="rounded border border-ink/10 bg-white px-2 py-1"
-                      aria-label="Charge type"
-                    >
-                      {Object.entries(CHARGE_KIND_LABELS).map(([k, label]) => (
-                        <option key={k} value={k}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  {/* Every kind carries a category now, services included —
+                      that is how a repair reaches Maintenance & Repairs in the
+                      reports without ever touching the catalogue. Charges used
+                      to lose this cell to the kind picker, so a delivery fee
+                      could be categorised by extraction but never corrected. */}
+                  <select
+                    value={item.categoryName ?? ""}
+                    onChange={(e) => updateItem(item.key, { categoryName: e.target.value || null })}
+                    className="rounded border border-ink/10 bg-white px-2 py-1"
+                    aria-label="Category"
+                  >
+                    <option value="">—</option>
+                    {props.categories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="p-1">
                   <input
@@ -989,6 +1048,13 @@ function ReviewForm(props: {
           className="rounded-md border border-dashed border-ink/20 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/40"
         >
           + Add line item
+        </button>
+        <button
+          type="button"
+          onClick={() => addCharge("service", 0)}
+          className="rounded-md border border-dashed border-ink/20 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/40"
+        >
+          + Add a service
         </button>
         <button
           type="button"

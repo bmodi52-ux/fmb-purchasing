@@ -1,3 +1,4 @@
+import { SUBSTANTIVE_KINDS } from "@/lib/receipt-extraction";
 import type { LineKind, StoredLineKind } from "@/lib/receipt-extraction";
 
 /**
@@ -173,9 +174,15 @@ export function residualFor(lines: MoneyLine[], receiptTotal: number): Residual 
   if (balance.balanced) return null;
 
   const share = receiptTotal === 0 ? 1 : Math.abs(balance.difference / receiptTotal);
-  const hasGoods = lines.some((l) => l.kind === "goods");
+  // Services count here as much as goods do. A cleaning invoice carries no
+  // goods at all, so without this its card surcharge would be booked as "not
+  // itemised" and sent to the review queue — a person summoned to confirm a
+  // 56c fee on an invoice that is perfectly well understood.
+  const hasSubstantive = lines.some((l) =>
+    (SUBSTANTIVE_KINDS as readonly string[]).includes(l.kind)
+  );
 
-  if (!hasGoods || share > CHARGE_PLAUSIBILITY_LIMIT) {
+  if (!hasSubstantive || share > CHARGE_PLAUSIBILITY_LIMIT) {
     return { kind: "unallocated", amount: balance.difference, reason: "unitemised" };
   }
   return {

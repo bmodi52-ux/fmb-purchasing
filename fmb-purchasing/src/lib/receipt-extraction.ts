@@ -3,12 +3,14 @@ import { isEmail, parseEmailReceipt } from "@/lib/email-receipt";
 
 /**
  * What a line represents. Only `goods` carries a unit cost and belongs in
- * price analytics; everything else exists so that the lines add up to the
- * total printed on the receipt. Mirrors the `line_item_kind` enum in
- * migration 0026 — keep the two in step.
+ * price analytics; `service` is real spend with nothing to cost per unit; the
+ * rest exist so that the lines add up to the total printed on the receipt.
+ * Mirrors the `line_item_kind` enum in migrations 0026 and 0035 — keep them in
+ * step.
  */
 export const LINE_KINDS = [
   "goods",
+  "service",
   "surcharge",
   "delivery",
   "discount",
@@ -17,6 +19,18 @@ export const LINE_KINDS = [
 ] as const;
 
 export type LineKind = (typeof LINE_KINDS)[number];
+
+/**
+ * Lines that are something the organisation actually bought, as opposed to
+ * charges bolted onto the purchase.
+ *
+ * The distinction decides whether an unexplained gap in a receipt can
+ * plausibly be a fee — see residualFor. Adding services to it matters: a
+ * cleaning invoice with a card surcharge has no goods on it at all, and
+ * without this its surcharge would be booked as "not itemised" and sent to
+ * the review queue for a person to look at.
+ */
+export const SUBSTANTIVE_KINDS: readonly LineKind[] = ["goods", "service"];
 
 /**
  * Every kind a stored line can have. `unallocated` is deliberately absent from
@@ -288,8 +302,14 @@ Every receipt must resolve to Subtotal (excl. GST) -> GST amount -> Total (incl.
 - If the receipt gives no GST signal at all, decide per line from what the line is: GST-free for basic food, GST-inclusive at 10% for anything else. Do NOT apply a blanket 10% to a receipt full of fresh food; a claimed credit that does not exist is a worse error than a missed one.
 - Set gstAmount to the total GST across the receipt, consistent with the per-line flags. If the receipt prints a GST total, use the printed figure.
 
+GOODS OR SERVICE
+Most of what this kitchen buys is stock, and those lines are kind "goods". Work bought rather than stock is kind "service": a cleaning contract, a plumbing repair, equipment servicing, pest control, a hired hand, a delivery driver's labour billed separately from the freight. Use it whenever the line is an activity someone performed, not an item that arrived.
+- The difference is not cosmetic. Goods lines are matched into a price catalogue and become part of a per-unit cost history, which is meaningless for a one-off "Monthly deep clean — August" and pollutes it. Services are recorded, categorised and reported, and stay out of that catalogue.
+- Labour billed by the hour is still a service, even with a quantity and a rate on the line: record what the invoice says in quantity and unitPrice, but leave normalizedQuantity and normalizedUnit null, since hours do not convert to a pack size.
+- An invoice can carry both: a plumber's parts are goods and their call-out labour is a service. Split them as the invoice does.
+
 EVERY DOLLAR OF THE TOTAL MUST APPEAR ON A LINE
-The line items must add up to the total printed on the receipt. When a receipt charges or credits something that is not a purchase, record it as its own line with the right kind:
+The line items must add up to the total printed on the receipt. When a receipt charges or credits something that is neither goods nor a service, record it as its own line with the right kind:
 - surcharge — card surcharge, service fee ("CREDIT SURCHARGE 0.56", "TOTAL SURCHARGE 0.50%")
 - delivery — freight, delivery, fuel levy
 - discount — always a negative amount ("10 % DISCOUNT ... 9.20-")
@@ -298,7 +318,7 @@ The line items must add up to the total printed on the receipt. When a receipt c
 Do not fold these into a goods line and do not leave them out. A genuine credit or return of goods stays kind "goods" with a negative amount.
 
 OTHER RULES
-- For each goods line, infer the canonical base unit and total quantity from the printed pack description (e.g. "Tomato Sauce Carton — 3x4L" -> normalizedQuantity 12, normalizedUnit "L"; "Chicken 10kg box" -> normalizedQuantity 10, normalizedUnit "kg"). Leave both null when no sensible conversion applies, and on any line that is not goods.
+- For each goods line, infer the canonical base unit and total quantity from the printed pack description (e.g. "Tomato Sauce Carton — 3x4L" -> normalizedQuantity 12, normalizedUnit "L"; "Chicken 10kg box" -> normalizedQuantity 10, normalizedUnit "kg"). Leave both null when no sensible conversion applies, and on every line that is not goods — a service included.
 - Assign each line the closest category from the provided enum. "Miscellaneous" is a real choice meaning the spend genuinely belongs to no other category — a one-off fee, a sundry charge. It is NOT a way of saying you are unsure.
 - When the line text does not say enough to classify it — "Sundries", "Item 4", an illegible or truncated description with no handwriting to clarify it — choose the "Unclear" option instead of guessing. An unclear line is put in front of a person to decide, which is far better than a confident wrong category nobody ever revisits.
 - Strip currency symbols from numbers. If a value is unreadable or absent, use null rather than guessing.
