@@ -65,3 +65,23 @@ export function collapseToItems<T extends CollapsibleOffer>(
     return { ...best, otherOfferCount: offers.length - 1 };
   });
 }
+
+/**
+ * Rejected offers, dropped from the Pricelist.
+ *
+ * A rejected offer is a price someone has already decided against. Listing it
+ * beside the live ones — as a row of its own, inside an expanded item, or in
+ * the "+N more offers" count — is clutter that reads as a real option at a
+ * glance. The full item page still shows every offer with its history, which
+ * is where a rejection is actually worth seeing.
+ *
+ * An item whose every offer was rejected keeps them. Filtering those too would
+ * take the item off the Pricelist altogether, leaving nothing to click through
+ * to and no way to notice it needs attention.
+ */
+export function withoutRejectedOffers<T extends CollapsibleOffer>(rows: T[]): T[] {
+  const itemsWithLiveOffer = new Set(
+    rows.filter((r) => r.status !== "rejected").map((r) => r.itemId)
+  );
+  return rows.filter((r) => r.status !== "rejected" || !itemsWithLiveOffer.has(r.itemId));
+}

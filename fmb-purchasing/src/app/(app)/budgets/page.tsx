@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getUserPermissions, can, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { leafCategories, categoryLabelsById } from "@/lib/categories";
+import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
 import { currentFiscalYearHijri, formatFiscalYear } from "@/lib/fiscal-year";
 import { FiscalYearSelect } from "@/components/fiscal-year-select";
 import { SubmitButton } from "@/components/submit-button";
@@ -50,7 +50,7 @@ export default async function BudgetsPage({
     loadReportRawData([selectedFy]),
   ]);
 
-  const categories = leafCategories(categoryRows ?? []);
+  const categories = leafCategories(sortCategories(categoryRows ?? []));
   const labels = categoryLabelsById(categoryRows ?? []);
   const budgetByCategory = new Map((budgetRows ?? []).map((b) => [b.category_id as string, Number(b.amount)]));
 

@@ -19,7 +19,7 @@ import {
 import { OfferForm } from "./offer-form";
 import { PackSizeForm } from "./pack-size-form";
 import { MergePanel, type DuplicateCandidate } from "./merge-panel";
-import { leafCategories, categoryLabelsById } from "@/lib/categories";
+import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
   name: "Name",
@@ -147,7 +147,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   const categoryNameById = categoryLabelsById(categories ?? []);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id, u.label]));
 
-  const assignableCategories = leafCategories(categories ?? []);
+  const assignableCategories = leafCategories(sortCategories(categories ?? []));
   const currentCategory = (categories ?? []).find((c) => c.id === item.category_id);
   const categoryOptions =
     currentCategory && !assignableCategories.some((c) => c.id === currentCategory.id)

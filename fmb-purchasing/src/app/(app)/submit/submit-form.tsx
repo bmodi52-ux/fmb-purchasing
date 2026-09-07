@@ -62,6 +62,33 @@ type ReviewItem = LineItemInput & {
  */
 const DRAFT_KEY = "fmb-expense-draft";
 
+/**
+ * What a receipt goes through between being chosen and appearing in the form.
+ *
+ * Three real waits, not an animation: the photo is shrunk in the browser, the
+ * file is uploaded, and then the model reads it. They used to be one caption —
+ * "Reading receipt…" — for up to half a minute, so there was no telling a slow
+ * connection from a slow read, or either from a page that had died.
+ */
+type UploadStage = "preparing" | "uploading" | "reading" | null;
+
+const UPLOAD_STEPS: { id: Exclude<UploadStage, null>; label: string; done: string }[] = [
+  { id: "preparing", label: "Preparing the photo…", done: "Photo prepared" },
+  { id: "uploading", label: "Uploading the receipt…", done: "Receipt uploaded" },
+  { id: "reading", label: "Reading the receipt…", done: "Receipt read" },
+];
+
+/** Where a step stands relative to the one actually running. */
+function stepState(
+  step: Exclude<UploadStage, null>,
+  current: UploadStage
+): "done" | "current" | "waiting" {
+  if (current === null) return "waiting";
+  const at = UPLOAD_STEPS.findIndex((s) => s.id === current);
+  const mine = UPLOAD_STEPS.findIndex((s) => s.id === step);
+  return mine < at ? "done" : mine === at ? "current" : "waiting";
+}
+
 type Draft = {
   vendorName: string;
   abn: string;
@@ -192,7 +219,10 @@ export function SubmitForm({
     initialExtractState
   );
   const [mode, setMode] = useState<"start" | "review">(editExpense ? "review" : "start");
-  const [preparing, setPreparing] = useState(false);
+  const [stage, setStage] = useState<UploadStage>(null);
+  // The two client-side stages, kept under one name because everything that
+  // asks is really asking "is a receipt on its way in?".
+  const preparing = stage === "preparing" || stage === "uploading";
   const [sizeError, setSizeError] = useState<string | null>(null);
   const [draggingOver, setDraggingOver] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentInput[]>(editExpense?.attachments ?? []);
@@ -303,9 +333,13 @@ export function SubmitForm({
   // result — an external system, not a derivable value — so an effect is
   // the right tool.
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    // Whatever came back, no step is still running. Cleared here rather than
+    // where extraction was started, because that call returns the moment the
+    // action is queued — see readReceiptFile.
+    setStage(null);
     if (extractState.data) {
       const d = extractState.data;
-      /* eslint-disable react-hooks/set-state-in-effect */
       setVendorName(d.vendor ?? "");
       setAbn(d.abn ?? "");
       setInvoiceNumber(d.invoiceNumber ?? "");
@@ -377,7 +411,7 @@ export function SubmitForm({
    */
   async function readReceiptFile(chosen: File, onRejected?: () => void) {
     setSizeError(null);
-    setPreparing(true);
+    setStage("preparing");
     try {
       const prepared = await shrinkImageForUpload(chosen);
       if (prepared.size > MAX_UPLOAD_BYTES) {
@@ -400,11 +434,31 @@ export function SubmitForm({
       // own fields: the input is disabled while this runs, and a disabled
       // control is left out of the FormData a native submit builds, so the
       // action saw no file at all and rejected every upload.
+      //
+      // Uploaded first and read second, as two calls, so the two waits can be
+      // told apart on screen: the upload is as slow as the connection, and the
+      // model call takes about the same ten to twenty seconds regardless. As
+      // one call they were one silent minute. If the upload half fails, the
+      // read is still attempted with the file itself — the action takes either
+      // — so the split can never cost somebody a receipt.
+      setStage("uploading");
       const payload = new FormData();
       payload.append("file", prepared);
-      extractAction(payload);
+      const uploaded = await uploadReceiptFileAction({ attachment: null, error: null }, payload);
+
+      const readPayload = new FormData();
+      if (uploaded.attachment) {
+        readPayload.append("attachment", JSON.stringify(uploaded.attachment));
+      } else {
+        readPayload.append("file", prepared);
+      }
+      setStage("reading");
+      extractAction(readPayload);
     } finally {
-      setPreparing(false);
+      // "reading" is left standing: extraction is now in flight under
+      // useActionState, and clearing the stage here would blank the caption
+      // for the longest wait of the three.
+      setStage((current) => (current === "reading" ? current : null));
     }
   }
 
@@ -523,12 +577,36 @@ export function SubmitForm({
               text, which after a few seconds is indistinguishable from a page
               that has died. An indeterminate bar cannot claim progress it does
               not know, but it can keep saying "still working", which is the
-              part that was missing. */}
+              part that was missing.
+
+              The three steps are each genuinely observed rather than a timed
+              animation: the browser shrinks the photo, uploads it, and then
+              asks for it to be read, and the caption is whichever of those has
+              actually been reached. */}
           {busy && (
-            <div className="flex flex-col gap-2" role="status" aria-live="polite">
-              <p className="font-mono text-sm text-ink/60">
-                {preparing ? "Preparing photo…" : "Reading receipt…"}
-              </p>
+            <div className="flex flex-col items-center gap-2" role="status" aria-live="polite">
+              <ol className="flex flex-col gap-1 text-left">
+                {UPLOAD_STEPS.map((step) => {
+                  const state = stepState(step.id, stage ?? (extracting ? "reading" : null));
+                  return (
+                    <li
+                      key={step.id}
+                      className={`flex items-center gap-2 font-mono text-sm ${
+                        state === "done"
+                          ? "text-ink/40"
+                          : state === "current"
+                            ? "text-ink/70"
+                            : "text-ink/30"
+                      }`}
+                    >
+                      <span aria-hidden="true" className="w-4 text-center">
+                        {state === "done" ? "✓" : state === "current" ? "…" : "·"}
+                      </span>
+                      {state === "done" ? step.done : step.label}
+                    </li>
+                  );
+                })}
+              </ol>
               <span className="inline-progress" aria-hidden="true" />
               {extracting && (
                 <p className="text-xs text-ink/45">

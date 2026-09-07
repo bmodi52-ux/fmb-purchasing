@@ -456,6 +456,61 @@ export function isWorthRemembering(
   return normalize(original) !== normalize(description);
 }
 
+/**
+ * What one unit of the auto-created pack size cost, from a receipt line.
+ *
+ * matchOrCreatePackSize always makes the plain "one unit" shape, so the price
+ * that belongs on the offer is the price of a single unit — not the line
+ * total, which is what quantity units cost together. Derived from the
+ * normalized quantity in preference to the raw one because the pack size's
+ * unit is the normalized one: a line reading "2000 g @ $0.004" normalizes to
+ * 2 kg, and the offer wants $4.00/kg, not $0.004/g.
+ *
+ * Null rather than a number whenever the arithmetic would produce something
+ * nobody should see on a pricelist: a credit or refund line (negative), a
+ * quantity of zero, or a line whose quantity was never read.
+ *
+ * Kept pure and exported so the rule is testable without a database — the
+ * rest of this module speaks the Supabase query API.
+ */
+/**
+ * Put a receipt's price on an offer that has none, and leave any other alone.
+ *
+ * The guard is the whole point: pack_price is master data, and an offer that
+ * already carries one carries it because somebody put it there. Filling only
+ * the gaps means a receipt can complete a half-made offer — including every
+ * offer created before prices were carried across at all — without a receipt
+ * ever quietly restating an approved price.
+ */
+async function fillMissingPackPrice(
+  admin: SupabaseClient,
+  offerId: string,
+  packPrice: number | null
+): Promise<void> {
+  if (packPrice == null) return;
+  await admin
+    .from("pricelist_items")
+    .update({ pack_price: packPrice })
+    .eq("id", offerId)
+    .is("pack_price", null);
+}
+
+export function unitPriceFromLine({
+  lineTotal,
+  quantity,
+  normalizedQuantity,
+}: {
+  lineTotal: number;
+  quantity: number | null;
+  normalizedQuantity: number | null;
+}): number | null {
+  const units = normalizedQuantity ?? quantity;
+  if (units == null || !(units > 0)) return null;
+  if (!(lineTotal > 0)) return null;
+  // numeric(12, 4), so anything finer is lost on the way into the column.
+  return Math.round((lineTotal / units) * 10000) / 10000;
+}
+
 export async function matchOrCreateOffer(
   admin: SupabaseClient,
   {
@@ -465,6 +520,7 @@ export async function matchOrCreateOffer(
     categoryId,
     userId,
     normalizedUnit = null,
+    packPrice = null,
   }: {
     vendorId: string;
     description: string;
@@ -477,6 +533,16 @@ export async function matchOrCreateOffer(
     categoryId: string | null;
     userId: string;
     normalizedUnit?: string | null;
+    /**
+     * What one unit cost on this receipt, from unitPriceFromLine.
+     *
+     * Written onto an offer that has no price of its own — which every offer
+     * a receipt creates used to be, leaving somebody to type in a figure the
+     * receipt had already stated. An existing price is never overwritten: it
+     * is what a person entered or approved, and a single receipt is not
+     * grounds to replace it.
+     */
+    packPrice?: number | null;
   }
 ): Promise<{ id: string; status: "matched" | "created"; categoryId: string | null }> {
   const knownOffer = await findOfferByVendorDescription(admin, vendorId, description);
@@ -502,6 +568,7 @@ export async function matchOrCreateOffer(
       });
     }
 
+    await fillMissingPackPrice(admin, knownOffer, packPrice);
     return { id: knownOffer, status: "matched", categoryId: matchedItem?.category_id ?? null };
   }
 
@@ -529,7 +596,10 @@ export async function matchOrCreateOffer(
     .eq("vendor_id", vendorId)
     .eq("pack_size_id", packSizeId)
     .maybeSingle();
-  if (byVendor) return { id: byVendor.id, status: "matched", categoryId: item.categoryId };
+  if (byVendor) {
+    await fillMissingPackPrice(admin, byVendor.id, packPrice);
+    return { id: byVendor.id, status: "matched", categoryId: item.categoryId };
+  }
 
   const { data: created, error } = await admin
     .from("pricelist_items")

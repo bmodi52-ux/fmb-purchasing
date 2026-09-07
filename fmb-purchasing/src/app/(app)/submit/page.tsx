@@ -26,6 +26,13 @@ export default async function SubmitExpensePage({
     admin.from("vendors").select("id, name").eq("status", "approved").order("name"),
   ]);
 
+  // Sorted by the name shown rather than by hierarchy: this picker lists bare
+  // leaf names, so grouping Beef and Chicken at their parent's place in the
+  // alphabet would read as no order at all.
+  const categoryNames = leafCategories(categories ?? [])
+    .map((c) => c.name)
+    .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -39,7 +46,7 @@ export default async function SubmitExpensePage({
         </p>
       </div>
       <SubmitForm
-        categories={leafCategories(categories ?? []).map((c) => c.name)}
+        categories={categoryNames}
         vendorNames={(vendors ?? []).map((v) => v.name)}
         myName={user.fullName || user.email}
         editExpense={editExpense}

@@ -114,6 +114,9 @@ async function reviewVendors(vendorIds: string[], decision: "approved" | "reject
     .update({ status: decision, reviewed_by: user.id, reviewed_at: new Date().toISOString() })
     .in("id", vendorIds);
   revalidatePath("/vendors");
+  // The decision can now be made from the vendor's own page, which has to stop
+  // showing the status it was made against.
+  revalidatePath("/vendors/[id]", "page");
   revalidateReports();
 }
 

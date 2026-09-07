@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { isWorthRemembering } from "./expense-matching.ts";
+import { isWorthRemembering, unitPriceFromLine } from "./expense-matching.ts";
 
 /**
  * Which submitter edits teach the app a new receipt wording.
@@ -46,5 +46,58 @@ describe("isWorthRemembering", () => {
 
   test("remembers a correction that only adds detail", () => {
     assert.equal(isWorthRemembering("Chicken", "Chicken Thigh 5kg"), true);
+  });
+});
+
+/**
+ * The price a receipt line puts on the offer it creates.
+ *
+ * Every offer a receipt created used to arrive with no price at all, so the
+ * figure printed on the receipt had to be typed back in by hand on the item
+ * page before the item was worth anything to anyone.
+ */
+describe("unitPriceFromLine", () => {
+  test("prices one unit, not the whole line", () => {
+    assert.equal(unitPriceFromLine({ lineTotal: 48, quantity: 4, normalizedQuantity: 4 }), 12);
+  });
+
+  test("prefers the normalized quantity, since that is the pack size's unit", () => {
+    // "2000 g" normalizes to 2 kg, and the pack size created alongside is
+    // 1 kg — so the offer wants $4.00/kg, not $0.004/g.
+    assert.equal(unitPriceFromLine({ lineTotal: 8, quantity: 2000, normalizedQuantity: 2 }), 4);
+  });
+
+  test("falls back to the raw quantity when nothing was normalized", () => {
+    assert.equal(unitPriceFromLine({ lineTotal: 30, quantity: 3, normalizedQuantity: null }), 10);
+  });
+
+  test("rounds to what the column can hold", () => {
+    // pack_price is numeric(12, 4); anything finer is lost on the way in.
+    assert.equal(unitPriceFromLine({ lineTotal: 10, quantity: 3, normalizedQuantity: null }), 3.3333);
+  });
+
+  test("gives no price when the quantity was never read", () => {
+    assert.equal(unitPriceFromLine({ lineTotal: 48, quantity: null, normalizedQuantity: null }), null);
+  });
+
+  test("gives no price for a zero quantity rather than dividing by it", () => {
+    assert.equal(unitPriceFromLine({ lineTotal: 48, quantity: 0, normalizedQuantity: 0 }), null);
+  });
+
+  test("gives no price for a credit or refund line", () => {
+    // A negative pack price is not a price anyone can act on.
+    assert.equal(unitPriceFromLine({ lineTotal: -48, quantity: 4, normalizedQuantity: 4 }), null);
+  });
+
+  test("gives no price for a free line", () => {
+    assert.equal(unitPriceFromLine({ lineTotal: 0, quantity: 4, normalizedQuantity: 4 }), null);
+  });
+
+  test("gives no price for a negative quantity", () => {
+    assert.equal(unitPriceFromLine({ lineTotal: 48, quantity: -4, normalizedQuantity: -4 }), null);
+  });
+
+  test("handles a fractional quantity", () => {
+    assert.equal(unitPriceFromLine({ lineTotal: 15, quantity: 1.5, normalizedQuantity: 1.5 }), 10);
   });
 });
