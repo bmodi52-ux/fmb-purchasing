@@ -22,16 +22,20 @@ export default async function SubmitExpensePage({
 
   const admin = createAdminClient();
   const [{ data: categories }, { data: vendors }] = await Promise.all([
-    admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
+    admin
+      .from("categories")
+      .select("id, name, parent_category_id, applies_to")
+      .order("name"),
     admin.from("vendors").select("id, name").eq("status", "approved").order("name"),
   ]);
 
   // Sorted by the name shown rather than by hierarchy: this picker lists bare
   // leaf names, so grouping Beef and Chicken at their parent's place in the
-  // alphabet would read as no order at all.
-  const categoryNames = leafCategories(categories ?? [])
-    .map((c) => c.name)
-    .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+  // alphabet would read as no order at all. Each carries the line kinds it is
+  // usually filed under, which decides the order they are offered in.
+  const categoryOptions = leafCategories(categories ?? [])
+    .map((c) => ({ name: c.name, appliesTo: c.applies_to ?? null }))
+    .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -46,7 +50,7 @@ export default async function SubmitExpensePage({
         </p>
       </div>
       <SubmitForm
-        categories={categoryNames}
+        categories={categoryOptions}
         vendorNames={(vendors ?? []).map((v) => v.name)}
         myName={user.fullName || user.email}
         editExpense={editExpense}

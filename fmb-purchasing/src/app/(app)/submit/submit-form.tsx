@@ -37,6 +37,7 @@ import {
 import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image-resize";
 import { normalizeReceiptDate } from "@/lib/format";
 import { round2, sumLines, residualFor } from "@/lib/expense-money";
+import { categoriesForLineGroup, lineGroupFor } from "@/lib/categories";
 
 const initialExtractState: ExtractState = { data: null, attachment: null, error: null };
 const initialUploadState: UploadFileState = { attachment: null, error: null };
@@ -88,6 +89,9 @@ function stepState(
   const mine = UPLOAD_STEPS.findIndex((s) => s.id === step);
   return mine < at ? "done" : mine === at ? "current" : "waiting";
 }
+
+/** A category as the line-item picker needs it: what to show, and when. */
+export type PickableCategory = { name: string; appliesTo: string[] | null };
 
 type Draft = {
   vendorName: string;
@@ -208,7 +212,8 @@ export function SubmitForm({
   myName,
   editExpense,
 }: {
-  categories: string[];
+  /** Leaf categories, sorted, each tagged with the line kinds it suits. */
+  categories: PickableCategory[];
   vendorNames: string[];
   myName: string;
   editExpense?: ExpenseForEdit | null;
@@ -670,7 +675,8 @@ export function SubmitForm({
 }
 
 function ReviewForm(props: {
-  categories: string[];
+  /** Leaf categories, sorted, each tagged with the line kinds it suits. */
+  categories: PickableCategory[];
   vendorNames: string[];
   myName: string;
   vendorName: string;
@@ -1045,19 +1051,12 @@ function ReviewForm(props: {
                       reports without ever touching the catalogue. Charges used
                       to lose this cell to the kind picker, so a delivery fee
                       could be categorised by extraction but never corrected. */}
-                  <select
-                    value={item.categoryName ?? ""}
-                    onChange={(e) => updateItem(item.key, { categoryName: e.target.value || null })}
-                    className="rounded border border-ink/10 bg-white px-2 py-1"
-                    aria-label="Category"
-                  >
-                    <option value="">—</option>
-                    {props.categories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                  <CategorySelect
+                    categories={props.categories}
+                    kind={item.kind}
+                    value={item.categoryName}
+                    onChange={(name) => updateItem(item.key, { categoryName: name })}
+                  />
                 </td>
                 <td className="p-1">
                   <input
@@ -1295,5 +1294,54 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-ink/70">{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * The category picker on a line item.
+ *
+ * Every line carries a category, and this used to offer all nineteen of them
+ * whatever the line was — so a bag of rice was chosen past Professional &
+ * Contractor Services, and a plumber past Dairy & Eggs. The line already knows
+ * what it is, so the ones that suit it come first and the rest stay under
+ * "Other categories": tagging is an ordering, not a restriction, because a
+ * category tagged wrongly must never make a receipt impossible to file.
+ */
+function CategorySelect({
+  categories,
+  kind,
+  value,
+  onChange,
+}: {
+  categories: PickableCategory[];
+  kind: StoredLineKind;
+  value: string | null;
+  onChange: (name: string | null) => void;
+}) {
+  const { relevant, others } = categoriesForLineGroup(categories, lineGroupFor(kind));
+
+  return (
+    <select
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value || null)}
+      className="rounded border border-ink/10 bg-white px-2 py-1"
+      aria-label="Category"
+    >
+      <option value="">—</option>
+      {relevant.map((c) => (
+        <option key={c.name} value={c.name}>
+          {c.name}
+        </option>
+      ))}
+      {others.length > 0 && (
+        <optgroup label="Other categories">
+          {others.map((c) => (
+            <option key={c.name} value={c.name}>
+              {c.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
   );
 }

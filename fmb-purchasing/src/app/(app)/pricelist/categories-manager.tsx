@@ -8,6 +8,7 @@ import {
   deleteCategory,
   type CategoryFormState,
 } from "./actions";
+import { CATEGORY_LINE_GROUPS } from "@/lib/categories";
 
 const initialState: CategoryFormState = { error: null, success: false };
 
@@ -41,6 +42,8 @@ export type ManagedCategory = {
   parentCategoryId: string | null;
   /** Items filed here, so a category that is doing work reads as such. */
   itemCount: number;
+  /** Line kinds this category is offered for first — see migration 0038. */
+  appliesTo: string[] | null;
 };
 
 function CodeBadge({ code }: { code: string | null }) {
@@ -154,6 +157,7 @@ function CategoryRow({
                   </option>
                 ))}
             </select>
+            <LineGroupChecks appliesTo={category.appliesTo} />
             <SubmitButton className="rounded-md border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
               Save
             </SubmitButton>
@@ -273,6 +277,9 @@ export function CategoriesManager({ categories }: { categories: ManagedCategory[
             </option>
           ))}
         </select>
+        {/* Nothing ticked means every kind, which is the right default for a
+            category whose use nobody has decided yet. */}
+        <LineGroupChecks appliesTo={[]} />
         <SubmitButton className="rounded-md border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
           + Add category
         </SubmitButton>
@@ -281,3 +288,37 @@ export function CategoriesManager({ categories }: { categories: ManagedCategory[
     </section>
   );
 }
+
+/**
+ * Which kinds of line this category is offered for first.
+ *
+ * Checkboxes rather than a multi-select because there are three of them and
+ * the answer is usually one. Ticking none is the same as ticking all: a
+ * category in nobody's list is a category nobody can find, so the action
+ * treats an empty selection as "all" rather than saving a dead end.
+ */
+function LineGroupChecks({ appliesTo }: { appliesTo: string[] | null }) {
+  const current = appliesTo ?? [...CATEGORY_LINE_GROUPS];
+  return (
+    <span className="flex items-center gap-2 text-xs text-ink/60">
+      <span className="text-ink/40">shows for</span>
+      {CATEGORY_LINE_GROUPS.map((group) => (
+        <label key={group} className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            name={`applies_${group}`}
+            defaultChecked={current.includes(group)}
+            className="h-3 w-3"
+          />
+          {LINE_GROUP_LABELS[group]}
+        </label>
+      ))}
+    </span>
+  );
+}
+
+const LINE_GROUP_LABELS: Record<string, string> = {
+  goods: "goods",
+  service: "services",
+  charge: "charges",
+};

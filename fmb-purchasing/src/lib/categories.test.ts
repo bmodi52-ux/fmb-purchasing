@@ -1,6 +1,13 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { sortCategories, leafCategories, categoryLabelsById, type CategoryRow } from "./categories.ts";
+import {
+  sortCategories,
+  leafCategories,
+  categoryLabelsById,
+  categoriesForLineGroup,
+  lineGroupFor,
+  type CategoryRow,
+} from "./categories.ts";
 
 function cat(id: string, name: string, parent: string | null = null): CategoryRow {
   return { id, name, parent_category_id: parent };
@@ -74,5 +81,72 @@ describe("sortCategories", () => {
       "a parent is still a grouping node, and leaves come out sorted"
     );
     assert.equal(categoryLabelsById(sorted).get("chk"), "Meat & Poultry › Chicken");
+  });
+});
+
+/**
+ * Which categories a line's kind puts in front of you.
+ *
+ * The picker used to offer all nineteen whatever the line was, so a bag of
+ * rice was chosen past Professional & Contractor Services and a plumber past
+ * Dairy & Eggs.
+ */
+describe("categoriesForLineGroup", () => {
+  const groceries = { name: "Groceries", appliesTo: ["goods"] };
+  const repairs = { name: "Maintenance & Repairs", appliesTo: ["service"] };
+  const cleaning = { name: "Cleaning & Sanitation", appliesTo: ["goods", "service"] };
+  const transport = { name: "Transport & Logistics", appliesTo: ["service", "charge"] };
+  const untagged = { name: "New Category", appliesTo: null };
+  const all = [groceries, repairs, cleaning, transport, untagged];
+
+  test("puts a goods line's categories first", () => {
+    const { relevant } = categoriesForLineGroup(all, "goods");
+    assert.deepEqual(relevant.map((c) => c.name), ["Groceries", "Cleaning & Sanitation", "New Category"]);
+  });
+
+  test("puts a service line's categories first", () => {
+    const { relevant } = categoriesForLineGroup(all, "service");
+    assert.deepEqual(
+      relevant.map((c) => c.name),
+      ["Maintenance & Repairs", "Cleaning & Sanitation", "Transport & Logistics", "New Category"]
+    );
+  });
+
+  test("keeps every other category reachable rather than dropping it", () => {
+    // A category tagged wrongly must not make an expense impossible to file.
+    const { relevant, others } = categoriesForLineGroup(all, "charge");
+    assert.deepEqual(relevant.map((c) => c.name), ["Transport & Logistics", "New Category"]);
+    assert.deepEqual(
+      others.map((c) => c.name),
+      ["Groceries", "Maintenance & Repairs", "Cleaning & Sanitation"],
+      "nothing is lost; it is only further down"
+    );
+  });
+
+  test("treats an untagged category as relevant to everything", () => {
+    for (const group of ["goods", "service", "charge"] as const) {
+      const { relevant } = categoriesForLineGroup([untagged], group);
+      assert.equal(relevant.length, 1, `untagged should still appear for ${group}`);
+    }
+  });
+
+  test("preserves the order it was given, which is already sorted", () => {
+    const { relevant } = categoriesForLineGroup([cleaning, groceries], "goods");
+    assert.deepEqual(relevant.map((c) => c.name), ["Cleaning & Sanitation", "Groceries"]);
+  });
+});
+
+describe("lineGroupFor", () => {
+  test("maps goods and services to their own groups", () => {
+    assert.equal(lineGroupFor("goods"), "goods");
+    assert.equal(lineGroupFor("service"), "service");
+  });
+
+  test("maps every charge kind to one group", () => {
+    // They all want the same short list; four columns of the same answer would
+    // be four things to keep in step.
+    for (const kind of ["surcharge", "delivery", "discount", "rounding", "deposit", "unallocated"]) {
+      assert.equal(lineGroupFor(kind), "charge");
+    }
   });
 });
