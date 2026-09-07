@@ -12,10 +12,12 @@ import {
   addOffer,
   updateOffer,
   reviewOffer,
+  reviewItem,
   deleteOffer,
   addVendorItemDescription,
   removeVendorItemDescription,
 } from "../actions";
+import { ReviewDecision, StatusPill } from "@/components/review-decision";
 import { OfferForm } from "./offer-form";
 import { PackSizeForm } from "./pack-size-form";
 import { MergePanel, type DuplicateCandidate } from "./merge-panel";
@@ -225,12 +227,27 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="page-title text-ink">{item.name}</h1>
           <span className="font-mono text-sm text-ink/50">{item.item_number}</span>
+          <StatusPill status={item.status as string} />
         </div>
         <p className="mt-1 text-sm text-ink/50">
           {updatedByName
             ? `Last updated ${formatDateTime(item.updated_at)} by ${updatedByName}`
             : `Created ${formatDateTime(item.created_at)}`}
         </p>
+
+        {/* An item a receipt created is pending, and nothing ever said so or
+            offered to change it — approval only ever happened as a side effect
+            of approving one of its offers, so an item with none stayed pending
+            for good. */}
+        {canApprove && item.status === "pending" && (
+          <ReviewDecision
+            action={reviewItem}
+            idField="item_id"
+            id={item.id}
+            approveLabel="Approve item"
+            note="Approving confirms this is a real product worth keeping in the catalogue. Rejecting keeps it for the expenses that already name it, but marks it as one nobody should file against."
+          />
+        )}
       </div>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">

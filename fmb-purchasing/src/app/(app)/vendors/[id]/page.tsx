@@ -15,6 +15,7 @@ import {
 } from "./actions";
 import { reviewVendor } from "../actions";
 import { formatDate } from "@/lib/format";
+import { ReviewDecision, StatusPill } from "@/components/review-decision";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -84,41 +85,17 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="page-title text-ink">{vendor.name}</h1>
           <span className="font-mono text-sm text-ink/50">{vendor.vendor_number}</span>
-          <span
-            className={`text-sm ${
-              vendor.status === "approved"
-                ? "text-palm"
-                : vendor.status === "rejected"
-                  ? "text-maroon/70"
-                  : "text-gold-deep"
-            }`}
-          >
-            {vendor.status as string}
-          </span>
+          <StatusPill status={vendor.status as string} />
         </div>
 
-        {/* Deciding a vendor used to be possible only from the list, on a row
-            showing a fraction of what is here. Whoever opens the record to
-            check the ABN, the address and who it pays is the person in a
-            position to approve it, so the decision belongs on the same page.
-            Same action the list calls — one review path, not two. */}
         {canApprove && vendor.status === "pending" && (
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <form action={reviewVendor}>
-              <input type="hidden" name="vendor_id" value={vendor.id} />
-              <input type="hidden" name="decision" value="approved" />
-              <SubmitButton className="rounded-md bg-palm px-4 py-2 text-sm font-medium text-white hover:bg-palm/90">
-                Approve vendor
-              </SubmitButton>
-            </form>
-            <form action={reviewVendor}>
-              <input type="hidden" name="vendor_id" value={vendor.id} />
-              <input type="hidden" name="decision" value="rejected" />
-              <SubmitButton className="rounded-md border border-maroon/30 px-4 py-2 text-sm text-maroon/80 hover:bg-maroon/5">
-                Reject
-              </SubmitButton>
-            </form>
-          </div>
+          <ReviewDecision
+            action={reviewVendor}
+            idField="vendor_id"
+            id={vendor.id}
+            approveLabel="Approve vendor"
+            note="Approving lets receipts be filed against this vendor without a second look."
+          />
         )}
       </div>
 

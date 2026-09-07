@@ -313,6 +313,44 @@ async function reviewOffers(offerIds: string[], decision: "approved" | "rejected
   revalidateReports();
 }
 
+/**
+ * Decide the item itself, from the item's own page.
+ *
+ * An item created from a receipt is inserted pending, and until now nothing in
+ * the app ever showed or changed that: the only way it became approved was as
+ * a side effect of somebody approving one of its offers. So an item whose
+ * offers were all rejected — or which had none yet — stayed pending for good,
+ * invisibly.
+ *
+ * Rejecting is deliberately not a delete. The item may already be named on
+ * expense lines, and reports read those; "rejected" says nobody should file
+ * anything new against it, which is what the state is for.
+ */
+export async function reviewItem(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "pricelist", "approve_master_data");
+
+  const itemId = String(formData.get("item_id"));
+  const decision = String(formData.get("decision"));
+  if (!itemId || (decision !== "approved" && decision !== "rejected")) return;
+
+  const admin = createAdminClient();
+  await admin
+    .from("items")
+    .update({
+      status: decision,
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+      updated_by: user.id,
+    })
+    .eq("id", itemId);
+
+  revalidatePath(`/pricelist/${itemId}`);
+  revalidatePath("/pricelist");
+  revalidateReports();
+}
+
 /** Approving an offer also confirms its parent Item, if still pending. */
 export async function reviewOffer(formData: FormData) {
   const offerId = String(formData.get("offer_id"));
