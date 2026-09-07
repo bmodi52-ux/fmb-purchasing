@@ -36,6 +36,13 @@ export type PayeeChoice =
       bankAccountName?: string | null;
       bsb?: string | null;
       accountNumber?: string | null;
+      /**
+       * Set when the submitter says the account on file is out of date and
+       * these are the details printed on the invoice in front of them.
+       * Recorded as a proposal beside the current account, never over it — see
+       * proposeVendorAccount.
+       */
+      replacesCurrent?: boolean;
     }
   | {
       kind: "new";
@@ -132,6 +139,7 @@ export async function resolvePayee(
       bankAccountName: choice.bankAccountName,
       bsb: choice.bsb,
       accountNumber: choice.accountNumber,
+      replacesCurrent: choice.replacesCurrent,
       actorId: actor.id,
     });
   }
@@ -168,18 +176,19 @@ export async function resolvePayee(
 }
 
 /**
- * The single payee row standing for "pay this vendor directly".
+ * The payee row standing for "pay this vendor directly".
  *
- * One row per vendor, which 0027's payees_vendor_unique index has enforced
- * from the start — the gap was never the constraint, it was that nothing in
- * the app ever set vendor_id, so bank details entered for a vendor became a
- * payee floating free of the vendor record and the next receipt from the same
- * shop could not find them.
+ * One *approved* row per vendor, which 0037's payees_vendor_approved_unique
+ * index enforces — the gap 0027 left was never the constraint, it was that
+ * nothing in the app ever set vendor_id, so bank details entered for a vendor
+ * became a payee floating free of the vendor record and the next receipt from
+ * the same shop could not find them.
  *
  * Bank details supplied here fill gaps but never overwrite: a submitter typing
  * what they read off an invoice must not silently replace an account the
- * Treasurer set up, and detecting that a vendor changed banks is a decision
- * for a person, not a side effect of a submission.
+ * Treasurer set up. When the invoice shows a *different* account, that is
+ * `replacesCurrent` below — a proposal recorded beside the current one, not a
+ * change to it.
  */
 async function payeeForVendor(
   admin: SupabaseClient,
@@ -189,6 +198,18 @@ async function payeeForVendor(
     bankAccountName?: string | null;
     bsb?: string | null;
     accountNumber?: string | null;
+    /**
+     * The submitter says this vendor's account has changed, and these are the
+     * details from the invoice in front of them.
+     *
+     * Written as a pending row of its own rather than over the approved one.
+     * Changed bank details on an invoice are the classic payment fraud, so the
+     * account on file is never altered by a submission — a holder of
+     * payments:mark_paid confirms it from the vendor page, and until then the
+     * old account is still what "pay this vendor" resolves to for everyone
+     * else.
+     */
+    replacesCurrent?: boolean;
     actorId: string;
   }
 ): Promise<string> {
@@ -198,10 +219,20 @@ async function payeeForVendor(
     bank_account_number: input.accountNumber?.replace(/\D/g, "") || null,
   };
 
+  if (input.replacesCurrent && (bank.bank_bsb || bank.bank_account_number)) {
+    return proposeVendorAccount(admin, {
+      vendorId: input.vendorId,
+      displayName: input.displayName,
+      bank,
+      actorId: input.actorId,
+    });
+  }
+
   const { data: existing } = await admin
     .from("payees")
     .select("id, bank_account_name, bank_bsb, bank_account_number")
     .eq("vendor_id", input.vendorId)
+    .eq("status", "approved")
     .order("created_at", { ascending: true })
     .limit(1);
 
@@ -234,10 +265,75 @@ async function payeeForVendor(
       .from("payees")
       .select("id")
       .eq("vendor_id", input.vendorId)
+      .eq("status", "approved")
       .limit(1);
     if (raced?.[0]) return raced[0].id as string;
     throw new Error(error.message);
   }
+  return data.id as string;
+}
+
+/**
+ * Record an account a submitter read off an invoice, without touching the one
+ * on file.
+ *
+ * Returns the proposed row's id, so the expense itself carries the account its
+ * submitter meant — the Treasurer paying it sees the details that came with
+ * the invoice, marked as unconfirmed, rather than an account the invoice
+ * contradicts.
+ *
+ * An identical proposal already waiting is reused rather than duplicated:
+ * three invoices in the same week with the vendor's new BSB is one change of
+ * bank, and should read as one thing to confirm.
+ */
+async function proposeVendorAccount(
+  admin: SupabaseClient,
+  input: {
+    vendorId: string;
+    displayName: string;
+    bank: { bank_account_name: string | null; bank_bsb: string | null; bank_account_number: string | null };
+    actorId: string;
+  }
+): Promise<string> {
+  const { data: current } = await admin
+    .from("payees")
+    .select("id, bank_bsb, bank_account_number")
+    .eq("vendor_id", input.vendorId)
+    .eq("status", "approved")
+    .limit(1);
+
+  // Not a change at all — the submitter retyped what is already on file.
+  const onFile = current?.[0];
+  if (
+    onFile &&
+    (onFile.bank_bsb ?? null) === input.bank.bank_bsb &&
+    (onFile.bank_account_number ?? null) === input.bank.bank_account_number
+  ) {
+    return onFile.id as string;
+  }
+
+  const { data: alreadyProposed } = await admin
+    .from("payees")
+    .select("id")
+    .eq("vendor_id", input.vendorId)
+    .eq("status", "pending")
+    .eq("bank_bsb", input.bank.bank_bsb)
+    .eq("bank_account_number", input.bank.bank_account_number)
+    .limit(1);
+  if (alreadyProposed?.[0]) return alreadyProposed[0].id as string;
+
+  const { data, error } = await admin
+    .from("payees")
+    .insert({
+      display_name: input.displayName,
+      vendor_id: input.vendorId,
+      ...input.bank,
+      status: "pending",
+      created_by: input.actorId,
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
   return data.id as string;
 }
 
@@ -246,7 +342,16 @@ export async function searchPayees(
   query: string
 ): Promise<PayeeSuggestion[]> {
   const trimmed = query.trim();
-  const base = admin.from("payees").select(SELECT).eq("is_active", true).limit(8);
+  const base = admin
+    .from("payees")
+    .select(SELECT)
+    .eq("is_active", true)
+    // A superseded account is not somewhere to send money, and a pending one
+    // belongs to the invoice that proposed it — neither is a choice to offer
+    // from a search box. getPayee still resolves them by id, so an expense
+    // already pointing at one still reads back.
+    .eq("status", "approved")
+    .limit(8);
 
   // An empty box shows the most recently added rather than nothing: the payee
   // is usually someone who has been paid before.

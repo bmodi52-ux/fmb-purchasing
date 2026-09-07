@@ -115,6 +115,11 @@ export async function removeContact(formData: FormData) {
  * the invoice, at submit time. Writing what you can read off the paperwork in
  * front of you is a different act from reading back what the organisation has
  * on file, and payeeForVendor never overwrites an account already recorded.
+ *
+ * Changing the account no longer edits the row. A vendor that changes banks
+ * gets a new account record, and the old one is marked superseded and kept —
+ * so an expense paid last year still says which account the money went to,
+ * which overwriting destroyed. See migration 0037.
  */
 export async function updateVendorPaymentDetails(formData: FormData) {
   const user = await getCurrentUser();
@@ -141,20 +146,163 @@ export async function updateVendorPaymentDetails(formData: FormData) {
 
   const { data: existing } = await admin
     .from("payees")
-    .select("id")
+    .select("id, bank_account_name, bank_bsb, bank_account_number, notes")
     .eq("vendor_id", vendorId)
+    .eq("status", "approved")
     .limit(1);
 
-  if (existing?.[0]) {
-    await admin.from("payees").update({ ...details, updated_at: new Date().toISOString() }).eq("id", existing[0].id);
-  } else {
+  const current = existing?.[0];
+  if (!current) {
     await admin.from("payees").insert({
       display_name: vendor.name as string,
       vendor_id: vendorId,
       ...details,
+      status: "approved",
       created_by: user.id,
     });
+    revalidatePath(`/vendors/${vendorId}`);
+    return;
   }
+
+  // Only the account itself is history. Correcting a typo in the account name,
+  // or adding "pays by PayID" to the notes, is describing the same account
+  // better — filing that as a bank change would bury the real ones.
+  const accountChanged =
+    (current.bank_bsb ?? null) !== details.bank_bsb ||
+    (current.bank_account_number ?? null) !== details.bank_account_number;
+
+  if (!accountChanged) {
+    await admin
+      .from("payees")
+      .update({ ...details, updated_at: new Date().toISOString() })
+      .eq("id", current.id);
+    revalidatePath(`/vendors/${vendorId}`);
+    return;
+  }
+
+  await replaceVendorAccount(admin, {
+    vendorId,
+    displayName: vendor.name as string,
+    currentPayeeId: current.id as string,
+    details,
+    userId: user.id,
+  });
+
+  revalidatePath(`/vendors/${vendorId}`);
+}
+
+/**
+ * Swap in a new account for a vendor, keeping the old one as history.
+ *
+ * Ordered so the unique index is never asked to hold two approved accounts for
+ * one vendor: the outgoing row is superseded first, then the new row is
+ * inserted, then the old row is pointed at its replacement. A failure between
+ * the steps leaves a vendor with no approved account rather than two, which is
+ * the safer half of the trade — nothing can be paid to a wrong account by
+ * accident, and the details are still on the page to re-enter.
+ */
+async function replaceVendorAccount(
+  admin: ReturnType<typeof createAdminClient>,
+  input: {
+    vendorId: string;
+    displayName: string;
+    currentPayeeId: string;
+    details: Record<string, string | null>;
+    userId: string;
+  }
+) {
+  const now = new Date().toISOString();
+
+  await admin
+    .from("payees")
+    .update({ status: "superseded", superseded_at: now, updated_at: now })
+    .eq("id", input.currentPayeeId);
+
+  const { data: created } = await admin
+    .from("payees")
+    .insert({
+      display_name: input.displayName,
+      vendor_id: input.vendorId,
+      ...input.details,
+      status: "approved",
+      created_by: input.userId,
+    })
+    .select("id")
+    .single();
+
+  if (created) {
+    await admin
+      .from("payees")
+      .update({ superseded_by: created.id })
+      .eq("id", input.currentPayeeId);
+  }
+}
+
+/**
+ * Accept an account a submitter read off an invoice, or discard it.
+ *
+ * The confirmation step that lets a submitter report a changed account without
+ * being able to change it: their details sit as a pending row until whoever
+ * holds payments:mark_paid — the person who will make the transfer — says that
+ * is genuinely where this vendor is paid now.
+ */
+export async function reviewProposedVendorAccount(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "payments", "mark_paid");
+
+  const payeeId = String(formData.get("payee_id"));
+  const vendorId = String(formData.get("vendor_id"));
+  const decision = String(formData.get("decision"));
+  if (!payeeId || !vendorId || (decision !== "accept" && decision !== "discard")) return;
+
+  const admin = createAdminClient();
+  const now = new Date().toISOString();
+
+  const { data: proposed } = await admin
+    .from("payees")
+    .select("id, vendor_id, status")
+    .eq("id", payeeId)
+    .maybeSingle();
+  // Re-checked rather than trusted: the id arrives from a form, and accepting
+  // one vendor's account onto another would be a payment sent to the wrong
+  // supplier.
+  if (!proposed || proposed.vendor_id !== vendorId || proposed.status !== "pending") return;
+
+  if (decision === "discard") {
+    // Superseded, not deleted: an expense may already point at this row, and
+    // "the details we were given and rejected" is worth being able to see.
+    await admin
+      .from("payees")
+      .update({ status: "superseded", superseded_at: now, updated_at: now })
+      .eq("id", payeeId);
+    revalidatePath(`/vendors/${vendorId}`);
+    return;
+  }
+
+  const { data: current } = await admin
+    .from("payees")
+    .select("id")
+    .eq("vendor_id", vendorId)
+    .eq("status", "approved")
+    .limit(1);
+
+  if (current?.[0]) {
+    await admin
+      .from("payees")
+      .update({
+        status: "superseded",
+        superseded_at: now,
+        superseded_by: payeeId,
+        updated_at: now,
+      })
+      .eq("id", current[0].id);
+  }
+
+  await admin
+    .from("payees")
+    .update({ status: "approved", updated_at: now })
+    .eq("id", payeeId);
 
   revalidatePath(`/vendors/${vendorId}`);
 }
