@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { isWorthRemembering, unitPriceFromLine } from "./expense-matching.ts";
+import { isWorthRemembering, unitPriceFromLine, offerPackPrice } from "./expense-matching.ts";
 
 /**
  * Which submitter edits teach the app a new receipt wording.
@@ -99,5 +99,91 @@ describe("unitPriceFromLine", () => {
 
   test("handles a fractional quantity", () => {
     assert.equal(unitPriceFromLine({ lineTotal: 15, quantity: 1.5, normalizedQuantity: 1.5 }), 10);
+  });
+});
+
+/**
+ * The price recorded against an offer, for the pack that offer is sold in.
+ *
+ * pack_price means the price of the whole pack, so a per-unit figure written
+ * there would read as a fraction of the real cost once divided by the pack's
+ * contents — 12 cents a kilo for rice that cost $2.40.
+ */
+describe("offerPackPrice", () => {
+  const rice = { innerQuantity: 5, unitCode: "kg", packCount: 4 };
+
+  test("falls back to the unit price when no pack is stated", () => {
+    assert.equal(
+      offerPackPrice({ lineTotal: 48, quantity: 20, normalizedQuantity: 20 }, null),
+      2.4
+    );
+  });
+
+  test("prices the whole pack when the line is counted in the pack's unit", () => {
+    // 20 kg for $48 is $2.40/kg, and one 5 kg × 4 carton holds 20 kg.
+    assert.equal(
+      offerPackPrice(
+        { lineTotal: 48, quantity: 20, normalizedQuantity: 20, normalizedUnit: "kg" },
+        rice
+      ),
+      48
+    );
+  });
+
+  test("still prices one pack when several were bought", () => {
+    assert.equal(
+      offerPackPrice(
+        { lineTotal: 96, quantity: 40, normalizedQuantity: 40, normalizedUnit: "kg" },
+        rice
+      ),
+      48
+    );
+  });
+
+  test("divides by the packs bought when the line counts packs", () => {
+    // "Ghee 12x500g", 2 cartons for $120 — the quantity is in cartons, not
+    // grams, so the line total over the count is already the pack price.
+    assert.equal(
+      offerPackPrice(
+        { lineTotal: 120, quantity: 2, normalizedQuantity: 2, normalizedUnit: "ea" },
+        { innerQuantity: 500, unitCode: "g", packCount: 12 }
+      ),
+      60
+    );
+  });
+
+  test("treats a unit it cannot read as counting packs", () => {
+    assert.equal(
+      offerPackPrice({ lineTotal: 60, quantity: 1, normalizedQuantity: null }, rice),
+      60
+    );
+  });
+
+  test("accepts the spelling the invoice used for the unit", () => {
+    assert.equal(
+      offerPackPrice(
+        { lineTotal: 48, quantity: 20, normalizedQuantity: 20, normalizedUnit: "KGS" },
+        rice
+      ),
+      48
+    );
+  });
+
+  test("gives no price for a credit line, pack or not", () => {
+    assert.equal(
+      offerPackPrice(
+        { lineTotal: -48, quantity: 20, normalizedQuantity: 20, normalizedUnit: "kg" },
+        rice
+      ),
+      null
+    );
+    assert.equal(offerPackPrice({ lineTotal: -48, quantity: 1, normalizedQuantity: 1 }, rice), null);
+  });
+
+  test("gives no price when nothing says how many packs were bought", () => {
+    assert.equal(
+      offerPackPrice({ lineTotal: 48, quantity: 0, normalizedQuantity: null }, rice),
+      null
+    );
   });
 });

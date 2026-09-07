@@ -12,7 +12,6 @@ import {
   matchOrCreateVendor,
   matchOrCreateOffer,
   preferredVendor,
-  unitPriceFromLine,
 } from "@/lib/expense-matching";
 import { fiscalYearForReceipt } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
@@ -607,13 +606,15 @@ async function buildLineRows(
         categoryId,
         userId,
         normalizedUnit: item.normalizedUnit,
-        // The receipt states what a unit cost, so an offer it creates should
-        // not open with an empty price waiting to be typed back in.
-        packPrice: unitPriceFromLine({
+        // The receipt states what was bought and for how much, so an offer it
+        // creates should not open with an empty price waiting to be typed back
+        // in. What that means for the pack is worked out there — see
+        // offerPackPrice.
+        line: {
           lineTotal: item.lineTotal,
           quantity: item.quantity,
           normalizedQuantity: item.normalizedQuantity,
-        }),
+        },
       });
       pricelistItemId = matched.id;
       // Prefer the category of the item this line resolved to. When the line

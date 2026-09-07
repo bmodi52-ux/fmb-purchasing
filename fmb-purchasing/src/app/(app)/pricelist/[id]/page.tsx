@@ -411,8 +411,17 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
 
                         <div className="mt-2 flex gap-4 text-xs text-ink/50">
                           {canEdit && (
-                            <details>
-                              <summary className="cursor-pointer hover:text-ink">Edit</summary>
+                            // Open when the offer is still missing something a
+                            // person has to supply — a receipt now brings the
+                            // price and the pack across, so an offer that
+                            // still has neither is one nobody can approve
+                            // without typing. Settled offers stay collapsed.
+                            <details open={o.status === "pending" && (o.pack_price == null || !o.vendor_id)}>
+                              <summary className="cursor-pointer hover:text-ink">
+                                {o.status === "pending" && (o.pack_price == null || !o.vendor_id)
+                                  ? "Finish this offer"
+                                  : "Edit"}
+                              </summary>
                               <div className="mt-2">
                                 <OfferForm
                                   action={updateOffer}
