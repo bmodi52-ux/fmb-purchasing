@@ -85,6 +85,9 @@ function revalidateAll() {
   revalidatePath("/approvals");
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
+  // The decision can now be made from the expense itself, so that page has to
+  // stop showing the status it was made against.
+  revalidatePath("/expenses/[id]", "page");
   revalidatePath("/payments");
   revalidateReports();
 }

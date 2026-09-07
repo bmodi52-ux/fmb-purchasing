@@ -8,7 +8,8 @@ import { getColumnPreference } from "@/lib/column-prefs";
 import { AddItemModal } from "./add-item-modal";
 import { ItemsTable, type OfferRow } from "./items-table";
 import { dismissDuplicatePair } from "./actions";
-import { leafCategories, categoryLabelsById } from "@/lib/categories";
+import { withoutRejectedOffers } from "./collapse-offers";
+import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
 
 export const metadata = { title: "Pricelist" };
 
@@ -121,7 +122,7 @@ export default async function PricelistPage() {
   const categoryNameById = categoryLabelsById(categories ?? []);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id, u.label]));
   const costByOfferId = new Map((offerCosts ?? []).map((c) => [c.offer_id, c]));
-  const assignableCategories = leafCategories(categories ?? []).map((c) => ({
+  const assignableCategories = leafCategories(sortCategories(categories ?? [])).map((c) => ({
     id: c.id,
     name: categoryNameById.get(c.id) ?? c.name,
   }));
@@ -157,8 +158,11 @@ export default async function PricelistPage() {
     })
     .sort((a, b) => a.status.localeCompare(b.status) || a.name.localeCompare(b.name));
 
-  const pending = rows.filter((r) => r.status === "pending");
-  const rest = rows.filter((r) => r.status !== "pending");
+  // Rejections belong to the item page, not to the list everyone reads to see
+  // what things cost — see withoutRejectedOffers.
+  const live = withoutRejectedOffers(rows);
+  const pending = live.filter((r) => r.status === "pending");
+  const rest = live.filter((r) => r.status !== "pending");
 
   return (
     <div className="flex flex-col gap-8">
@@ -263,7 +267,7 @@ export default async function PricelistPage() {
       {pending.length > 0 && (
         <section>
           <h2 className="mb-2 section-title text-ink">Pending review ({pending.length})</h2>
-          <ItemsTable rows={pending} allOffers={rows} canApprove={canApprove} initialVisible={visibleColumns} />
+          <ItemsTable rows={pending} allOffers={live} canApprove={canApprove} initialVisible={visibleColumns} />
         </section>
       )}
 
@@ -275,7 +279,7 @@ export default async function PricelistPage() {
           Each vendor&rsquo;s offer is listed as its own row only while the Vendor
           column is shown. Otherwise expand an item to compare its vendors.
         </p>
-        <ItemsTable rows={rest} allOffers={rows} canApprove={canApprove} initialVisible={visibleColumns} emptyLabel="None." collapseByItem />
+        <ItemsTable rows={rest} allOffers={live} canApprove={canApprove} initialVisible={visibleColumns} emptyLabel="None." collapseByItem />
       </section>
     </div>
   );

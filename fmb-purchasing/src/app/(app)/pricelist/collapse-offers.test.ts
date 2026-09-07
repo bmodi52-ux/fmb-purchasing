@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { collapseToItems, type CollapsibleOffer } from "./collapse-offers.ts";
+import { collapseToItems, withoutRejectedOffers, type CollapsibleOffer } from "./collapse-offers.ts";
 
 type Row = CollapsibleOffer & { id: string };
 
@@ -88,5 +88,57 @@ describe("collapseToItems", () => {
 
   test("handles an empty table", () => {
     assert.deepEqual(collapseToItems([] as Row[], HIDDEN), []);
+  });
+});
+
+describe("withoutRejectedOffers", () => {
+  test("drops a rejected offer from an item that still has a live one", () => {
+    const rows = [offer("live", "rice", 4, "approved"), offer("dead", "rice", 1, "rejected")];
+    assert.deepEqual(
+      withoutRejectedOffers(rows).map((r) => r.id),
+      ["live"]
+    );
+  });
+
+  test("counts a pending offer as live", () => {
+    const rows = [offer("waiting", "rice", 4, "pending"), offer("dead", "rice", 1, "rejected")];
+    assert.deepEqual(
+      withoutRejectedOffers(rows).map((r) => r.id),
+      ["waiting"]
+    );
+  });
+
+  test("keeps rejected offers when they are all an item has", () => {
+    // Otherwise the item drops off the Pricelist entirely, with nothing left
+    // to click through to.
+    const rows = [offer("dead", "rice", 1, "rejected"), offer("also-dead", "rice", 2, "rejected")];
+    assert.deepEqual(
+      withoutRejectedOffers(rows).map((r) => r.id),
+      ["dead", "also-dead"]
+    );
+  });
+
+  test("judges each item separately", () => {
+    const rows = [
+      offer("rice-live", "rice", 4, "approved"),
+      offer("rice-dead", "rice", 1, "rejected"),
+      offer("flour-dead", "flour", 1, "rejected"),
+    ];
+    assert.deepEqual(
+      withoutRejectedOffers(rows).map((r) => r.id),
+      ["rice-live", "flour-dead"]
+    );
+  });
+
+  test("preserves input order", () => {
+    const rows = [offer("b", "flour", 1), offer("a", "rice", 2)];
+    assert.deepEqual(
+      withoutRejectedOffers(rows).map((r) => r.id),
+      ["b", "a"]
+    );
+  });
+
+  test("handles an empty table", () => {
+    assert.deepEqual(withoutRejectedOffers([] as Row[]), []);
   });
 });

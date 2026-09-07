@@ -12,14 +12,16 @@ import {
   addOffer,
   updateOffer,
   reviewOffer,
+  reviewItem,
   deleteOffer,
   addVendorItemDescription,
   removeVendorItemDescription,
 } from "../actions";
+import { ReviewDecision, StatusPill } from "@/components/review-decision";
 import { OfferForm } from "./offer-form";
 import { PackSizeForm } from "./pack-size-form";
 import { MergePanel, type DuplicateCandidate } from "./merge-panel";
-import { leafCategories, categoryLabelsById } from "@/lib/categories";
+import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
   name: "Name",
@@ -147,7 +149,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   const categoryNameById = categoryLabelsById(categories ?? []);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id, u.label]));
 
-  const assignableCategories = leafCategories(categories ?? []);
+  const assignableCategories = leafCategories(sortCategories(categories ?? []));
   const currentCategory = (categories ?? []).find((c) => c.id === item.category_id);
   const categoryOptions =
     currentCategory && !assignableCategories.some((c) => c.id === currentCategory.id)
@@ -225,12 +227,27 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="page-title text-ink">{item.name}</h1>
           <span className="font-mono text-sm text-ink/50">{item.item_number}</span>
+          <StatusPill status={item.status as string} />
         </div>
         <p className="mt-1 text-sm text-ink/50">
           {updatedByName
             ? `Last updated ${formatDateTime(item.updated_at)} by ${updatedByName}`
             : `Created ${formatDateTime(item.created_at)}`}
         </p>
+
+        {/* An item a receipt created is pending, and nothing ever said so or
+            offered to change it — approval only ever happened as a side effect
+            of approving one of its offers, so an item with none stayed pending
+            for good. */}
+        {canApprove && item.status === "pending" && (
+          <ReviewDecision
+            action={reviewItem}
+            idField="item_id"
+            id={item.id}
+            approveLabel="Approve item"
+            note="Approving confirms this is a real product worth keeping in the catalogue. Rejecting keeps it for the expenses that already name it, but marks it as one nobody should file against."
+          />
+        )}
       </div>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
@@ -411,8 +428,17 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
 
                         <div className="mt-2 flex gap-4 text-xs text-ink/50">
                           {canEdit && (
-                            <details>
-                              <summary className="cursor-pointer hover:text-ink">Edit</summary>
+                            // Open when the offer is still missing something a
+                            // person has to supply — a receipt now brings the
+                            // price and the pack across, so an offer that
+                            // still has neither is one nobody can approve
+                            // without typing. Settled offers stay collapsed.
+                            <details open={o.status === "pending" && (o.pack_price == null || !o.vendor_id)}>
+                              <summary className="cursor-pointer hover:text-ink">
+                                {o.status === "pending" && (o.pack_price == null || !o.vendor_id)
+                                  ? "Finish this offer"
+                                  : "Edit"}
+                              </summary>
                               <div className="mt-2">
                                 <OfferForm
                                   action={updateOffer}

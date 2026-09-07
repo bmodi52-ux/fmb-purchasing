@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { canonicalUnitCode } from "@/lib/units";
+import { packShapeFromDescription, type PackShape } from "@/lib/pack-shape";
 
 function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -306,21 +307,38 @@ async function matchOrCreatePackSize(
     itemId,
     canonicalUnitId,
     normalizedUnit,
+    description,
   }: {
     itemId: string;
     canonicalUnitId: string;
     normalizedUnit: string | null;
+    /**
+     * The line's own wording, read for a pack the vendor has stated —
+     * "Rice 5kg x 4". Not the same evidence as the quantity bought, which
+     * still cannot be used for this; see packShapeFromDescription.
+     */
+    description?: string | null;
   }
 ): Promise<string> {
-  const innerUnitId = (await resolveUnitId(admin, normalizedUnit, canonicalUnitId)) ?? canonicalUnitId;
+  // A shape the description states wins over "one unit". Everything else
+  // about this function stays as it was, including what happens when it says
+  // nothing: setting up the pack by hand is only skipped when the invoice
+  // itself did the describing.
+  const stated = packShapeFromDescription(description);
+  const statedUnitId = stated ? await unitIdByCode(admin, stated.unitCode) : null;
+
+  const innerUnitId =
+    statedUnitId ?? (await resolveUnitId(admin, normalizedUnit, canonicalUnitId)) ?? canonicalUnitId;
+  const innerQuantity = statedUnitId ? stated!.innerQuantity : 1;
+  const packCount = statedUnitId ? stated!.packCount : 1;
 
   const { data: existing } = await admin
     .from("item_pack_sizes")
     .select("id")
     .eq("item_id", itemId)
-    .eq("inner_quantity", 1)
+    .eq("inner_quantity", innerQuantity)
     .eq("inner_unit_id", innerUnitId)
-    .eq("pack_count", 1)
+    .eq("pack_count", packCount)
     .is("label", null)
     .maybeSingle();
   if (existing) return existing.id;
@@ -331,10 +349,11 @@ async function matchOrCreatePackSize(
     .from("item_pack_sizes")
     .insert({
       item_id: itemId,
-      inner_quantity: 1,
+      inner_quantity: innerQuantity,
       inner_unit_id: innerUnitId,
-      pack_count: 1,
-      sold_loose: selfEvident,
+      pack_count: packCount,
+      // A stated pack of several is a carton, not something sold loose.
+      sold_loose: selfEvident && packCount === 1 && innerQuantity === 1,
       contents_confirmed: selfEvident,
     })
     .select("id")
@@ -456,6 +475,106 @@ export function isWorthRemembering(
   return normalize(original) !== normalize(description);
 }
 
+/**
+ * What one unit of the auto-created pack size cost, from a receipt line.
+ *
+ * matchOrCreatePackSize always makes the plain "one unit" shape, so the price
+ * that belongs on the offer is the price of a single unit — not the line
+ * total, which is what quantity units cost together. Derived from the
+ * normalized quantity in preference to the raw one because the pack size's
+ * unit is the normalized one: a line reading "2000 g @ $0.004" normalizes to
+ * 2 kg, and the offer wants $4.00/kg, not $0.004/g.
+ *
+ * Null rather than a number whenever the arithmetic would produce something
+ * nobody should see on a pricelist: a credit or refund line (negative), a
+ * quantity of zero, or a line whose quantity was never read.
+ *
+ * Kept pure and exported so the rule is testable without a database — the
+ * rest of this module speaks the Supabase query API.
+ */
+/**
+ * Put a receipt's price on an offer that has none, and leave any other alone.
+ *
+ * The guard is the whole point: pack_price is master data, and an offer that
+ * already carries one carries it because somebody put it there. Filling only
+ * the gaps means a receipt can complete a half-made offer — including every
+ * offer created before prices were carried across at all — without a receipt
+ * ever quietly restating an approved price.
+ */
+async function fillMissingPackPrice(
+  admin: SupabaseClient,
+  offerId: string,
+  packPrice: number | null
+): Promise<void> {
+  if (packPrice == null) return;
+  await admin
+    .from("pricelist_items")
+    .update({ pack_price: packPrice })
+    .eq("id", offerId)
+    .is("pack_price", null);
+}
+
+export function unitPriceFromLine({
+  lineTotal,
+  quantity,
+  normalizedQuantity,
+}: ReceiptLineFacts): number | null {
+  const units = normalizedQuantity ?? quantity;
+  if (units == null || !(units > 0)) return null;
+  if (!(lineTotal > 0)) return null;
+  return round4(lineTotal / units);
+}
+
+/** What a line says about how much was bought, and for what. */
+export type ReceiptLineFacts = {
+  lineTotal: number;
+  quantity: number | null;
+  normalizedQuantity: number | null;
+  /** The unit that quantity is in, as extraction normalized it. */
+  normalizedUnit?: string | null;
+};
+
+/** numeric(12, 4) — anything finer is lost on the way into the column. */
+function round4(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
+/**
+ * The price to record against an offer, for the pack that offer is sold in.
+ *
+ * pack_price means the price of the whole pack, which is why this cannot just
+ * be a per-unit figure: an offer whose pack is 5 kg × 4 and whose price is
+ * $2.40 reads as 12 cents a kilo. So the price has to be worked out for
+ * whichever pack was created alongside it.
+ *
+ * Two cases, decided by whether the line's own quantity is counted in the
+ * pack's unit:
+ *
+ *   "Rice 5kg x 4", 20 kg for $48 — the quantity is in kilos, the same unit
+ *   the pack is described in, so the pack costs its own contents' worth:
+ *   $2.40/kg × 20 kg = $48.
+ *
+ *   "Ghee 12x500g", 1 for $60 — the quantity counts packs, not grams, so the
+ *   line total divided by the number of packs is already the pack price.
+ *
+ * Null wherever the arithmetic would produce a figure nobody should see on a
+ * pricelist — see unitPriceFromLine, whose refusals this inherits.
+ */
+export function offerPackPrice(line: ReceiptLineFacts, shape: PackShape | null): number | null {
+  if (!shape) return unitPriceFromLine(line);
+
+  const totalQuantity = shape.innerQuantity * shape.packCount;
+
+  if (canonicalUnitCode(line.normalizedUnit) === shape.unitCode) {
+    const perUnit = unitPriceFromLine(line);
+    return perUnit == null ? null : round4(perUnit * totalQuantity);
+  }
+
+  const packs = line.quantity ?? 1;
+  if (!(packs > 0) || !(line.lineTotal > 0)) return null;
+  return round4(line.lineTotal / packs);
+}
+
 export async function matchOrCreateOffer(
   admin: SupabaseClient,
   {
@@ -465,6 +584,7 @@ export async function matchOrCreateOffer(
     categoryId,
     userId,
     normalizedUnit = null,
+    line = null,
   }: {
     vendorId: string;
     description: string;
@@ -477,8 +597,22 @@ export async function matchOrCreateOffer(
     categoryId: string | null;
     userId: string;
     normalizedUnit?: string | null;
+    /**
+     * What this line says was bought and for how much.
+     *
+     * Used for the offer's price, which every offer a receipt created used to
+     * lack entirely — leaving somebody to type in a figure the receipt had
+     * already stated. Worked out here rather than by the caller because the
+     * right price depends on the pack this decides to create; see
+     * offerPackPrice. An existing price is never overwritten: it is what a
+     * person entered or approved, and one receipt is not grounds to replace
+     * it.
+     */
+    line?: ReceiptLineFacts | null;
   }
 ): Promise<{ id: string; status: "matched" | "created"; categoryId: string | null }> {
+  const shape = packShapeFromDescription(description);
+  const packPrice = line ? offerPackPrice({ ...line, normalizedUnit }, shape) : null;
   const knownOffer = await findOfferByVendorDescription(admin, vendorId, description);
   if (knownOffer) {
     // Same reasoning as in matchOrCreateItem: this vendor's wording is already
@@ -502,6 +636,7 @@ export async function matchOrCreateOffer(
       });
     }
 
+    await fillMissingPackPrice(admin, knownOffer, packPrice);
     return { id: knownOffer, status: "matched", categoryId: matchedItem?.category_id ?? null };
   }
 
@@ -512,6 +647,7 @@ export async function matchOrCreateOffer(
     itemId: item.id,
     canonicalUnitId: itemRow!.canonical_unit_id,
     normalizedUnit,
+    description,
   });
 
   await recordVendorItemDescription(admin, { itemId: item.id, vendorId, description, userId });
@@ -529,13 +665,17 @@ export async function matchOrCreateOffer(
     .eq("vendor_id", vendorId)
     .eq("pack_size_id", packSizeId)
     .maybeSingle();
-  if (byVendor) return { id: byVendor.id, status: "matched", categoryId: item.categoryId };
+  if (byVendor) {
+    await fillMissingPackPrice(admin, byVendor.id, packPrice);
+    return { id: byVendor.id, status: "matched", categoryId: item.categoryId };
+  }
 
   const { data: created, error } = await admin
     .from("pricelist_items")
     .insert({
       vendor_id: vendorId,
       pack_size_id: packSizeId,
+      pack_price: packPrice,
       status: "pending",
       created_by: userId,
     })

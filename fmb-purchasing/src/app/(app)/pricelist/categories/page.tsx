@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CategoriesManager, type ManagedCategory } from "../categories-manager";
+import { sortCategories } from "@/lib/categories";
 
 export const metadata = { title: "Categories" };
 
@@ -24,7 +25,7 @@ export default async function PricelistCategoriesPage() {
 
   const admin = createAdminClient();
   const [{ data: categories }, { data: itemCategoryRows }] = await Promise.all([
-    admin.from("categories").select("id, name, parent_category_id, code").order("sort_order"),
+    admin.from("categories").select("id, name, parent_category_id, code, applies_to").order("name"),
     // Every item, not just those with an offer, so the "changing the code
     // renumbers N items" warning is honest.
     admin.from("items").select("category_id"),
@@ -37,12 +38,13 @@ export default async function PricelistCategoriesPage() {
     }
   }
 
-  const managedCategories: ManagedCategory[] = (categories ?? []).map((c) => ({
+  const managedCategories: ManagedCategory[] = sortCategories(categories ?? []).map((c) => ({
     id: c.id,
     name: c.name,
     code: c.code ?? null,
     parentCategoryId: c.parent_category_id,
     itemCount: itemCountByCategory.get(c.id) ?? 0,
+    appliesTo: (c.applies_to as string[] | null) ?? null,
   }));
 
   return (

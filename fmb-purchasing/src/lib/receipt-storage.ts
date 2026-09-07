@@ -59,6 +59,19 @@ export function sha256Hex(bytes: Uint8Array): string {
 }
 
 /**
+ * Where a receipt with these bytes lives in the bucket.
+ *
+ * Derived entirely from the content hash, so it can be recomputed rather than
+ * taken on trust. That is what lets the extraction action accept "read the file
+ * I just uploaded" from a browser: the path is recomputed from the hash the
+ * browser quotes, so no path of the caller's choosing is ever followed.
+ */
+export function receiptStoragePath(sha256: string, contentType: string): string {
+  const extension = EXTENSIONS[contentType] ?? "bin";
+  return `sha256/${sha256.slice(0, 2)}/${sha256}.${extension}`;
+}
+
+/**
  * Store a receipt under a key derived from its own bytes.
  *
  * The old key was `<user>/<epoch-millis>-<filename>`, which made every upload
@@ -83,8 +96,7 @@ export async function storeReceiptFile(
   file: { bytes: Uint8Array; name: string; type: string }
 ): Promise<StoredFile> {
   const sha256 = sha256Hex(file.bytes);
-  const extension = EXTENSIONS[file.type] ?? "bin";
-  const storagePath = `sha256/${sha256.slice(0, 2)}/${sha256}.${extension}`;
+  const storagePath = receiptStoragePath(sha256, file.type);
 
   const { error } = await admin.storage
     .from(RECEIPTS_BUCKET)

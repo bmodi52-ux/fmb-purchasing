@@ -7,7 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { ReceiptViewer } from "@/components/receipt-viewer";
 import { ReversePanel } from "./reverse-panel";
-import { reopenExpense } from "../../approvals/actions";
+import { reopenExpense, reviewExpense } from "../../approvals/actions";
+import { ReviewDecision } from "@/components/review-decision";
 import { reversePayment } from "../../payments/actions";
 
 /**
@@ -180,6 +181,10 @@ export default async function ExpenseDetailPage({
   const canReopen =
     can(permissions, "approvals", "approve") &&
     (expense.status === "approved" || expense.status === "declined");
+  // Deciding it in the first place, which until now could only be done from
+  // the Approvals queue — a list of summaries, while everything worth reading
+  // before approving is on this page.
+  const canDecide = can(permissions, "approvals", "approve") && expense.status === "submitted";
   const canUnpay = can(permissions, "payments", "mark_paid") && expense.status === "paid";
 
   const backHref = can(permissions, "all_expenses", "view") ? "/expenses" : "/my-submissions";
@@ -207,6 +212,24 @@ export default async function ExpenseDetailPage({
           {vendor?.name ?? expense.vendor_name_raw ?? "Vendor not recorded"}
           {expense.receipt_date ? ` · ${formatDate(expense.receipt_date)}` : ""}
         </p>
+
+        {/* The decision, on the page that shows the whole expense. The
+            Approvals queue lists what it can fit; everything else — the
+            receipt itself, the payee, the line-by-line detail, the history —
+            is here, so this is where somebody actually finishes reading before
+            deciding. Same action the queue submits to. */}
+        {canDecide && (
+          <ReviewDecision
+            action={reviewExpense}
+            idField="expense_id"
+            id={expense.id}
+            approveLabel="Approve"
+            rejectLabel="Decline"
+            rejectValue="declined"
+            commentLabel="Comment (optional)"
+            note="A comment is sent to whoever submitted this, and is worth leaving on a decline."
+          />
+        )}
       </div>
 
       {/* ---------------- summary ---------------- */}

@@ -118,9 +118,11 @@ that the backup is *usable*.
 
 - **Anthropic and Resend keys** are in Vercel only. Note where they came from;
   both are re-issuable, but not recoverable.
-- **The `ABN_LOOKUP_GUID`** is absent from local `.env.local` and may be absent
-  in production too. Its failure mode is silent — lookups return "no matches"
-  rather than an error — so confirm it is set rather than assuming.
+- **The `ABN_LOOKUP_GUID`** is set in local `.env.local`, but it is a personal
+  GUID registered at abr.business.gov.au/Tools/WebServices and is stored
+  nowhere else — if it is lost, register a new one. Confirm it is set in Vercel
+  rather than assuming: the failure mode is silent, and name search returns
+  "no matches" rather than an error when it is missing.
 - **Deleted expenses are gone.** Deletion is hard, and since the file cleanup
   landed it removes the receipt too. Only the submitter can delete, and only
   before a decision, so the window is small — but there is no undo.

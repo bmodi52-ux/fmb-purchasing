@@ -8,7 +8,11 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission, userCan } from "@/lib/permissions";
 import { extractReceipt, type ExtractedReceipt, type StoredLineKind } from "@/lib/receipt-extraction";
 import { lookupAbn, type AbnLookupResult } from "@/lib/abn-lookup";
-import { matchOrCreateVendor, matchOrCreateOffer, preferredVendor } from "@/lib/expense-matching";
+import {
+  matchOrCreateVendor,
+  matchOrCreateOffer,
+  preferredVendor,
+} from "@/lib/expense-matching";
 import { fiscalYearForReceipt } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
 import { leafCategories } from "@/lib/categories";
@@ -26,8 +30,11 @@ import {
 } from "@/lib/payees";
 import {
   ACCEPTED_TYPES,
+  RECEIPTS_BUCKET,
   expenseIdsWithFile,
   receiptContentType,
+  receiptStoragePath,
+  sha256Hex,
   storeReceiptFile,
   type StoredFile,
 } from "@/lib/receipt-storage";
@@ -71,6 +78,68 @@ async function readUpload(
   };
 }
 
+/**
+ * A file the browser has already uploaded, quoted back for reading.
+ *
+ * The upload and the model call are two waits with nothing in common: one is
+ * as slow as the connection, the other takes ten to twenty seconds whatever
+ * the connection. Run as one action they were one indistinguishable "Reading
+ * receipt…", so this lets the browser do them in turn and say which is
+ * happening — see readReceiptFile in submit-form.tsx.
+ *
+ * Only the hash and content type are believed. The path is recomputed from
+ * them and the bytes are re-hashed after download, so quoting somebody else's
+ * storage path fetches nothing, and quoting a hash you do not have the file
+ * for is not something you can do.
+ */
+function storedUpload(
+  formData: FormData
+): { attachment: StoredFile } | { error: string } | null {
+  const raw = formData.get("attachment");
+  if (typeof raw !== "string" || !raw) return null;
+
+  let claimed: StoredFile;
+  try {
+    claimed = JSON.parse(raw) as StoredFile;
+  } catch {
+    return { error: "That upload could not be read back. Please choose the file again." };
+  }
+  if (
+    typeof claimed?.sha256 !== "string" ||
+    !/^[0-9a-f]{64}$/.test(claimed.sha256) ||
+    !ACCEPTED_TYPES.has(claimed.contentType)
+  ) {
+    return { error: "That upload could not be read back. Please choose the file again." };
+  }
+
+  return {
+    attachment: {
+      storagePath: receiptStoragePath(claimed.sha256, claimed.contentType),
+      fileName: typeof claimed.fileName === "string" ? claimed.fileName : "receipt",
+      contentType: claimed.contentType,
+      sizeBytes: Number(claimed.sizeBytes) || 0,
+      sha256: claimed.sha256,
+      alreadyStored: true,
+    },
+  };
+}
+
+/** The bytes behind an upload the browser has already made. */
+async function downloadStoredReceipt(
+  admin: ReturnType<typeof createAdminClient>,
+  attachment: StoredFile
+): Promise<Uint8Array | null> {
+  const { data, error } = await admin.storage
+    .from(RECEIPTS_BUCKET)
+    .download(attachment.storagePath);
+  if (error || !data) return null;
+
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  // The path came from the quoted hash, so this is what proves the quote was
+  // honest rather than a guess at somebody else's file.
+  return sha256Hex(bytes) === attachment.sha256 ? bytes : null;
+}
+
 export async function extractReceiptAction(
   _prev: ExtractState,
   formData: FormData
@@ -79,34 +148,53 @@ export async function extractReceiptAction(
   if (!user) redirect("/login");
   await requirePermission(user, "submit_expense", "submit");
 
-  const read = await readUpload(formData);
-  if ("error" in read) return { data: null, attachment: null, error: read.error };
-
   const admin = createAdminClient();
 
+  const stored = storedUpload(formData);
+  if (stored && "error" in stored) {
+    return { data: null, attachment: null, error: stored.error };
+  }
+
   let attachment: StoredFile;
-  try {
-    attachment = await storeReceiptFile(admin, {
-      bytes: read.bytes,
-      name: read.file.name,
-      type: read.file.type,
-    });
-  } catch (err) {
-    await reportError({
-      source: "receipt-upload",
-      error: err,
-      detail: `${read.file.type}, ${read.file.size} bytes`,
-      userId: user.id,
-    });
-    return {
-      data: null,
-      attachment: null,
-      error: `Could not save the receipt file: ${(err as Error).message}`,
-    };
+  let bytes: Uint8Array | null = null;
+  let fileType: string;
+  let fileSize: number;
+
+  if (stored) {
+    attachment = stored.attachment;
+    fileType = attachment.contentType;
+    fileSize = attachment.sizeBytes;
+  } else {
+    const read = await readUpload(formData);
+    if ("error" in read) return { data: null, attachment: null, error: read.error };
+    bytes = read.bytes;
+    fileType = read.file.type;
+    fileSize = read.file.size;
+
+    try {
+      attachment = await storeReceiptFile(admin, {
+        bytes: read.bytes,
+        name: read.file.name,
+        type: read.file.type,
+      });
+    } catch (err) {
+      await reportError({
+        source: "receipt-upload",
+        error: err,
+        detail: `${read.file.type}, ${read.file.size} bytes`,
+        userId: user.id,
+      });
+      return {
+        data: null,
+        attachment: null,
+        error: `Could not save the receipt file: ${(err as Error).message}`,
+      };
+    }
   }
 
   // Served before the throttle is consulted: a repeat of a file already read
-  // costs nothing, so it should not consume anyone's allowance either.
+  // costs nothing, so it should not consume anyone's allowance either. Also
+  // before the download below, so a repeat never fetches the bytes at all.
   const cached = extractionCache.get(attachment.sha256);
   if (cached) return { data: cached, attachment, error: null };
 
@@ -122,6 +210,17 @@ export async function extractReceiptAction(
     };
   }
 
+  if (!bytes) {
+    bytes = await downloadStoredReceipt(admin, attachment);
+    if (!bytes) {
+      return {
+        data: null,
+        attachment: null,
+        error: "That upload could not be read back. Please choose the file again.",
+      };
+    }
+  }
+
   const { data: categories } = await admin
     .from("categories")
     .select("id, name, parent_category_id")
@@ -129,8 +228,8 @@ export async function extractReceiptAction(
   const categoryNames = leafCategories(categories ?? []).map((c) => c.name);
 
   try {
-    const base64 = Buffer.from(read.bytes).toString("base64");
-    const extracted = await extractReceipt(base64, read.file.type, categoryNames);
+    const base64 = Buffer.from(bytes).toString("base64");
+    const extracted = await extractReceipt(base64, fileType, categoryNames);
     extractionCache.set(attachment.sha256, extracted);
     return { data: extracted, attachment, error: null };
   } catch (err) {
@@ -140,7 +239,7 @@ export async function extractReceiptAction(
     await reportError({
       source: "receipt-extraction",
       error: err,
-      detail: `${read.file.type}, ${read.file.size} bytes`,
+      detail: `${fileType}, ${fileSize} bytes`,
       userId: user.id,
     });
     return {
@@ -507,6 +606,15 @@ async function buildLineRows(
         categoryId,
         userId,
         normalizedUnit: item.normalizedUnit,
+        // The receipt states what was bought and for how much, so an offer it
+        // creates should not open with an empty price waiting to be typed back
+        // in. What that means for the pack is worked out there — see
+        // offerPackPrice.
+        line: {
+          lineTotal: item.lineTotal,
+          quantity: item.quantity,
+          normalizedQuantity: item.normalizedQuantity,
+        },
       });
       pricelistItemId = matched.id;
       // Prefer the category of the item this line resolved to. When the line

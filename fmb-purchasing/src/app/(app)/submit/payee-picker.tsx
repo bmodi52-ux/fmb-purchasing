@@ -59,6 +59,8 @@ export function PayeePicker({
   const [vendorBsb, setVendorBsb] = useState("");
   const [vendorAccountNumber, setVendorAccountNumber] = useState("");
   const [vendorAccountName, setVendorAccountName] = useState("");
+  // The submitter says this invoice disagrees with the account on file.
+  const [changedDetails, setChangedDetails] = useState(false);
 
   const mode: "me" | "vendor" | "existing" | "new" =
     value?.kind === "new"
@@ -75,6 +77,9 @@ export function PayeePicker({
       bankAccountName: patch.bankAccountName ?? vendorAccountName,
       bsb: patch.bsb ?? vendorBsb,
       accountNumber: patch.accountNumber ?? vendorAccountNumber,
+      // Only meaningful when something is already on file; otherwise these are
+      // the vendor's first account, not a replacement for one.
+      replacesCurrent: vendorHasPaymentDetails && changedDetails,
     });
   }
 
@@ -148,20 +153,58 @@ export function PayeePicker({
 
       {mode === "vendor" && (
         <div className="mt-3">
-          {vendorHasPaymentDetails ? (
+          {vendorHasPaymentDetails && !changedDetails ? (
             // The numbers themselves stay server-side. 0027 put bank details
             // behind payments:mark_paid, and knowing an account is on file is
             // all a submitter needs in order not to type it again.
-            <p className="rounded-md bg-palm/10 px-3 py-2 text-sm text-ink/75">
-              Bank details for {vendorName.trim()} are already on file. The Treasurer will
-              use them — nothing to enter here.
-            </p>
+            <div className="rounded-md bg-palm/10 px-3 py-2 text-sm text-ink/75">
+              <p>
+                Bank details for {vendorName.trim()} are already on file. The Treasurer will
+                use them — nothing to enter here.
+              </p>
+              {/* Suppliers change banks, and the person holding the new
+                  invoice is the first to know. Without this the only route was
+                  to find someone with payments:mark_paid and have them type
+                  over the old account. What is entered here is recorded beside
+                  the account on file, not over it — a changed BSB on an
+                  invoice is the classic payment fraud, so it is confirmed by
+                  whoever makes the transfer before it is used. */}
+              <button
+                type="button"
+                onClick={() => setChangedDetails(true)}
+                className="mt-1 text-xs text-ink/60 underline hover:text-ink"
+              >
+                The invoice shows different details
+              </button>
+            </div>
           ) : (
             <>
-              <p className="mb-3 text-xs text-ink/55">
-                No bank details saved for this vendor yet. Add them from the invoice if you
-                have them; they are needed once and reused from then on.
-              </p>
+              {vendorHasPaymentDetails ? (
+                <div className="mb-3 flex flex-wrap items-baseline gap-2">
+                  <p className="text-xs text-ink/55">
+                    Enter what this invoice says. It is recorded against {vendorName.trim()} for
+                    the Treasurer to confirm — the details on file are not changed by this.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChangedDetails(false);
+                      setVendorAccountName("");
+                      setVendorBsb("");
+                      setVendorAccountNumber("");
+                      onChange({ kind: "vendor" });
+                    }}
+                    className="text-xs text-ink/50 underline hover:text-ink"
+                  >
+                    never mind, use the details on file
+                  </button>
+                </div>
+              ) : (
+                <p className="mb-3 text-xs text-ink/55">
+                  No bank details saved for this vendor yet. Add them from the invoice if you
+                  have them; they are needed once and reused from then on.
+                </p>
+              )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1 text-sm sm:col-span-2">
                   <span className="text-ink/70">

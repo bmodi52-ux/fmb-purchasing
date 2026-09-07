@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
-import { categoryLabelsById } from "@/lib/categories";
+import { categoryLabelsById, CATEGORY_LINE_GROUPS } from "@/lib/categories";
 import { recordVendorItemDescription } from "@/lib/expense-matching";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
 import { UNIT_DIMENSIONS, type UnitDimension } from "@/lib/units";
@@ -309,6 +309,44 @@ async function reviewOffers(offerIds: string[], decision: "approved" | "rejected
     }
   }
 
+  revalidatePath("/pricelist");
+  revalidateReports();
+}
+
+/**
+ * Decide the item itself, from the item's own page.
+ *
+ * An item created from a receipt is inserted pending, and until now nothing in
+ * the app ever showed or changed that: the only way it became approved was as
+ * a side effect of somebody approving one of its offers. So an item whose
+ * offers were all rejected — or which had none yet — stayed pending for good,
+ * invisibly.
+ *
+ * Rejecting is deliberately not a delete. The item may already be named on
+ * expense lines, and reports read those; "rejected" says nobody should file
+ * anything new against it, which is what the state is for.
+ */
+export async function reviewItem(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "pricelist", "approve_master_data");
+
+  const itemId = String(formData.get("item_id"));
+  const decision = String(formData.get("decision"));
+  if (!itemId || (decision !== "approved" && decision !== "rejected")) return;
+
+  const admin = createAdminClient();
+  await admin
+    .from("items")
+    .update({
+      status: decision,
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+      updated_by: user.id,
+    })
+    .eq("id", itemId);
+
+  revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
   revalidateReports();
 }
@@ -682,6 +720,19 @@ function categoryCodeOrNull(formData: FormData): { code: string | null; error: s
   return { code: raw, error: null };
 }
 
+
+/**
+ * Which kinds of line a category is offered for first (migration 0038).
+ *
+ * An empty selection would leave the category out of every picker's first
+ * list, which reads as a category nobody can find rather than one nobody has
+ * tagged — so it falls back to all three, and the check constraint agrees.
+ */
+function appliesToFromForm(formData: FormData): string[] {
+  const chosen = CATEGORY_LINE_GROUPS.filter((group) => formData.get(`applies_${group}`) === "on");
+  return chosen.length > 0 ? [...chosen] : [...CATEGORY_LINE_GROUPS];
+}
+
 export async function createCategory(
   _prev: CategoryFormState,
   formData: FormData
@@ -699,6 +750,7 @@ export async function createCategory(
     name,
     code,
     parent_category_id: fieldOrNull(formData, "parent_category_id"),
+    applies_to: appliesToFromForm(formData),
     sort_order: numberOrNull(formData, "sort_order") ?? 500,
   });
 
@@ -762,7 +814,7 @@ export async function updateCategory(
 
   const { error } = await admin
     .from("categories")
-    .update({ name, code, parent_category_id: parentCategoryId })
+    .update({ name, code, parent_category_id: parentCategoryId, applies_to: appliesToFromForm(formData) })
     .eq("id", id);
 
   if (error) {

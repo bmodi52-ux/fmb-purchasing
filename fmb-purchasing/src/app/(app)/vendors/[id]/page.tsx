@@ -11,7 +11,11 @@ import {
   addContact,
   removeContact,
   updateVendorPaymentDetails,
+  reviewProposedVendorAccount,
 } from "./actions";
+import { reviewVendor } from "../actions";
+import { formatDate } from "@/lib/format";
+import { ReviewDecision, StatusPill } from "@/components/review-decision";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -31,6 +35,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
 
   const permissions = await getUserPermissions(user.teamIds);
   const canEdit = can(permissions, "vendors", "edit_master_data");
+  const canApprove = can(permissions, "vendors", "approve_master_data");
   // The trust boundary 0027 drew: bank details belong to whoever transfers the
   // money, not to everyone who can read a vendor record.
   const canSeeBankDetails = can(permissions, "payments", "mark_paid");
@@ -40,17 +45,22 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
     admin.from("vendors").select("*").eq("id", id).maybeSingle(),
     admin.from("vendor_collection_addresses").select("*").eq("vendor_id", id).order("created_at"),
     admin.from("vendor_contacts").select("*").eq("vendor_id", id).order("created_at"),
+    // Every account this vendor has ever had, newest first: the one in use,
+    // anything a submitter has proposed off an invoice, and the ones they
+    // replaced. See migration 0037.
     admin
       .from("payees")
-      .select("id, bank_account_name, bank_bsb, bank_account_number, notes")
+      .select("id, bank_account_name, bank_bsb, bank_account_number, notes, status, created_at, superseded_at")
       .eq("vendor_id", id)
-      .order("created_at", { ascending: true })
-      .limit(1),
+      .order("created_at", { ascending: false }),
   ]);
 
   if (!vendor) notFound();
 
-  const stored = paymentRow.data?.[0];
+  const accounts = paymentRow.data ?? [];
+  const stored = accounts.find((a) => a.status === "approved");
+  const proposed = accounts.filter((a) => a.status === "pending");
+  const superseded = accounts.filter((a) => a.status === "superseded");
   // Nothing but presence leaves the server unless the viewer may see the
   // numbers — an unused field in a payload is still a disclosure.
   const payment = stored
@@ -75,7 +85,18 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="page-title text-ink">{vendor.name}</h1>
           <span className="font-mono text-sm text-ink/50">{vendor.vendor_number}</span>
+          <StatusPill status={vendor.status as string} />
         </div>
+
+        {canApprove && vendor.status === "pending" && (
+          <ReviewDecision
+            action={reviewVendor}
+            idField="vendor_id"
+            id={vendor.id}
+            approveLabel="Approve vendor"
+            note="Approving lets receipts be filed against this vendor without a second look."
+          />
+        )}
       </div>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
@@ -116,6 +137,52 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
           reimbursed to whoever bought it.
         </p>
 
+        {/* Details a submitter read off an invoice that disagreed with the
+            account on file. They are shown here rather than applied, because a
+            changed BSB on an invoice is the classic payment fraud — the person
+            who will make the transfer is the one who decides it is real. */}
+        {canSeeBankDetails && proposed.length > 0 && (
+          <div className="mb-5 flex flex-col gap-3 rounded-md border border-gold/50 bg-gold/10 p-4">
+            <p className="text-sm font-medium text-ink">
+              {proposed.length === 1
+                ? "A submitter read different details off an invoice"
+                : `${proposed.length} sets of details from invoices disagree with the account on file`}
+            </p>
+            {proposed.map((account) => (
+              <div key={account.id as string} className="flex flex-wrap items-end justify-between gap-3">
+                <div className="text-sm">
+                  <p className="text-ink/80">{(account.bank_account_name as string | null) || "—"}</p>
+                  <p className="font-mono text-ink/70">
+                    BSB {(account.bank_bsb as string | null) || "—"} · Acct{" "}
+                    {(account.bank_account_number as string | null) || "—"}
+                  </p>
+                  <p className="text-xs text-ink/45">
+                    Supplied {formatDate(account.created_at as string)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <form action={reviewProposedVendorAccount}>
+                    <input type="hidden" name="vendor_id" value={vendor.id} />
+                    <input type="hidden" name="payee_id" value={account.id as string} />
+                    <input type="hidden" name="decision" value="accept" />
+                    <SubmitButton className="rounded-md bg-palm px-3 py-1.5 text-sm font-medium text-white hover:bg-palm/90">
+                      Use these from now on
+                    </SubmitButton>
+                  </form>
+                  <form action={reviewProposedVendorAccount}>
+                    <input type="hidden" name="vendor_id" value={vendor.id} />
+                    <input type="hidden" name="payee_id" value={account.id as string} />
+                    <input type="hidden" name="decision" value="discard" />
+                    <SubmitButton className="rounded-md border border-ink/20 px-3 py-1.5 text-sm text-ink/70 hover:bg-ink/5">
+                      Discard
+                    </SubmitButton>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {canSeeBankDetails ? (
           <form action={updateVendorPaymentDetails} className="grid gap-4 sm:grid-cols-2">
             <input type="hidden" name="vendor_id" value={vendor.id} />
@@ -147,6 +214,14 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
                 className="input"
               />
             </Field>
+            {/* Saying so here rather than after the fact: entering a different
+                BSB or account number does not edit this record, it starts a
+                new one and keeps the old. */}
+            <p className="text-xs text-ink/45 sm:col-span-2">
+              Changing the BSB or account number files the current account as
+              past and records the new one, so paid expenses still say where the
+              money went.
+            </p>
             <SubmitButton className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
               Save payment details
             </SubmitButton>
@@ -160,6 +235,33 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
               ? "Bank details are on file. They are visible only to whoever makes the payment."
               : "No bank details on file for this vendor."}
           </p>
+        )}
+
+        {/* Where the money used to go. Kept because a payment made in 2025
+            was made to the account of 2025, and an expense record that cannot
+            say which account it was is a record of very little. */}
+        {canSeeBankDetails && superseded.length > 0 && (
+          <details className="mt-5 border-t border-ink/10 pt-4">
+            <summary className="cursor-pointer text-sm text-ink/60">
+              {superseded.length} past account{superseded.length === 1 ? "" : "s"}
+            </summary>
+            <ul className="mt-3 flex flex-col gap-2 text-sm">
+              {superseded.map((account) => (
+                <li key={account.id as string} className="text-ink/60">
+                  <span className="font-mono">
+                    BSB {(account.bank_bsb as string | null) || "—"} · Acct{" "}
+                    {(account.bank_account_number as string | null) || "—"}
+                  </span>
+                  {account.bank_account_name && (
+                    <span className="ml-2">{account.bank_account_name as string}</span>
+                  )}
+                  <span className="ml-2 text-xs text-ink/40">
+                    used until {formatDate(account.superseded_at as string)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </section>
 
