@@ -38,7 +38,7 @@ Needs a `.env.local` — copy `.env.local.example` and fill it in:
 | `NEXT_PUBLIC_SITE_URL` | only to make reset links point somewhere local |
 
 ```bash
-npm test          # 248 tests, incl. migrations applied to a real Postgres
+npm test          # 323 tests, incl. migrations applied to a real Postgres
 npx tsc --noEmit  # the check ESLint cannot do
 npx eslint .
 ```
