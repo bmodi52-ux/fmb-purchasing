@@ -336,7 +336,134 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
         <div className="flex flex-col gap-5">
           {(packSizes ?? []).map((p) => {
             const packOffers = offersByPackSize.get(p.id) ?? [];
+            const liveOffers = packOffers.filter((o) => o.status !== "rejected");
+            const rejectedOffers = packOffers.filter((o) => o.status === "rejected");
             const packUnitLabel = unitLabelById.get(p.inner_unit_id) ?? null;
+
+            // One renderer for both lists below, so a rejected offer is
+            // displayed exactly as a live one is — same actions, same
+            // history. The disclosure is the only difference.
+            const renderOffer = (o: (typeof packOffers)[number]) => {
+              const history = historyByOffer.get(o.id) ?? [];
+              const cost = costByOfferId.get(o.id);
+              return (
+                <li key={o.id} className="rounded-md border border-ink/10 bg-cream/60 p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-ink">
+                        {o.vendor_id ? vendorNameById.get(o.vendor_id) : "— no vendor —"}
+                      </span>
+                      {o.brand && <span className="ml-1 text-xs text-ink/40">({o.brand})</span>}
+                      {o.vendor_sku && <span className="ml-1 font-mono text-xs text-ink/40">#{o.vendor_sku}</span>}
+                      <StatusBadge status={o.status} />
+                    </div>
+                    <span className="font-mono text-ink/70">
+                      {o.pack_price != null ? `$${o.pack_price}` : "—"}
+                      {cost?.cost_per_base_unit != null && (
+                        <span className="ml-2 text-ink/50">
+                          (${cost.cost_per_base_unit.toFixed(4)}/{cost.base_unit_code})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {o.comments && <p className="mt-1 text-ink/60">{o.comments}</p>}
+
+                  {canApprove && o.status === "pending" && (
+                    <div className="mt-2 flex gap-3">
+                      <form action={reviewOffer}>
+                        <input type="hidden" name="offer_id" value={o.id} />
+                        <input type="hidden" name="decision" value="approved" />
+                        <SubmitButton className="text-xs text-palm hover:underline">
+                          Approve
+                        </SubmitButton>
+                      </form>
+                      <form action={reviewOffer}>
+                        <input type="hidden" name="offer_id" value={o.id} />
+                        <input type="hidden" name="decision" value="rejected" />
+                        <SubmitButton className="text-xs text-maroon/70 hover:underline">
+                          Reject
+                        </SubmitButton>
+                      </form>
+                    </div>
+                  )}
+
+                  <div className="mt-2 flex gap-4 text-xs text-ink/50">
+                    {canEdit && (
+                      // Open when the offer is still missing something a
+                      // person has to supply — a receipt now brings the
+                      // price and the pack across, so an offer that
+                      // still has neither is one nobody can approve
+                      // without typing. Settled offers stay collapsed.
+                      <details open={o.status === "pending" && (o.pack_price == null || !o.vendor_id)}>
+                        <summary className="cursor-pointer hover:text-ink">
+                          {o.status === "pending" && (o.pack_price == null || !o.vendor_id)
+                            ? "Finish this offer"
+                            : "Edit"}
+                        </summary>
+                        <div className="mt-2">
+                          <OfferForm
+                            action={updateOffer}
+                            itemId={item.id}
+                            packSizeId={p.id}
+                            offerId={o.id}
+                            totalQuantity={p.total_quantity}
+                            innerUnitLabel={packUnitLabel}
+                            vendorId={o.vendor_id}
+                            brand={o.brand}
+                            vendorSku={o.vendor_sku}
+                            packPrice={o.pack_price}
+                            comments={o.comments}
+                            vendors={vendors ?? []}
+                            packSizes={(packSizes ?? []).map((ps) => ({
+                              id: ps.id,
+                              label: packSizeLabelById.get(ps.id) ?? "",
+                            }))}
+                            submitLabel="Save"
+                          />
+                        </div>
+                      </details>
+                    )}
+                    {canEdit && (purchasesByOffer.get(o.id) ?? 0) === 0 && (
+                      <form action={deleteOffer}>
+                        <input type="hidden" name="offer_id" value={o.id} />
+                        <input type="hidden" name="item_id" value={item.id} />
+                        <SubmitButton className="text-xs text-maroon/70 hover:underline">
+                          Delete offer
+                        </SubmitButton>
+                      </form>
+                    )}
+                    <details>
+                      <summary className="cursor-pointer hover:text-ink">History ({history.length})</summary>
+                      {history.length === 0 ? (
+                        <p className="mt-2">No changes recorded yet.</p>
+                      ) : (
+                        <ul className="mt-2 flex flex-col gap-2">
+                          {history.map((h) => (
+                            <li key={h.id} className="rounded border border-ink/10 bg-white p-2">
+                              <p className="mb-1 text-ink/40">
+                                {formatDateTime(h.changed_at)}
+                                {h.changed_by && ` · ${profileNameById.get(h.changed_by) ?? "unknown"}`}
+                              </p>
+                              <ul>
+                                {Object.entries(h.changes as Record<string, { old: unknown; new: unknown }>).map(
+                                  ([field, diff]) => (
+                                    <li key={field} className="text-ink/70">
+                                      <span className="text-ink/40">{OFFER_FIELD_LABELS[field] ?? field}:</span>{" "}
+                                      {offerDisplayValue(field, diff.old)} → {offerDisplayValue(field, diff.new)}
+                                    </li>
+                                  )
+                                )}
+                              </ul>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </details>
+                  </div>
+                </li>
+              );
+            };
+
             return (
               <div key={p.id} className="rounded-md border border-ink/10 bg-white p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -382,128 +509,29 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                 )}
 
                 <ul className="flex flex-col gap-3">
-                  {packOffers.map((o) => {
-                    const history = historyByOffer.get(o.id) ?? [];
-                    const cost = costByOfferId.get(o.id);
-                    return (
-                      <li key={o.id} className="rounded-md border border-ink/10 bg-cream/60 p-3 text-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <span className="text-ink">
-                              {o.vendor_id ? vendorNameById.get(o.vendor_id) : "— no vendor —"}
-                            </span>
-                            {o.brand && <span className="ml-1 text-xs text-ink/40">({o.brand})</span>}
-                            {o.vendor_sku && <span className="ml-1 font-mono text-xs text-ink/40">#{o.vendor_sku}</span>}
-                            <StatusBadge status={o.status} />
-                          </div>
-                          <span className="font-mono text-ink/70">
-                            {o.pack_price != null ? `$${o.pack_price}` : "—"}
-                            {cost?.cost_per_base_unit != null && (
-                              <span className="ml-2 text-ink/50">
-                                (${cost.cost_per_base_unit.toFixed(4)}/{cost.base_unit_code})
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                        {o.comments && <p className="mt-1 text-ink/60">{o.comments}</p>}
-
-                        {canApprove && o.status === "pending" && (
-                          <div className="mt-2 flex gap-3">
-                            <form action={reviewOffer}>
-                              <input type="hidden" name="offer_id" value={o.id} />
-                              <input type="hidden" name="decision" value="approved" />
-                              <SubmitButton className="text-xs text-palm hover:underline">
-                                Approve
-                              </SubmitButton>
-                            </form>
-                            <form action={reviewOffer}>
-                              <input type="hidden" name="offer_id" value={o.id} />
-                              <input type="hidden" name="decision" value="rejected" />
-                              <SubmitButton className="text-xs text-maroon/70 hover:underline">
-                                Reject
-                              </SubmitButton>
-                            </form>
-                          </div>
-                        )}
-
-                        <div className="mt-2 flex gap-4 text-xs text-ink/50">
-                          {canEdit && (
-                            // Open when the offer is still missing something a
-                            // person has to supply — a receipt now brings the
-                            // price and the pack across, so an offer that
-                            // still has neither is one nobody can approve
-                            // without typing. Settled offers stay collapsed.
-                            <details open={o.status === "pending" && (o.pack_price == null || !o.vendor_id)}>
-                              <summary className="cursor-pointer hover:text-ink">
-                                {o.status === "pending" && (o.pack_price == null || !o.vendor_id)
-                                  ? "Finish this offer"
-                                  : "Edit"}
-                              </summary>
-                              <div className="mt-2">
-                                <OfferForm
-                                  action={updateOffer}
-                                  itemId={item.id}
-                                  packSizeId={p.id}
-                                  offerId={o.id}
-                                  totalQuantity={p.total_quantity}
-                                  innerUnitLabel={packUnitLabel}
-                                  vendorId={o.vendor_id}
-                                  brand={o.brand}
-                                  vendorSku={o.vendor_sku}
-                                  packPrice={o.pack_price}
-                                  comments={o.comments}
-                                  vendors={vendors ?? []}
-                                  packSizes={(packSizes ?? []).map((ps) => ({
-                                    id: ps.id,
-                                    label: packSizeLabelById.get(ps.id) ?? "",
-                                  }))}
-                                  submitLabel="Save"
-                                />
-                              </div>
-                            </details>
-                          )}
-                          {canEdit && (purchasesByOffer.get(o.id) ?? 0) === 0 && (
-                            <form action={deleteOffer}>
-                              <input type="hidden" name="offer_id" value={o.id} />
-                              <input type="hidden" name="item_id" value={item.id} />
-                              <SubmitButton className="text-xs text-maroon/70 hover:underline">
-                                Delete offer
-                              </SubmitButton>
-                            </form>
-                          )}
-                          <details>
-                            <summary className="cursor-pointer hover:text-ink">History ({history.length})</summary>
-                            {history.length === 0 ? (
-                              <p className="mt-2">No changes recorded yet.</p>
-                            ) : (
-                              <ul className="mt-2 flex flex-col gap-2">
-                                {history.map((h) => (
-                                  <li key={h.id} className="rounded border border-ink/10 bg-white p-2">
-                                    <p className="mb-1 text-ink/40">
-                                      {formatDateTime(h.changed_at)}
-                                      {h.changed_by && ` · ${profileNameById.get(h.changed_by) ?? "unknown"}`}
-                                    </p>
-                                    <ul>
-                                      {Object.entries(h.changes as Record<string, { old: unknown; new: unknown }>).map(
-                                        ([field, diff]) => (
-                                          <li key={field} className="text-ink/70">
-                                            <span className="text-ink/40">{OFFER_FIELD_LABELS[field] ?? field}:</span>{" "}
-                                            {offerDisplayValue(field, diff.old)} → {offerDisplayValue(field, diff.new)}
-                                          </li>
-                                        )
-                                      )}
-                                    </ul>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </details>
-                        </div>
-                      </li>
-                    );
-                  })}
-                  {packOffers.length === 0 && <li className="text-sm text-ink/50">No vendor offers yet.</li>}
+                  {liveOffers.map(renderOffer)}
+                  {liveOffers.length === 0 && (
+                    <li className="text-sm text-ink/50">
+                      {rejectedOffers.length > 0
+                        ? "Every offer for this pack was rejected."
+                        : "No vendor offers yet."}
+                    </li>
+                  )}
                 </ul>
+
+                {/* Rejected offers are kept, not deleted: they are a record
+                    of a price somebody decided against, and the expense
+                    lines that pointed at them still do. Collapsed, because
+                    an item bought for years otherwise buries its live
+                    offers under everything ever turned down. */}
+                {rejectedOffers.length > 0 && (
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-sm text-ink/50 hover:text-ink">
+                      {rejectedOffers.length} rejected
+                    </summary>
+                    <ul className="mt-2 flex flex-col gap-3">{rejectedOffers.map(renderOffer)}</ul>
+                  </details>
+                )}
 
                 {canEdit && (
                   <details className="mt-3">

@@ -6,6 +6,8 @@ import { canViewExpense } from "@/lib/expense-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { ReceiptViewer } from "@/components/receipt-viewer";
+import { PayeeAccount } from "@/components/payee-account";
+import { paymentInstruction } from "@/lib/payment-instruction";
 import { ReversePanel } from "./reverse-panel";
 import { reopenExpense, reviewExpense } from "../../approvals/actions";
 import { ReviewDecision } from "@/components/review-decision";
@@ -82,7 +84,7 @@ export default async function ExpenseDetailPage({
   const { data: expense } = await admin
     .from("expenses")
     .select(
-      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, created_at"
+      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, payee_id, created_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -95,6 +97,13 @@ export default async function ExpenseDetailPage({
   if (!(await canViewExpense(user, expense.submitted_by))) redirect("/");
 
   const permissions = await getUserPermissions(user.teamIds);
+
+  // The account numbers themselves stay behind 0027's trust boundary; the
+  // payee's name and whether the account is confirmed do not, because a
+  // submitter should be able to see who their receipt is going to pay.
+  const payment = await paymentInstruction(admin, expense, {
+    canSeeBankDetails: can(permissions, "payments", "mark_paid"),
+  });
 
   const { count: attachmentCount } = await admin
     .from("expense_attachments")
@@ -251,6 +260,14 @@ export default async function ExpenseDetailPage({
           <Field label="Submitted by">{person(expense.submitted_by)}</Field>
           <Field label="Submitted at">{formatDateTime(expense.created_at)}</Field>
           <Field label="Fiscal year (Hijri)">{expense.fiscal_year_hijri}</Field>
+          {/* Who the money goes to, on the page that shows the whole expense.
+              An account read off an invoice and not yet confirmed says so
+              here as well as on Payments — a reviewer approving the spend is
+              also someone who might recognise that a vendor's bank has not,
+              in fact, changed. */}
+          <Field label="Pay to">
+            <PayeeAccount instruction={payment} />
+          </Field>
         </dl>
 
         <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-ink/10 pt-4">

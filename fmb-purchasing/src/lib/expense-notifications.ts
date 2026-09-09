@@ -40,7 +40,7 @@ export async function notifyExpenseSubmitted(expense: ExpenseSummary) {
       kind: "expense_submitted",
       title: `Submitted ${expenseRef(expense)}`,
       body: `${money(expense.total)} — now waiting for review.`,
-      link: "/my-submissions",
+      link: `/expenses/${expense.id}`,
       expenseId: expense.id,
     },
     // the submitter may also be a reviewer; don't tell them twice
@@ -51,7 +51,7 @@ export async function notifyExpenseSubmitted(expense: ExpenseSummary) {
         kind: "expense_to_review" as const,
         title: `New expense to review — ${expenseRef(expense)}`,
         body: `${money(expense.total)} is waiting for your decision.`,
-        link: "/approvals",
+        link: `/expenses/${expense.id}`,
         expenseId: expense.id,
       })),
   ]);
@@ -76,7 +76,7 @@ export async function notifyExpenseDecision(
         decision === "approved"
           ? `${money(expense.total)} approved and passed to Accounts for reimbursement.${comment ? ` Comment: ${comment}` : ""}`
           : `${money(expense.total)} was declined. Please contact FMB Procurement Head.${comment ? ` Comment: ${comment}` : ""}`,
-      link: "/my-submissions",
+      link: `/expenses/${expense.id}`,
       expenseId: expense.id,
     },
   ]);
@@ -91,7 +91,7 @@ export async function notifyExpensePaid(expense: ExpenseSummary, paymentReferenc
       kind: "expense_paid",
       title: `Reimbursed — ${expenseRef(expense)}`,
       body: `${money(expense.total)} has been paid.${paymentReference ? ` Reference: ${paymentReference}` : ""}`,
-      link: "/my-submissions",
+      link: `/expenses/${expense.id}`,
       expenseId: expense.id,
     },
   ]);

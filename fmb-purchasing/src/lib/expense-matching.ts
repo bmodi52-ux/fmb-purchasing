@@ -575,6 +575,82 @@ export function offerPackPrice(line: ReceiptLineFacts, shape: PackShape | null):
   return round4(line.lineTotal / packs);
 }
 
+/**
+ * The offer the submitter picked from the Pricelist typeahead.
+ *
+ * Matching normally reads the description text, which is the only evidence a
+ * receipt gives. But the submit form has a typeahead that lists one suggestion
+ * per approved offer, showing its pack and vendor — and the person choosing
+ * from it is looking at the invoice. That is better evidence than the wording,
+ * and until now it was thrown away: the choice set the category and nothing
+ * else, so the server re-derived a pack from the text and could land somewhere
+ * other than the pack that was picked.
+ *
+ * Returns null when the id does not resolve, so a stale pin — an offer deleted
+ * between the page loading and the submission — falls back to matching rather
+ * than failing the whole expense.
+ *
+ * Deliberately does not check the offer's vendor against the expense's. The
+ * same product is bought from several vendors, and a submitter pinning the
+ * pack they recognise from another vendor's offer is stating what was bought,
+ * not who sold it. What that means for the vendor's own offer list is settled
+ * below, the same way an unrecognised description would be.
+ */
+export async function chosenOffer(
+  admin: SupabaseClient,
+  {
+    offerId,
+    vendorId,
+    description,
+    originalDescription,
+    userId,
+    line,
+    normalizedUnit,
+  }: {
+    offerId: string;
+    vendorId: string;
+    description: string;
+    originalDescription: string | null;
+    userId: string;
+    line?: ReceiptLineFacts | null;
+    normalizedUnit: string | null;
+  }
+): Promise<{ id: string; status: "matched"; categoryId: string | null } | null> {
+  const { data: offer } = await admin
+    .from("pricelist_items")
+    .select("id, pack_size_id, item_pack_sizes ( items ( id, category_id ) )")
+    .eq("id", offerId)
+    .maybeSingle<{
+      id: string;
+      pack_size_id: string;
+      item_pack_sizes: { items: { id: string; category_id: string | null } | null } | null;
+    }>();
+  if (!offer) return null;
+
+  const item = offer.item_pack_sizes?.items ?? null;
+
+  // The pack is already known, so the price is the price of that pack rather
+  // than something derived from a shape read out of the wording.
+  const shape = packShapeFromDescription(description);
+  const packPrice = line ? offerPackPrice({ ...line, normalizedUnit }, shape) : null;
+  await fillMissingPackPrice(admin, offer.id, packPrice);
+
+  // A pin is also a person saying "this wording means this item", which is the
+  // same lesson a correction teaches — worth keeping for the next receipt.
+  if (item) {
+    await recordVendorItemDescription(admin, { itemId: item.id, vendorId, description, userId });
+    await rememberMisreading(admin, {
+      itemId: item.id,
+      vendorId,
+      description,
+      originalDescription,
+      userId,
+    });
+  }
+
+  return { id: offer.id, status: "matched", categoryId: item?.category_id ?? null };
+}
+
 export async function matchOrCreateOffer(
   admin: SupabaseClient,
   {

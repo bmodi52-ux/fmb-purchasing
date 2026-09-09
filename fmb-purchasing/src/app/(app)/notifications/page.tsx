@@ -89,11 +89,18 @@ function NotificationCard({
     title: string;
     body: string | null;
     link: string | null;
+    expense_id: string | null;
     read_at: string | null;
     created_at: string;
   };
 }) {
   const isUnread = !n.read_at;
+
+  // The expense itself, not the list it happens to sit on. Notifications
+  // recorded before that was true still carry a /my-submissions or /approvals
+  // link, so the expense the row already names wins over the stored link —
+  // which fixes the ones already sent as well as the ones still to come.
+  const href = n.expense_id ? `/expenses/${n.expense_id}` : n.link;
 
   return (
     <div
@@ -111,8 +118,8 @@ function NotificationCard({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-3">
-        {n.link && (
-          <Link href={n.link} prefetch={false} className="text-sm text-ink underline hover:text-gold-deep">
+        {href && (
+          <Link href={href} prefetch={false} className="text-sm text-ink underline hover:text-gold-deep">
             View
           </Link>
         )}
