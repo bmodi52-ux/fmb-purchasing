@@ -19,11 +19,14 @@ export function AddItemForm({
   categories,
   units,
   onSuccess,
+  fixedVendor,
 }: {
   vendors: Vendor[];
   categories: Category[];
   units: Unit[];
   onSuccess?: () => void;
+  /** When set, the first offer is this vendor's and there is nothing to choose. */
+  fixedVendor?: { id: string; name: string };
 }) {
   const [state, formAction, pending] = useActionState(createItem, initialState);
   const formRef = useRef<HTMLFormElement>(null);
@@ -126,17 +129,25 @@ export function AddItemForm({
       <div className="border-t border-ink/10 pt-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/40">First vendor offer</p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-ink/70">Vendor</span>
-            <select name="vendor_id" className="input" defaultValue="">
-              <option value="">— no vendor —</option>
-              {vendors.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.vendor_number} — {v.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {fixedVendor ? (
+            <div className="flex flex-col gap-1 text-sm">
+              <span className="text-ink/70">Vendor</span>
+              <input type="hidden" name="vendor_id" value={fixedVendor.id} />
+              <div className="input flex items-center bg-ink/[0.03] text-ink/80">{fixedVendor.name}</div>
+            </div>
+          ) : (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-ink/70">Vendor</span>
+              <select name="vendor_id" className="input" defaultValue="">
+                <option value="">— no vendor —</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.vendor_number} — {v.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-ink/70">Brand</span>
             <input name="brand" className="input" />

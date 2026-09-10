@@ -51,6 +51,16 @@ Decided (2026-09-10):
 
 ## Done
 
+### 5. Vendor page: the products they supply, and adding items and pricing there
+
+A Products section on every vendor page lists each item and pack size the
+vendor supplies: price per pack, price per unit, how often it has been bought
+and when last, with Approve / Reject on pending offers and rejected ones
+collapsed. For Pricelist editors, "+ New item" opens Add item with the vendor
+filled in, and "+ Add pricing for an existing item" searches the Pricelist,
+picks a pack (packs this vendor already prices are greyed out) and takes the
+price, brand and product code.
+
 ### 3. Receipt upload doesn't match items already on the Pricelist
 
 Every goods line is now matched as soon as the receipt is read, and the form

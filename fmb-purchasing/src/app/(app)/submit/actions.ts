@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { revalidateReports } from "../reports/data";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { allRows } from "@/lib/supabase/all-rows";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission, userCan } from "@/lib/permissions";
 import { extractReceipt, type ExtractedReceipt, type StoredLineKind } from "@/lib/receipt-extraction";
@@ -589,22 +590,6 @@ export type LineToResolve = {
   /** The offer an expense being edited already files this line against. */
   pricelistItemId: string | null;
 };
-
-const PAGE_SIZE = 1000;
-
-/** Every row a query returns, a page at a time past Supabase's row cap. */
-async function allRows<T>(
-  page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>
-): Promise<T[]> {
-  const rows: T[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await page(from, from + PAGE_SIZE - 1);
-    if (error) throw new Error(error.message);
-    const batch = (data ?? []) as T[];
-    rows.push(...batch);
-    if (batch.length < PAGE_SIZE) return rows;
-  }
-}
 
 type WordingRow = { item_id: string; vendor_id: string | null; description: string };
 
