@@ -1,4 +1,5 @@
 import { SubmitButton } from "@/components/submit-button";
+import { soldAsOf } from "@/lib/pack-description";
 import { updatePackSize } from "../actions";
 import { PackFields } from "../pack-fields";
 
@@ -17,6 +18,7 @@ export function PackSizeForm({
   packCount,
   label,
   soldLoose,
+  packaging,
   units,
   purchaseCount,
 }: {
@@ -27,6 +29,7 @@ export function PackSizeForm({
   packCount: number;
   label: string | null;
   soldLoose: boolean;
+  packaging: string | null;
   units: Unit[];
   /** How many recorded purchases would have their per-unit cost restated. */
   purchaseCount: number;
@@ -38,9 +41,13 @@ export function PackSizeForm({
 
       <PackFields
         units={units}
-        defaults={{ innerQuantity: String(innerQuantity), innerUnitId, packCount: String(packCount) }}
+        defaults={{
+          soldAs: soldAsOf({ innerQuantity, unitLabel: null, packCount, soldLoose, packaging }),
+          innerQuantity: String(innerQuantity),
+          innerUnitId,
+          packCount: String(packCount),
+        }}
         defaultLabel={label}
-        defaultSoldLoose={soldLoose}
       />
 
       {purchaseCount > 0 && (

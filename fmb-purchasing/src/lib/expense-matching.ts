@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { canonicalUnitCode } from "@/lib/units";
 import { packShapeFromDescription, type PackShape } from "@/lib/pack-shape";
+import { packagingFromText } from "@/lib/pack-description";
 
 function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -344,6 +345,8 @@ async function matchOrCreatePackSize(
   if (existing) return existing.id;
 
   const selfEvident = await isSelfEvidentQuantity(admin, innerUnitId);
+  // A stated pack of several is a carton, not something sold loose.
+  const soldLoose = selfEvident && packCount === 1 && innerQuantity === 1;
 
   const { data: created, error } = await admin
     .from("item_pack_sizes")
@@ -352,8 +355,9 @@ async function matchOrCreatePackSize(
       inner_quantity: innerQuantity,
       inner_unit_id: innerUnitId,
       pack_count: packCount,
-      // A stated pack of several is a carton, not something sold loose.
-      sold_loose: selfEvident && packCount === 1 && innerQuantity === 1,
+      sold_loose: soldLoose,
+      // "Green Chilli 6kg Box" says what it comes in as plainly as its weight.
+      packaging: soldLoose ? null : packagingFromText(description),
       contents_confirmed: selfEvident,
     })
     .select("id")

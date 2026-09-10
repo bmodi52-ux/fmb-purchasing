@@ -3,7 +3,7 @@
 import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { ColumnsDataTable, type ColumnDef, type BulkAction } from "@/components/columns-data-table";
-import { formatUnitCost, packTitle } from "@/lib/pack-description";
+import { formatPackPrice, formatUnitCost, packTitle, type PackDescriptionInput } from "@/lib/pack-description";
 import { reviewOffer, bulkReviewOffers } from "./actions";
 import { collapseToItems } from "./collapse-offers";
 
@@ -23,6 +23,8 @@ export type OfferRow = {
   totalQuantity: number;
   packLabel: string | null;
   soldLoose: boolean;
+  /** What the pack comes in — "box". Null when nobody has said. */
+  packaging: string | null;
   /** False while nobody has said what one unit holds — cost is then per pack. */
   contentsConfirmed: boolean;
   packPrice: number | null;
@@ -38,13 +40,18 @@ export type OfferRow = {
 };
 
 
-function formatPackSize(r: OfferRow): string {
-  return packTitle(r.packLabel, {
+function shapeOf(r: OfferRow): PackDescriptionInput {
+  return {
     innerQuantity: r.innerQuantity,
     unitLabel: r.innerUnitLabel,
     packCount: r.packCount,
     soldLoose: r.soldLoose,
-  });
+    packaging: r.packaging,
+  };
+}
+
+function formatPackSize(r: OfferRow): string {
+  return packTitle(r.packLabel, shapeOf(r));
 }
 
 function formatCostPerUnit(r: OfferRow): string {
@@ -116,13 +123,17 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
     },
     {
       key: "pack_price",
-      label: "Pack price",
-      render: (r) => <span className="font-mono text-ink/70">{r.packPrice != null ? `$${r.packPrice}` : "—"}</span>,
+      label: "Price",
+      render: (r) => (
+        <span className="font-mono text-ink/70">
+          {r.packPrice != null ? formatPackPrice(r.packPrice, shapeOf(r)) : "—"}
+        </span>
+      ),
       exportValue: (r) => r.packPrice ?? "",
     },
     {
       key: "cost_per_unit",
-      label: "Cost per unit",
+      label: "Per unit",
       render: (r) => (
         <span className={`font-mono ${r.contentsConfirmed ? "text-ink/70" : "text-ink/40 italic"}`}>
           {formatCostPerUnit(r)}

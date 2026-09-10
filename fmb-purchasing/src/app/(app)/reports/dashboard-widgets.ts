@@ -144,6 +144,7 @@ export function computeWidgetData(kind: WidgetKind, config: WidgetConfig, raw: R
           normalizedQuantity: Number(c.base_quantity),
           normalizedUnit: c.base_unit_code,
           perUnit: Number(c.cost_per_base_unit),
+          perPack: c.sold_loose ? null : Number(c.line_total) / Number(c.normalized_quantity),
         }))
         .sort((a, b) => (a.receiptDate ?? "").localeCompare(b.receiptDate ?? ""));
       return { kind, rows, itemLabel: config.itemLabel ?? rows[0]?.groupName ?? "Item" };

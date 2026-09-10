@@ -22,7 +22,10 @@ export function OfferForm({
   vendors,
   packSizes,
   submitLabel,
+  priceLabel,
 }: {
+  /** What the price is for — "Price per box". */
+  priceLabel?: string;
   action: (formData: FormData) => void | Promise<void>;
   itemId: string;
   packSizeId: string;
@@ -96,7 +99,7 @@ export function OfferForm({
 
         <div className="flex gap-2">
           <label className="flex flex-1 flex-col gap-1 text-sm">
-            <span className="text-ink/70">Price for the whole pack</span>
+            <span className="text-ink/70">{priceLabel ?? "Price for the whole pack"}</span>
             <input
               name="pack_price"
               type="number"

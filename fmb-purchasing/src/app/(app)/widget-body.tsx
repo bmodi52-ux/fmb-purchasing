@@ -247,6 +247,7 @@ function UnitCostTable({ rows }: { rows: PerUnitRow[] }) {
           <tr className="text-left text-ink/45">
             <th scope="col" className="py-1 pr-3 font-medium">Vendor</th>
             <th scope="col" className="py-1 pr-3 text-right font-medium">Quantity</th>
+            <th scope="col" className="py-1 pr-3 text-right font-medium">Per pack</th>
             <th scope="col" className="py-1 text-right font-medium">Per unit</th>
           </tr>
         </thead>
@@ -256,6 +257,9 @@ function UnitCostTable({ rows }: { rows: PerUnitRow[] }) {
               <td className="py-1 pr-3 truncate">{r.vendorName}</td>
               <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
                 {r.normalizedQuantity} {r.normalizedUnit}
+              </td>
+              <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
+                {r.perPack != null ? `$${r.perPack.toFixed(2)}` : "—"}
               </td>
               <td className="py-1 text-right font-mono tabular-nums">${r.perUnit.toFixed(4)}</td>
             </tr>

@@ -11,6 +11,10 @@ export type PaidCostRow = {
   base_quantity: number;
   base_unit_code: string;
   cost_per_base_unit: number;
+  line_total: number;
+  /** Packs bought on the line. */
+  normalized_quantity: number;
+  sold_loose: boolean;
 };
 
 export type ReportRawData = {
@@ -150,7 +154,7 @@ const loadCachedReportRows = unstable_cache(
           admin
             .from("item_paid_unit_costs")
             .select(
-              "item_id, item_name, expense_id, receipt_date, base_quantity, base_unit_code, cost_per_base_unit"
+              "item_id, item_name, expense_id, receipt_date, base_quantity, base_unit_code, cost_per_base_unit, line_total, normalized_quantity, sold_loose"
             )
             .in("expense_id", expenseIds),
         ])

@@ -10,6 +10,7 @@ import { categoryLabelsById, CATEGORY_LINE_GROUPS } from "@/lib/categories";
 import { recordVendorItemDescription } from "@/lib/expense-matching";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
 import { UNIT_DIMENSIONS, type UnitDimension } from "@/lib/units";
+import { isPackaging } from "@/lib/pack-description";
 
 async function requirePricelistEdit() {
   const user = await getCurrentUser();
@@ -32,6 +33,24 @@ function numberOrNull(formData: FormData, key: string): number | null {
 export type CreateItemState = { error: string | null; success: boolean };
 
 /**
+ * The pack fields every pack form posts, as columns. A loose pack is one unit
+ * with no packaging whatever else the form carried, and a packaging word the
+ * database would refuse is dropped rather than failing the save.
+ */
+function packFieldsFrom(formData: FormData, labelField: string) {
+  const soldLoose = formData.get("sold_loose") === "on";
+  const packaging = formData.get("packaging");
+  return {
+    inner_quantity: soldLoose ? 1 : numberOrNull(formData, "inner_quantity"),
+    inner_unit_id: fieldOrNull(formData, "inner_unit_id"),
+    pack_count: soldLoose ? 1 : (numberOrNull(formData, "pack_count") ?? 1),
+    label: fieldOrNull(formData, labelField),
+    sold_loose: soldLoose,
+    packaging: !soldLoose && isPackaging(packaging) ? packaging : null,
+  };
+}
+
+/**
  * Creates the whole hierarchy in one submission — Item, first pack size,
  * first vendor offer — mirroring the Vendor "everything in one popup"
  * pattern. Further pack sizes/offers are added from the item detail page.
@@ -43,7 +62,7 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
   if (!name) return { error: "Item name is required.", success: false };
 
   const canonicalUnitId = fieldOrNull(formData, "canonical_unit_id");
-  if (!canonicalUnitId) return { error: "Choose what prices are compared per.", success: false };
+  if (!canonicalUnitId) return { error: "Choose what the item is measured in.", success: false };
 
   const admin = createAdminClient();
   const categoryId = fieldOrNull(formData, "category_id");
@@ -78,15 +97,14 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
     .single();
   if (itemError || !item) return { error: itemError?.message ?? "Could not create the item.", success: false };
 
+  const firstPack = packFieldsFrom(formData, "pack_label");
   const { data: packSizeRow, error: packSizeError } = await admin
     .from("item_pack_sizes")
     .insert({
       item_id: item.id,
-      inner_quantity: numberOrNull(formData, "inner_quantity") ?? 1,
-      inner_unit_id: fieldOrNull(formData, "inner_unit_id") ?? canonicalUnitId,
-      pack_count: numberOrNull(formData, "pack_count") ?? 1,
-      label: fieldOrNull(formData, "pack_label"),
-      sold_loose: formData.get("sold_loose") === "on",
+      ...firstPack,
+      inner_quantity: firstPack.inner_quantity ?? 1,
+      inner_unit_id: firstPack.inner_unit_id ?? canonicalUnitId,
       contents_confirmed: true,
       created_by: user.id,
     })
@@ -120,18 +138,13 @@ export async function addPackSize(formData: FormData) {
   const user = await requirePricelistEdit();
 
   const itemId = String(formData.get("item_id") ?? "");
-  const innerQuantity = numberOrNull(formData, "inner_quantity");
-  const innerUnitId = fieldOrNull(formData, "inner_unit_id");
-  if (!itemId || innerQuantity == null || !innerUnitId) return;
+  const pack = packFieldsFrom(formData, "label");
+  if (!itemId || pack.inner_quantity == null || !pack.inner_unit_id) return;
 
   const admin = createAdminClient();
   await admin.from("item_pack_sizes").insert({
     item_id: itemId,
-    inner_quantity: innerQuantity,
-    inner_unit_id: innerUnitId,
-    pack_count: numberOrNull(formData, "pack_count") ?? 1,
-    label: fieldOrNull(formData, "label"),
-    sold_loose: formData.get("sold_loose") === "on",
+    ...pack,
     // entered by a human, so its contents are known by definition
     contents_confirmed: true,
     created_by: user.id,
@@ -148,6 +161,7 @@ const PACK_SIZE_TRACKED_FIELDS = [
   "pack_count",
   "label",
   "sold_loose",
+  "packaging",
   "contents_confirmed",
 ] as const;
 type PackSizeTrackedRow = Record<(typeof PACK_SIZE_TRACKED_FIELDS)[number], unknown>;
@@ -177,16 +191,11 @@ export async function updatePackSize(formData: FormData) {
     .single<PackSizeTrackedRow>();
   if (!before) return;
 
-  const innerQuantity = numberOrNull(formData, "inner_quantity");
-  const innerUnitId = fieldOrNull(formData, "inner_unit_id");
-  if (innerQuantity == null || innerQuantity <= 0 || !innerUnitId) return;
+  const pack = packFieldsFrom(formData, "label");
+  if (pack.inner_quantity == null || pack.inner_quantity <= 0 || !pack.inner_unit_id) return;
 
   const next: PackSizeTrackedRow = {
-    inner_quantity: innerQuantity,
-    inner_unit_id: innerUnitId,
-    pack_count: numberOrNull(formData, "pack_count") ?? 1,
-    label: fieldOrNull(formData, "label"),
-    sold_loose: formData.get("sold_loose") === "on",
+    ...pack,
     // Saving this form *is* the confirmation — a human has just stated what
     // one unit contains.
     contents_confirmed: true,
