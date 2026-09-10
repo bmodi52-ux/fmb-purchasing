@@ -518,6 +518,57 @@ async function fillMissingPackPrice(
     .is("pack_price", null);
 }
 
+/**
+ * This vendor's offer on a pack, adding a pending one when there is none.
+ *
+ * A reviewed offer is preferred over a provisional one, then the oldest, so
+ * the answer never depends on row order. A rejected offer is not reused: it
+ * records a price somebody decided against, and a new purchase is fresh
+ * evidence for a reviewer to look at.
+ */
+async function offerForPack(
+  admin: SupabaseClient,
+  {
+    vendorId,
+    packSizeId,
+    packPrice,
+    userId,
+  }: { vendorId: string; packSizeId: string; packPrice: number | null; userId: string }
+): Promise<{ id: string; status: "matched" | "created" }> {
+  const { data: offers, error } = await admin
+    .from("pricelist_items")
+    .select("id, status, created_at")
+    .eq("vendor_id", vendorId)
+    .eq("pack_size_id", packSizeId);
+  if (error) throw error;
+
+  const live = (offers ?? [])
+    .filter((o) => o.status !== "rejected")
+    .sort(
+      (a, b) =>
+        Number(b.status === "approved") - Number(a.status === "approved") ||
+        String(a.created_at).localeCompare(String(b.created_at))
+    );
+  if (live[0]) {
+    await fillMissingPackPrice(admin, live[0].id as string, packPrice);
+    return { id: live[0].id as string, status: "matched" };
+  }
+
+  const { data: created, error: insertError } = await admin
+    .from("pricelist_items")
+    .insert({
+      vendor_id: vendorId,
+      pack_size_id: packSizeId,
+      pack_price: packPrice,
+      status: "pending",
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+  if (insertError) throw insertError;
+  return { id: created.id, status: "created" };
+}
+
 export function unitPriceFromLine({
   lineTotal,
   quantity,
@@ -655,6 +706,94 @@ export async function chosenOffer(
   return { id: offer.id, status: "matched", categoryId: item?.category_id ?? null };
 }
 
+type PinnedLine = {
+  vendorId: string;
+  description: string;
+  originalDescription: string | null;
+  userId: string;
+  line?: ReceiptLineFacts | null;
+  normalizedUnit: string | null;
+};
+
+/**
+ * The pack the submit form matched a line to, or the submitter picked.
+ *
+ * The form now shows every line's Pricelist item and pack before anything is
+ * saved, so the pack arriving here is one a person has seen — better evidence
+ * than re-reading the wording, which is what used to turn "Box Tomato" into a
+ * second tomato. Files against this vendor's offer on that pack, adding a
+ * pending one when the vendor has never sold it: never a new item, never a
+ * new pack.
+ *
+ * Null when the pack no longer exists, so a stale pin falls back to matching
+ * rather than failing the expense.
+ */
+export async function chosenPack(
+  admin: SupabaseClient,
+  { packSizeId, vendorId, description, originalDescription, userId, line, normalizedUnit }: PinnedLine & { packSizeId: string }
+): Promise<{ id: string; status: "matched" | "created"; categoryId: string | null } | null> {
+  const { data: pack } = await admin
+    .from("item_pack_sizes")
+    .select("id, inner_quantity, inner_unit_id, pack_count, items ( id, category_id )")
+    .eq("id", packSizeId)
+    .maybeSingle<{
+      id: string;
+      inner_quantity: number;
+      inner_unit_id: string;
+      pack_count: number;
+      items: { id: string; category_id: string | null } | null;
+    }>();
+  if (!pack) return null;
+
+  const { data: unit } = await admin.from("units").select("code").eq("id", pack.inner_unit_id).maybeSingle();
+  // The pack is known, so its price is worked out for that pack rather than
+  // for a shape read out of the wording.
+  const shape: PackShape | null = unit
+    ? { innerQuantity: Number(pack.inner_quantity), unitCode: unit.code as string, packCount: Number(pack.pack_count) }
+    : null;
+  const packPrice = line ? offerPackPrice({ ...line, normalizedUnit }, shape) : null;
+
+  const offer = await offerForPack(admin, { vendorId, packSizeId: pack.id, packPrice, userId });
+
+  const item = pack.items;
+  if (item) {
+    await recordVendorItemDescription(admin, { itemId: item.id, vendorId, description, userId });
+    await rememberMisreading(admin, { itemId: item.id, vendorId, description, originalDescription, userId });
+  }
+
+  return { ...offer, categoryId: item?.category_id ?? null };
+}
+
+/**
+ * An item the form matched a line to without a pack — only an item that has
+ * one pack or none, since the form asks for the pack whenever there are more.
+ * An item with no packs gets the pack its wording describes.
+ */
+export async function chosenItem(
+  admin: SupabaseClient,
+  pin: PinnedLine & { itemId: string }
+): Promise<{ id: string; status: "matched" | "created"; categoryId: string | null } | null> {
+  const { data: item } = await admin
+    .from("items")
+    .select("id, canonical_unit_id")
+    .eq("id", pin.itemId)
+    .maybeSingle();
+  if (!item) return null;
+
+  const { data: packs } = await admin.from("item_pack_sizes").select("id").eq("item_id", item.id);
+  const packSizeId =
+    packs?.length === 1
+      ? (packs[0]!.id as string)
+      : await matchOrCreatePackSize(admin, {
+          itemId: item.id,
+          canonicalUnitId: item.canonical_unit_id,
+          normalizedUnit: pin.normalizedUnit,
+          description: pin.description,
+        });
+
+  return chosenPack(admin, { ...pin, packSizeId });
+}
+
 export async function matchOrCreateOffer(
   admin: SupabaseClient,
   {
@@ -739,28 +878,6 @@ export async function matchOrCreateOffer(
     userId,
   });
 
-  const { data: byVendor } = await admin
-    .from("pricelist_items")
-    .select("id")
-    .eq("vendor_id", vendorId)
-    .eq("pack_size_id", packSizeId)
-    .maybeSingle();
-  if (byVendor) {
-    await fillMissingPackPrice(admin, byVendor.id, packPrice);
-    return { id: byVendor.id, status: "matched", categoryId: item.categoryId };
-  }
-
-  const { data: created, error } = await admin
-    .from("pricelist_items")
-    .insert({
-      vendor_id: vendorId,
-      pack_size_id: packSizeId,
-      pack_price: packPrice,
-      status: "pending",
-      created_by: userId,
-    })
-    .select("id")
-    .single();
-  if (error) throw error;
-  return { id: created.id, status: "created", categoryId: item.categoryId };
+  const offer = await offerForPack(admin, { vendorId, packSizeId, packPrice, userId });
+  return { ...offer, categoryId: item.categoryId };
 }

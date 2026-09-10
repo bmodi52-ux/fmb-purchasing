@@ -2,7 +2,7 @@
 
 import { SubmitButton } from "@/components/submit-button";
 import { useReportPending } from "@/components/pending";
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { Fragment, useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   extractReceiptAction,
@@ -11,6 +11,7 @@ import {
   reportOversizeReceiptAction,
   findPossibleDuplicates,
   resolveVendorAction,
+  matchReceiptLinesAction,
   createExpense,
   updateExpense,
   type ExtractState,
@@ -21,12 +22,14 @@ import {
   type ExpenseForEdit,
   type DuplicateWarning,
   type ResolvedVendor,
+  type LineMatchResult,
 } from "./actions";
 import type { ExtractedReceipt } from "@/lib/receipt-extraction";
 import type { StoredLineKind } from "@/lib/line-kinds";
 import type { PayeeChoice } from "@/lib/payees";
 import { VendorLookupFields } from "./vendor-lookup-fields";
 import { ItemLookupCells } from "./item-lookup-cells";
+import { LineMatchRow } from "./line-match";
 import { PayeePicker } from "./payee-picker";
 import {
   ReconciliationStrip,
@@ -47,6 +50,12 @@ type ReviewItem = LineItemInput & {
   itemNumber: string;
   /** Added by the app to account for the receipt total, not read from the receipt. */
   autoAdded?: boolean;
+  /**
+   * The Pricelist item and pack this line is filed against, as the form shows
+   * it. Undefined until it has been looked for; null where there is nothing to
+   * look for yet — a blank line, or one being typed.
+   */
+  match?: LineMatchResult | null;
 };
 
 /**
@@ -171,6 +180,28 @@ function blankItem(kind: StoredLineKind = "goods", lineTotal = 0): ReviewItem {
     gstApplicable: kind !== "goods" && kind !== "rounding",
     normalizedQuantity: null,
     normalizedUnit: null,
+    match: null,
+  };
+}
+
+/**
+ * A line with what matching found applied to it: the item and pack become the
+ * line's pins, which is what the submission is then filed against.
+ *
+ * An offer pinned by an earlier edit gives way to its pack, so the submission
+ * files against this expense's own vendor's offer on that pack — not whichever
+ * vendor's offer the line pointed at before.
+ */
+function withMatch(item: ReviewItem, result: LineMatchResult | null): ReviewItem {
+  if (!result) return { ...item, match: null };
+  return {
+    ...item,
+    match: result,
+    itemId: result.itemId,
+    packSizeId: result.packSizeId,
+    pricelistItemId: null,
+    itemNumber: result.itemNumber ?? item.itemNumber,
+    categoryName: result.categoryName ?? item.categoryName,
   };
 }
 
@@ -816,6 +847,126 @@ function ReviewForm(props: {
     return () => clearTimeout(timer);
   }, [props.attachments, props.invoiceNumber, props.vendorName, props.editExpenseId]);
 
+  // Look every goods line up on the Pricelist as soon as it arrives — from a
+  // receipt, a restored draft or an expense being edited — so the form can say
+  // what each line will be filed against before anything is saved. Lines are
+  // marked in flight so a re-render cannot ask twice, and a line edited while
+  // its answer is on the way keeps the edit.
+  const matchingKeys = useRef(new Set<string>());
+  useEffect(() => {
+    const pending = props.items.filter(
+      (it) =>
+        it.kind === "goods" &&
+        it.match === undefined &&
+        it.description.trim() !== "" &&
+        !matchingKeys.current.has(it.key)
+    );
+    if (pending.length === 0) return;
+
+    const keys = new Set(pending.map((it) => it.key));
+    for (const key of keys) matchingKeys.current.add(key);
+
+    matchReceiptLinesAction({
+      vendorName: props.vendorName,
+      abn: props.abn || null,
+      lines: pending.map((it) => ({
+        key: it.key,
+        description: it.description,
+        categoryName: it.categoryName,
+        itemId: it.itemId ?? null,
+        pricelistItemId: it.pricelistItemId ?? null,
+      })),
+    })
+      .then((results) =>
+        props.setItems((prev) =>
+          prev.map((it) =>
+            keys.has(it.key) && it.match === undefined ? withMatch(it, results[it.key] ?? null) : it
+          )
+        )
+      )
+      .catch(() =>
+        // Matching failing must never stop a submission; the line is filed the
+        // way it always was.
+        props.setItems((prev) =>
+          prev.map((it) => (keys.has(it.key) && it.match === undefined ? { ...it, match: null } : it))
+        )
+      )
+      .finally(() => {
+        for (const key of keys) matchingKeys.current.delete(key);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.items]);
+
+  /** Look an unlinked line up again once someone has finished typing it. */
+  function rematchIfUnlinked(key: string) {
+    props.setItems((prev) =>
+      prev.map((it) =>
+        it.key === key &&
+        it.kind === "goods" &&
+        it.match === null &&
+        !it.itemId &&
+        !it.packSizeId &&
+        it.description.trim()
+          ? { ...it, match: undefined }
+          : it
+      )
+    );
+  }
+
+  function confirmMatch(key: string) {
+    props.setItems((prev) =>
+      prev.map((it) => (it.key === key && it.match ? { ...it, match: { ...it.match, confidence: "sure" } } : it))
+    );
+  }
+
+  /** "Not this": the line stops pointing at the item, which is kept as an option. */
+  function rejectMatch(key: string) {
+    props.setItems((prev) =>
+      prev.map((it) => {
+        if (it.key !== key || !it.match) return it;
+        const m = it.match;
+        const passedOver = m.itemId && m.itemName ? [{ itemId: m.itemId, itemName: m.itemName, itemNumber: m.itemNumber }] : [];
+        return {
+          ...it,
+          itemId: null,
+          packSizeId: null,
+          pricelistItemId: null,
+          itemNumber: "",
+          match: {
+            ...m,
+            confidence: "none",
+            itemId: null,
+            itemNumber: null,
+            itemName: null,
+            categoryName: null,
+            packSizeId: null,
+            packs: [],
+            alternatives: [...passedOver, ...m.alternatives.filter((a) => a.itemId !== m.itemId)],
+          },
+        };
+      })
+    );
+  }
+
+  function choosePack(key: string, packSizeId: string | null) {
+    props.setItems((prev) =>
+      prev.map((it) =>
+        it.key === key
+          ? { ...it, packSizeId, pricelistItemId: null, match: it.match ? { ...it.match, packSizeId } : it.match }
+          : it
+      )
+    );
+  }
+
+  /** An item offered as an alternative: looked up again with that item fixed. */
+  function chooseItem(key: string, itemId: string) {
+    props.setItems((prev) =>
+      prev.map((it) =>
+        it.key === key ? { ...it, itemId, packSizeId: null, pricelistItemId: null, match: undefined } : it
+      )
+    );
+  }
+
   function updateItem(key: string, patch: Partial<ReviewItem>) {
     props.setItems((prev) =>
       prev.map((it) => {
@@ -833,9 +984,14 @@ function ReviewForm(props: {
         // A patch that names the pin itself is the pin being set, not edited.
         if (
           patch.pricelistItemId === undefined &&
+          patch.itemId === undefined &&
+          patch.packSizeId === undefined &&
           (patch.description !== undefined || patch.itemNumber !== undefined)
         ) {
           next.pricelistItemId = null;
+          next.itemId = null;
+          next.packSizeId = null;
+          next.match = null;
         }
         return next;
       })
@@ -843,9 +999,25 @@ function ReviewForm(props: {
   }
 
   function selectItemSuggestion(key: string, s: ItemLookupSuggestion) {
-    // The suggestion is one approved offer — a pack, from a vendor — so
-    // choosing it settles which offer the line is, not merely its category.
-    updateItem(key, { categoryName: s.categoryName ?? undefined, pricelistItemId: s.id });
+    // The suggestion is one pack of one item, whether or not any vendor has an
+    // offer on it yet — so choosing it settles which pack the line is, and the
+    // submission adds this vendor's offer to that pack if it needs one.
+    updateItem(key, {
+      categoryName: s.categoryName ?? undefined,
+      itemId: s.itemId,
+      packSizeId: s.packSizeId,
+      pricelistItemId: null,
+      match: {
+        confidence: "sure",
+        itemId: s.itemId,
+        itemNumber: s.itemNumber,
+        itemName: s.description,
+        categoryName: s.categoryName,
+        packSizeId: s.packSizeId,
+        packs: s.packs,
+        alternatives: [],
+      },
+    });
   }
 
   function addCharge(kind: StoredLineKind, amount: number) {
@@ -873,10 +1045,13 @@ function ReviewForm(props: {
               ...it,
               kind,
               ...(kind === "goods"
-                ? {}
+                ? { match: it.description.trim() ? undefined : null }
                 : {
                     itemNumber: "",
                     pricelistItemId: null,
+                    itemId: null,
+                    packSizeId: null,
+                    match: null,
                     quantity: null,
                     unitPrice: null,
                     normalizedQuantity: null,
@@ -912,6 +1087,18 @@ function ReviewForm(props: {
       setError("This looks like something already submitted — confirm below, or change the details.");
       return;
     }
+    const goods = props.items.filter((it) => it.kind === "goods" && it.description.trim());
+    if (goods.some((it) => it.match === undefined)) {
+      setError("Still checking the lines against the Pricelist — try again in a moment.");
+      return;
+    }
+    // Which pack decides what the quantity means — sixteen boxes or sixteen
+    // kilos — so it is never guessed on the way in.
+    const packless = goods.find((it) => it.itemId && !it.packSizeId && (it.match?.packs.length ?? 0) > 1);
+    if (packless) {
+      setError(`Choose which pack of ${packless.match?.itemName ?? "the item"} "${packless.description}" is.`);
+      return;
+    }
     startSubmit(async () => {
       const payload = {
         vendorName: props.vendorName,
@@ -925,7 +1112,7 @@ function ReviewForm(props: {
         lineItems: props.items
           .filter((it) => it.description.trim())
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          .map(({ key: _key, itemNumber: _itemNumber, ...rest }) => rest),
+          .map(({ key: _key, itemNumber: _itemNumber, match: _match, autoAdded: _autoAdded, ...rest }) => rest),
       };
       const result = props.editExpenseId
         ? await updateExpense(props.editExpenseId, payload)
@@ -1069,8 +1256,8 @@ function ReviewForm(props: {
           </thead>
           <tbody>
             {props.items.map((item) => (
+              <Fragment key={item.key}>
               <tr
-                key={item.key}
                 // A line the app added to make the receipt add up is tinted, so
                 // the submitter is confirming something rather than hunting for
                 // what changed.
@@ -1097,6 +1284,7 @@ function ReviewForm(props: {
                     description={item.description}
                     setDescription={(v) => updateItem(item.key, { description: v })}
                     onSelect={(s) => selectItemSuggestion(item.key, s)}
+                    onDescriptionBlur={() => rematchIfUnlinked(item.key)}
                   />
                 ) : (
                   <>
@@ -1186,6 +1374,17 @@ function ReviewForm(props: {
                   </button>
                 </td>
               </tr>
+              {item.kind === "goods" && (
+                <LineMatchRow
+                  description={item.description}
+                  match={item.match}
+                  onConfirm={() => confirmMatch(item.key)}
+                  onReject={() => rejectMatch(item.key)}
+                  onChoosePack={(packSizeId) => choosePack(item.key, packSizeId)}
+                  onChooseItem={(itemId) => chooseItem(item.key, itemId)}
+                />
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>

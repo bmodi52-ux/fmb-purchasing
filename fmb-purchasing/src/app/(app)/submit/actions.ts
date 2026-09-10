@@ -11,9 +11,20 @@ import { lookupAbn, type AbnLookupResult } from "@/lib/abn-lookup";
 import {
   matchOrCreateVendor,
   matchOrCreateOffer,
+  chosenItem,
   chosenOffer,
+  chosenPack,
   preferredVendor,
 } from "@/lib/expense-matching";
+import {
+  choosePack,
+  matchLine,
+  normalizeWording,
+  type CatalogueItem,
+  type CatalogueUnit,
+  type KnownWording,
+  type MatchConfidence,
+} from "@/lib/line-matching";
 import { fiscalYearForReceipt } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
 import { leafCategories } from "@/lib/categories";
@@ -431,19 +442,65 @@ export async function resolveVendorAction(
   };
 }
 
+export type LinePackOption = { id: string; title: string };
+
 export type ItemLookupSuggestion = {
-  id: string;
+  /** Unique per suggestion: the pack, or the item when it has no packs yet. */
+  key: string;
+  itemId: string;
+  packSizeId: string | null;
   itemNumber: string | null;
+  /** The item's name, which becomes the line's description when chosen. */
   description: string;
   packSizeLabel: string | null;
-  brand: string | null;
-  vendorName: string | null;
   categoryName: string | null;
+  /** Every pack of the item, so the line can be switched between them. */
+  packs: LinePackOption[];
 };
 
-/** Item #/name typeahead for manual entry line items — matches at the Item
- * level, then surfaces each approved vendor offer under it (pack size +
- * vendor) as a separate suggestion. */
+type PackRow = {
+  id: string;
+  item_id: string;
+  label: string | null;
+  inner_quantity: number;
+  inner_unit_id: string;
+  pack_count: number;
+  sold_loose: boolean;
+  packaging: string | null;
+};
+
+type UnitRow = { id: string; code: string; label: string; base_unit_code: string; to_base_factor: number };
+
+const PACK_COLUMNS = "id, item_id, label, inner_quantity, inner_unit_id, pack_count, sold_loose, packaging";
+
+/** An item's packs as the form offers them, named the way the Pricelist names them. */
+function packOptions(packs: PackRow[], unitById: Map<string, UnitRow>): LinePackOption[] {
+  return packs
+    .map((p) => ({
+      id: p.id,
+      title: packTitle(p.label, {
+        innerQuantity: p.inner_quantity,
+        unitLabel: unitById.get(p.inner_unit_id)?.label,
+        packCount: p.pack_count,
+        soldLoose: p.sold_loose,
+        packaging: p.packaging,
+      }),
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/**
+ * Item #/name typeahead for goods lines — one suggestion per pack size.
+ *
+ * It used to list only approved vendor offers, eight at most, so a pack nobody
+ * had priced yet could not be picked at all: Tomato's second pack simply never
+ * appeared, and the only way to file against it was to let the submission
+ * create another. Every pack of every item still in use is offered now, and
+ * choosing one adds this vendor's offer to it on submission when it needs one.
+ *
+ * Also finds an item by what receipts have called it, so typing the invoice's
+ * own words — "box tomato" — finds Tomato.
+ */
 export async function searchPricelistItemsAction(query: string): Promise<ItemLookupSuggestion[]> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -454,65 +511,283 @@ export async function searchPricelistItemsAction(query: string): Promise<ItemLoo
 
   const admin = createAdminClient();
 
-  const retiredMatchIds = await itemIdsByRetiredNumber(admin, trimmed);
+  const [retiredMatchIds, { data: wordingRows }] = await Promise.all([
+    itemIdsByRetiredNumber(admin, trimmed),
+    admin.from("vendor_item_descriptions").select("item_id").ilike("description", `%${trimmed}%`).limit(20),
+  ]);
+  const alsoMatchingIds = [
+    ...new Set([...retiredMatchIds, ...(wordingRows ?? []).map((r) => r.item_id as string)]),
+  ];
+
   const { data: matchedItems } = await admin
     .from("items")
     .select("id, item_number, name, category_id")
-    .or(itemMatchFilter(trimmed, retiredMatchIds))
+    .or(itemMatchFilter(trimmed, alsoMatchingIds))
+    .neq("status", "rejected")
+    .order("name")
     .limit(20);
-  const itemById = new Map((matchedItems ?? []).map((i) => [i.id, i]));
-  const itemIds = [...itemById.keys()];
-  if (itemIds.length === 0) return [];
+  const items = matchedItems ?? [];
+  if (items.length === 0) return [];
 
-  const { data: packSizes } = await admin
-    .from("item_pack_sizes")
-    .select("id, item_id, inner_quantity, inner_unit_id, pack_count, label, sold_loose, packaging")
-    .in("item_id", itemIds);
-  const packSizeById = new Map((packSizes ?? []).map((p) => [p.id, p]));
-  const packSizeIds = [...packSizeById.keys()];
-  if (packSizeIds.length === 0) return [];
-
-  const { data: offers } = await admin
-    .from("pricelist_items")
-    .select("id, vendor_id, brand, pack_size_id")
-    .in("pack_size_id", packSizeIds)
-    .eq("status", "approved")
-    .limit(8);
-
-  const rows = offers ?? [];
-  const vendorIds = [...new Set(rows.map((r) => r.vendor_id).filter(Boolean))];
-  const categoryIds = [...new Set([...itemById.values()].map((i) => i.category_id).filter(Boolean))];
-
-  const [{ data: vendors }, { data: categories }, { data: units }] = await Promise.all([
-    vendorIds.length ? admin.from("vendors").select("id, name").in("id", vendorIds) : { data: [] },
-    categoryIds.length ? admin.from("categories").select("id, name").in("id", categoryIds) : { data: [] },
-    admin.from("units").select("id, label"),
+  const [{ data: packRows }, { data: categories }, { data: units }] = await Promise.all([
+    admin
+      .from("item_pack_sizes")
+      .select(PACK_COLUMNS)
+      .in(
+        "item_id",
+        items.map((i) => i.id)
+      ),
+    admin.from("categories").select("id, name"),
+    admin.from("units").select("id, code, label, base_unit_code, to_base_factor"),
   ]);
-  const vendorNameById = new Map((vendors ?? []).map((v) => [v.id, v.name]));
-  const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
-  const unitLabelById = new Map((units ?? []).map((u) => [u.id, u.label]));
+  const unitById = new Map(((units ?? []) as UnitRow[]).map((u) => [u.id, u]));
+  const categoryNameById = new Map((categories ?? []).map((c) => [c.id as string, c.name as string]));
+  const packsByItem = new Map<string, PackRow[]>();
+  for (const p of (packRows ?? []) as PackRow[]) {
+    packsByItem.set(p.item_id, [...(packsByItem.get(p.item_id) ?? []), p]);
+  }
 
-  return rows.map((r) => {
-    const packSize = packSizeById.get(r.pack_size_id)!;
-    const item = itemById.get(packSize.item_id)!;
-    return {
-      id: r.id,
-      itemNumber: item.item_number,
-      description: item.name,
-      // The pack's own name first — "2 - pack" is what whoever set it up
-      // called it, and the shape beside it is what tells two packs apart.
-      packSizeLabel: packTitle(packSize.label, {
-        innerQuantity: packSize.inner_quantity,
-        unitLabel: unitLabelById.get(packSize.inner_unit_id),
-        packCount: packSize.pack_count,
-        soldLoose: packSize.sold_loose,
-        packaging: packSize.packaging,
-      }),
-      brand: r.brand,
-      vendorName: r.vendor_id ? (vendorNameById.get(r.vendor_id) ?? null) : null,
+  const suggestions: ItemLookupSuggestion[] = [];
+  for (const item of items) {
+    const packs = packOptions(packsByItem.get(item.id) ?? [], unitById);
+    const common = {
+      itemId: item.id as string,
+      itemNumber: item.item_number as string | null,
+      description: item.name as string,
       categoryName: item.category_id ? (categoryNameById.get(item.category_id) ?? null) : null,
+      packs,
     };
+    if (packs.length === 0) {
+      suggestions.push({ ...common, key: common.itemId, packSizeId: null, packSizeLabel: "No pack sizes yet" });
+    }
+    for (const p of packs) {
+      suggestions.push({ ...common, key: p.id, packSizeId: p.id, packSizeLabel: p.title });
+    }
+  }
+  return suggestions.slice(0, 12);
+}
+
+export type LineMatchResult = {
+  confidence: MatchConfidence;
+  itemId: string | null;
+  itemNumber: string | null;
+  itemName: string | null;
+  categoryName: string | null;
+  /** Null when the item has several packs and the line doesn't say which. */
+  packSizeId: string | null;
+  packs: LinePackOption[];
+  /** Other items worth offering, best first. */
+  alternatives: { itemId: string; itemName: string; itemNumber: string | null }[];
+};
+
+export type LineToResolve = {
+  key: string;
+  description: string;
+  categoryName: string | null;
+  /** An item the submitter chose, to find the pack for. */
+  itemId: string | null;
+  /** The offer an expense being edited already files this line against. */
+  pricelistItemId: string | null;
+};
+
+const PAGE_SIZE = 1000;
+
+/** Every row a query returns, a page at a time past Supabase's row cap. */
+async function allRows<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await page(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const batch = (data ?? []) as T[];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) return rows;
+  }
+}
+
+type WordingRow = { item_id: string; vendor_id: string | null; description: string };
+
+/**
+ * Which Pricelist item and pack each receipt line is, before anything is saved.
+ *
+ * Matching used to run only at submission and only on the exact wording, so a
+ * line reading "Box Tomato" never found the Tomato somebody had set up, and
+ * became a second one without a word said. This runs as soon as a receipt is
+ * read — and on a restored draft, and on an expense being edited — so the form
+ * shows every line's match and asks where it isn't sure. See line-matching.ts
+ * for how a line is read. Never writes.
+ */
+export async function matchReceiptLinesAction(input: {
+  vendorName: string;
+  abn: string | null;
+  lines: LineToResolve[];
+}): Promise<Record<string, LineMatchResult>> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "submit_expense", "submit");
+  if (input.lines.length === 0) return {};
+
+  const admin = createAdminClient();
+  const vendorId = (await resolveVendorAction(input.vendorName, input.abn))?.id ?? null;
+
+  const wordings = [...new Set(input.lines.map((l) => normalizeWording(l.description)).filter(Boolean))];
+  const pinnedOfferIds = input.lines.map((l) => l.pricelistItemId).filter((id): id is string => !!id);
+  const wordingColumns = "item_id, vendor_id, description";
+
+  const [itemRows, packRows, unitsResult, categoriesResult, exactWordings, vendorlessWordings, ownWordings, vendorOffers, pinnedOffersResult] =
+    await Promise.all([
+      allRows<{ id: string; name: string; item_number: string | null; category_id: string | null }>((from, to) =>
+        admin.from("items").select("id, name, item_number, category_id").neq("status", "rejected").order("id").range(from, to)
+      ),
+      allRows<PackRow>((from, to) => admin.from("item_pack_sizes").select(PACK_COLUMNS).order("id").range(from, to)),
+      admin.from("units").select("id, code, label, base_unit_code, to_base_factor"),
+      admin.from("categories").select("id, name"),
+      // The exact wordings on this receipt, whoever used them…
+      wordings.length
+        ? allRows<WordingRow>((from, to) =>
+            admin
+              .from("vendor_item_descriptions")
+              .select(wordingColumns)
+              .in("description_normalized", wordings)
+              .order("id")
+              .range(from, to)
+          )
+        : Promise.resolve([] as WordingRow[]),
+      // …names items have been renamed away from…
+      allRows<WordingRow>((from, to) =>
+        admin.from("vendor_item_descriptions").select(wordingColumns).is("vendor_id", null).order("id").range(from, to)
+      ),
+      // …and everything this vendor has called anything.
+      vendorId
+        ? allRows<WordingRow>((from, to) =>
+            admin
+              .from("vendor_item_descriptions")
+              .select(wordingColumns)
+              .eq("vendor_id", vendorId)
+              .order("id")
+              .range(from, to)
+          )
+        : Promise.resolve([] as WordingRow[]),
+      vendorId
+        ? allRows<{ pack_size_id: string }>((from, to) =>
+            admin
+              .from("pricelist_items")
+              .select("pack_size_id")
+              .eq("vendor_id", vendorId)
+              .neq("status", "rejected")
+              .order("id")
+              .range(from, to)
+          )
+        : Promise.resolve([] as { pack_size_id: string }[]),
+      pinnedOfferIds.length
+        ? admin.from("pricelist_items").select("id, pack_size_id").in("id", pinnedOfferIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+  const units = (unitsResult.data ?? []) as UnitRow[];
+  const unitById = new Map(units.map((u) => [u.id, u]));
+  const categoryNameById = new Map((categoriesResult.data ?? []).map((c) => [c.id as string, c.name as string]));
+  const packById = new Map(packRows.map((p) => [p.id, p]));
+  const packsByItem = new Map<string, PackRow[]>();
+  for (const p of packRows) packsByItem.set(p.item_id, [...(packsByItem.get(p.item_id) ?? []), p]);
+
+  const catalogue: CatalogueItem[] = itemRows.map((i) => ({
+    id: i.id,
+    name: i.name,
+    itemNumber: i.item_number,
+    categoryName: i.category_id ? (categoryNameById.get(i.category_id) ?? null) : null,
+    packs: (packsByItem.get(i.id) ?? []).map((p) => ({
+      id: p.id,
+      label: p.label,
+      innerQuantity: Number(p.inner_quantity),
+      unitCode: unitById.get(p.inner_unit_id)?.code ?? null,
+      packCount: Number(p.pack_count),
+      soldLoose: p.sold_loose,
+      packaging: p.packaging,
+    })),
+  }));
+  const itemById = new Map(catalogue.map((i) => [i.id, i]));
+  const catalogueUnits: CatalogueUnit[] = units.map((u) => ({
+    code: u.code,
+    baseUnitCode: u.base_unit_code,
+    toBaseFactor: Number(u.to_base_factor),
+  }));
+  const known: KnownWording[] = [...exactWordings, ...vendorlessWordings, ...ownWordings].map((w) => ({
+    itemId: w.item_id,
+    vendorId: w.vendor_id,
+    description: w.description,
+  }));
+  const vendorPackIds = new Set(vendorOffers.map((o) => o.pack_size_id));
+  const packOfOffer = new Map(
+    ((pinnedOffersResult.data ?? []) as { id: string; pack_size_id: string }[]).map((o) => [o.id, o.pack_size_id])
+  );
+
+  const alternativesFor = (ids: string[]) =>
+    ids.flatMap((id) => {
+      const alt = itemById.get(id);
+      return alt ? [{ itemId: alt.id, itemName: alt.name, itemNumber: alt.itemNumber }] : [];
+    });
+
+  const resultFor = (
+    item: CatalogueItem,
+    confidence: MatchConfidence,
+    packSizeId: string | null,
+    alternatives: string[]
+  ): LineMatchResult => ({
+    confidence,
+    itemId: item.id,
+    itemNumber: item.itemNumber,
+    itemName: item.name,
+    categoryName: item.categoryName,
+    packSizeId,
+    packs: packOptions(packsByItem.get(item.id) ?? [], unitById),
+    alternatives: alternativesFor(alternatives),
   });
+
+  const results: Record<string, LineMatchResult> = {};
+  for (const line of input.lines) {
+    // Something a person already settled — the offer an edited expense files
+    // against, or an item picked from the options — is not second-guessed.
+    const pinnedPackId = line.pricelistItemId ? packOfOffer.get(line.pricelistItemId) : undefined;
+    const pinnedPack = pinnedPackId ? packById.get(pinnedPackId) : undefined;
+    const pinnedItem = pinnedPack
+      ? itemById.get(pinnedPack.item_id)
+      : line.itemId
+        ? itemById.get(line.itemId)
+        : undefined;
+    if (pinnedItem) {
+      results[line.key] = resultFor(
+        pinnedItem,
+        "sure",
+        pinnedPack?.id ??
+          choosePack(pinnedItem.packs, line.description, catalogueUnits, vendorPackIds, pinnedItem.name),
+        []
+      );
+      continue;
+    }
+
+    const pick = matchLine(line, catalogue, known, vendorId);
+    const item = pick.itemId ? itemById.get(pick.itemId) : undefined;
+    results[line.key] = item
+      ? resultFor(
+          item,
+          pick.confidence,
+          choosePack(item.packs, line.description, catalogueUnits, vendorPackIds, item.name),
+          pick.alternatives
+        )
+      : {
+          confidence: "none",
+          itemId: null,
+          itemNumber: null,
+          itemName: null,
+          categoryName: null,
+          packSizeId: null,
+          packs: [],
+          alternatives: alternativesFor(pick.alternatives),
+        };
+  }
+  return results;
 }
 
 export type LineItemInput = {
@@ -535,6 +810,18 @@ export type LineItemInput = {
    * being true the moment the wording changes underneath it.
    */
   pricelistItemId?: string | null;
+  /**
+   * The Pricelist item this line is, as the submit form matched it or the
+   * submitter chose it. Used only when no pack was — see packSizeId.
+   */
+  itemId?: string | null;
+  /**
+   * The pack this line is, as the form matched it or the submitter chose it.
+   * Filed against this expense's vendor's offer on that pack, adding one when
+   * the vendor has none — so a line the form matched never becomes a new item
+   * or pack size.
+   */
+  packSizeId?: string | null;
   /**
    * What this line is. Only "goods" is a purchase; the rest exist so the lines
    * add up to the total printed on the receipt — see migration 0026.
@@ -612,21 +899,26 @@ async function buildLineRows(
       // while looking at the invoice — better evidence than the wording, so it
       // is tried first. A pin that no longer resolves falls through to
       // matching rather than failing the submission.
-      const chosen = item.pricelistItemId
-        ? await chosenOffer(admin, {
-            offerId: item.pricelistItemId,
-            vendorId,
-            description: item.description,
-            originalDescription: item.originalDescription ?? null,
-            userId,
-            normalizedUnit: item.normalizedUnit,
-            line: {
-              lineTotal: item.lineTotal,
-              quantity: item.quantity,
-              normalizedQuantity: item.normalizedQuantity,
-            },
-          })
-        : null;
+      //
+      // A pack the form matched or the submitter picked comes next, and an item
+      // without a pack after that. Only a line nothing was found for reaches
+      // matchOrCreateOffer, which is the one path that can add an item.
+      const pin = {
+        vendorId,
+        description: item.description,
+        originalDescription: item.originalDescription ?? null,
+        userId,
+        normalizedUnit: item.normalizedUnit,
+        line: {
+          lineTotal: item.lineTotal,
+          quantity: item.quantity,
+          normalizedQuantity: item.normalizedQuantity,
+        },
+      };
+      const chosen =
+        (item.pricelistItemId ? await chosenOffer(admin, { ...pin, offerId: item.pricelistItemId }) : null) ??
+        (item.packSizeId ? await chosenPack(admin, { ...pin, packSizeId: item.packSizeId }) : null) ??
+        (item.itemId ? await chosenItem(admin, { ...pin, itemId: item.itemId }) : null);
 
       const matched = chosen ?? (await matchOrCreateOffer(admin, {
         vendorId,
@@ -791,7 +1083,7 @@ export async function getExpenseForEdit(expenseId: string): Promise<ExpenseForEd
     admin
       .from("expense_line_items")
       .select(
-        "description_raw, kind, quantity, unit_price, line_total, category_id, gst_applicable, normalized_quantity, normalized_unit"
+        "description_raw, pricelist_item_id, kind, quantity, unit_price, line_total, category_id, gst_applicable, normalized_quantity, normalized_unit"
       )
       .eq("expense_id", expenseId)
       .order("sort_order"),
@@ -826,6 +1118,9 @@ export async function getExpenseForEdit(expenseId: string): Promise<ExpenseForEd
     payee: expense.payee_id ? { kind: "existing", payeeId: expense.payee_id } : null,
     lineItems: (lineItems ?? []).map((li) => ({
       description: li.description_raw,
+      // Kept so an edit shows what each line is already filed against, rather
+      // than reading the wording afresh and possibly landing somewhere else.
+      pricelistItemId: li.pricelist_item_id,
       kind: (li.kind ?? "goods") as StoredLineKind,
       quantity: li.quantity,
       unitPrice: li.unit_price,

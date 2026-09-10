@@ -51,6 +51,24 @@ Decided (2026-09-10):
 
 ## Done
 
+### 3. Receipt upload doesn't match items already on the Pricelist
+
+Every goods line is now matched as soon as the receipt is read, and the form
+shows what it will be filed against under each line: ✓ when certain, "Check"
+when probably right, "New item" with close matches offered when nothing fits.
+Quantities, packaging words and plurals are set aside, one-letter handwriting
+slips still count, and a wording the vendor has used before matches outright.
+The pack is read from the line ("Box Tomato", "20kg Onions") or the vendor's
+history, and the form asks when neither settles it. A matched line files
+against that pack and never creates an item or pack size. Against the live
+Pricelist, all eleven lines of the BLF + Mix invoice find their items.
+
+### 4. Submit typeahead shows only one of an item's pack sizes
+
+The typeahead lists every pack of every item still in use, priced or not, and
+finds items by what receipts have called them. Choosing a pack with no offer
+from this vendor adds a pending one on submission.
+
 ### 2. Item setup for boxed produce: price per box and per kg, both
 
 A pack now records what it comes in (migration 0040): loose, or a box, bag,
