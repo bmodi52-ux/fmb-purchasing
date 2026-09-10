@@ -130,6 +130,8 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
   if (offerError) return { error: offerError.message, success: false };
 
   revalidatePath("/pricelist");
+  const vendorId = fieldOrNull(formData, "vendor_id");
+  if (vendorId) revalidatePath(`/vendors/${vendorId}`);
   revalidateReports();
   return { error: null, success: true };
 }
@@ -287,7 +289,75 @@ export async function addOffer(formData: FormData) {
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
+  const vendorId = fieldOrNull(formData, "vendor_id");
+  if (vendorId) revalidatePath(`/vendors/${vendorId}`);
   revalidateReports();
+}
+
+export type AddVendorOfferState = { error: string | null; success: boolean };
+
+/**
+ * Pricing for an item that already exists, added from the vendor's own page.
+ *
+ * Pricing used to be added only from the item's page, one item at a time, so
+ * setting up what a supplier sells meant opening every item they carry. From
+ * the vendor page the vendor is already known and the item is what gets
+ * chosen — which is how anyone holding a supplier's price sheet works through
+ * it.
+ *
+ * Refuses a second live offer from the same vendor on the same pack: two
+ * prices for one thing from one supplier is a question for the item page,
+ * where both can be seen, not something to create by accident.
+ */
+export async function addVendorOffer(
+  _prev: AddVendorOfferState,
+  formData: FormData
+): Promise<AddVendorOfferState> {
+  const user = await requirePricelistEdit();
+
+  const vendorId = fieldOrNull(formData, "vendor_id");
+  const packSizeId = fieldOrNull(formData, "pack_size_id");
+  if (!vendorId) return { error: "There is no vendor to add this pricing for.", success: false };
+  if (!packSizeId) return { error: "Choose the item and its pack size.", success: false };
+
+  const admin = createAdminClient();
+  const { data: pack } = await admin.from("item_pack_sizes").select("id, item_id").eq("id", packSizeId).maybeSingle();
+  if (!pack) return { error: "That pack size no longer exists. Choose the item again.", success: false };
+
+  const { data: existing } = await admin
+    .from("pricelist_items")
+    .select("id")
+    .eq("vendor_id", vendorId)
+    .eq("pack_size_id", packSizeId)
+    .neq("status", "rejected")
+    .limit(1);
+  if (existing && existing.length > 0) {
+    return {
+      error: "This vendor already has pricing on that pack size. Change it from the item's page instead.",
+      success: false,
+    };
+  }
+
+  const { error } = await admin.from("pricelist_items").insert({
+    pack_size_id: packSizeId,
+    vendor_id: vendorId,
+    brand: fieldOrNull(formData, "brand"),
+    vendor_sku: fieldOrNull(formData, "vendor_sku"),
+    pack_price: numberOrNull(formData, "pack_price"),
+    comments: fieldOrNull(formData, "comments"),
+    status: "approved",
+    created_by: user.id,
+    reviewed_by: user.id,
+    reviewed_at: new Date().toISOString(),
+    updated_by: user.id,
+  });
+  if (error) return { error: error.message, success: false };
+
+  revalidatePath(`/vendors/${vendorId}`);
+  revalidatePath(`/pricelist/${pack.item_id}`);
+  revalidatePath("/pricelist");
+  revalidateReports();
+  return { error: null, success: true };
 }
 
 async function reviewOffers(offerIds: string[], decision: "approved" | "rejected") {
@@ -319,6 +389,8 @@ async function reviewOffers(offerIds: string[], decision: "approved" | "rejected
   }
 
   revalidatePath("/pricelist");
+  // Offers are approved from vendor pages too, and each lists its own.
+  revalidatePath("/vendors/[id]", "page");
   revalidateReports();
 }
 
