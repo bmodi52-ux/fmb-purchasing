@@ -18,18 +18,47 @@ renumbers a list and would show #12 as 10.
 
 <!-- Worth considering, not yet decided. -->
 
+### 1. Sandbox environment for training and testing
+
+A place where new users can be trained and play around without touching real
+data. Needs a decision on the approach — a separate Supabase project and Vercel
+deployment (e.g. sandbox.fmbpurchasing.com.au) with its own seeded demo data,
+emails that never reach real vendors or approvers, a clear "Sandbox" banner, and
+a way to reset it to a clean state.
+
+Parked until later; not to be started until asked.
+
+Decided (2026-09-10):
+
+- Address: sandbox.fmbpurchasing.com.au — a subdomain, so no new domain to buy.
+- Database: delete the old Tokyo project and create a fresh Sydney project named
+  "FMB Sandbox".
+- Tokyo: deleted as it is, no export first.
+- Data: a scrubbed copy of real data, with vendor names, bank details and
+  people replaced. A fresh copy is taken at every reset.
+- Receipt files: copied in too. Accepted knowingly: the real details printed on
+  them (vendor, ABN, sometimes bank details) stay visible to trainees.
+- Email: sent the same way as the live site, with subjects prefixed "[Sandbox]".
+- Logins: a personal login for each trainee, kept across resets.
+- Receipt reading: the same Anthropic key as live.
+- Updates: the sandbox gets every change automatically when it is merged.
+- Reset: a script run from this computer, for now. An admin button in the
+  sandbox may come later. Its drawbacks: the sandbox would hold a key to the
+  live database; a mix-up in its settings could wipe live; a big copy may
+  outrun Vercel's time limit; and a reset can be clicked mid-session. The middle
+  ground is a button that starts a GitHub Action, which keeps the live key out
+  of the sandbox.
+
 ## Done
 
-### 1. Units and pack sizes: plain wording anyone can follow
+### 2. Item setup for boxed produce: price per box and per kg, both
 
-Every pack is described in words now, by one shared formatter: "Pack of 2"
-rather than "1 ea × 2 (2 ea)", "4 × 5 kg, 20 kg in total", "Loose, priced per
-kg". "ea" reads as "item" and a cost as "$0.25 each". "Canonical unit (for
-costing)" is "Compare prices per", with an example underneath. The pack form
-asks "How many in the pack" and "Each one is", and shows the pack as it will
-read before saving. The warning's grammar is fixed.
-
-### 2. Submit: the pack's name doesn't show in the item typeahead
-
-It does now, on its own line under the item: "2 - pack (Pack of 2)", with the
-item number and vendor beneath.
+A pack now records what it comes in (migration 0040): loose, or a box, bag,
+sack, carton, tray, punnet, bunch, bottle, jar, tin, tub or pack. The pack form
+starts from "Comes as", then "Each box holds 6 kg", with smaller packs inside as
+an optional tick. Green Chilli reads "Box of 6 kg" and its offer "$40.00 per box
+($6.6667/kg)". "What we've actually paid" adds most recent and average per pack
+beside the per-kg figures, and Reports and the dashboard unit-cost table gain a
+Per pack column. "Compare prices per" is "Measured in". Existing packs named
+with a packaging word are backfilled, and receipt-created packs read it off the
+line.

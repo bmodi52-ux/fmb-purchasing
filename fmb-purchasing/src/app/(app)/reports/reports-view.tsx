@@ -52,6 +52,8 @@ export type PerUnitRow = {
   normalizedQuantity: number;
   normalizedUnit: string;
   perUnit: number;
+  /** What one pack — a box, a bag — cost. Null when bought loose, where it is the per-unit figure. */
+  perPack: number | null;
 };
 
 /** Palette slot per stage, fixed so colour follows the stage and not its rank. */
@@ -745,7 +747,7 @@ function UnitCostsSection({
   return (
     <Panel
       title="Per-unit cost trends"
-      subtitle="What we actually pay per kilo, litre or each — compare vendors within an item"
+      subtitle="What we actually pay per box or pack, and per kilo, litre or item — compare vendors within an item"
       onExport={
         perUnitRows.length > 0
           ? () =>
@@ -757,6 +759,7 @@ function UnitCostsSection({
                   date: r.receiptDate ?? "",
                   quantity: r.normalizedQuantity,
                   unit: r.normalizedUnit,
+                  per_pack_cost: r.perPack ?? "",
                   per_unit_cost: r.perUnit,
                 }))
               )
@@ -810,6 +813,7 @@ function UnitCostsSection({
                           <th scope="col" className="py-1 pr-3 font-medium">Vendor</th>
                           <th scope="col" className="py-1 pr-3 font-medium">Date</th>
                           <th scope="col" className="py-1 pr-3 text-right font-medium">Quantity</th>
+                          <th scope="col" className="py-1 pr-3 text-right font-medium">Per pack</th>
                           <th scope="col" className="py-1 text-right font-medium">Per unit</th>
                         </tr>
                       </thead>
@@ -822,6 +826,9 @@ function UnitCostsSection({
                             </td>
                             <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
                               {r.normalizedQuantity} {r.normalizedUnit}
+                            </td>
+                            <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
+                              {r.perPack != null ? `$${r.perPack.toFixed(2)}` : "—"}
                             </td>
                             <td className="py-1 text-right font-mono tabular-nums">
                               ${r.perUnit.toFixed(4)}

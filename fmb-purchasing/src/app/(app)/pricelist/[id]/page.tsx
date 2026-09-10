@@ -21,15 +21,31 @@ import { ReviewDecision, StatusPill } from "@/components/review-decision";
 import { OfferForm } from "./offer-form";
 import { PackSizeForm } from "./pack-size-form";
 import { PackFields } from "../pack-fields";
-import { describePack, formatUnitCost, packTitle, unitName, unitOptionLabel } from "@/lib/pack-description";
+import {
+  formatPackPrice,
+  formatUnitCost,
+  packTitle,
+  priceFieldLabel,
+  unitName,
+  unitOptionLabel,
+} from "@/lib/pack-description";
+import { summarisePackPrices } from "@/lib/pack-prices";
 import { MergePanel, type DuplicateCandidate } from "./merge-panel";
 import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
   name: "Name",
   category_id: "Category",
-  canonical_unit_id: "Prices compared per",
+  canonical_unit_id: "Measured in",
   comments: "Comments",
+  // Pack size edits are written to the item's history too.
+  label: "Pack name",
+  packaging: "Pack comes as",
+  inner_quantity: "Pack holds",
+  inner_unit_id: "Pack unit",
+  pack_count: "Smaller packs inside",
+  sold_loose: "Bought loose",
+  contents_confirmed: "Pack contents confirmed",
 };
 
 const OFFER_FIELD_LABELS: Record<string, string> = {
@@ -109,7 +125,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   // whether an offer can still be deleted.
   const offerIdList = (offers ?? []).map((o) => o.id);
   const { data: usageRows } = offerIdList.length
-    ? await admin.from("expense_line_items").select("pricelist_item_id").in("pricelist_item_id", offerIdList)
+    ? await admin.from("expense_line_items").select("id, pricelist_item_id").in("pricelist_item_id", offerIdList)
     : { data: [] };
   const purchasesByOffer = new Map<string, number>();
   for (const r of usageRows ?? []) {
@@ -121,6 +137,37 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     const n = purchasesByOffer.get(o.id) ?? 0;
     if (n > 0) purchasesByPackSize.set(o.pack_size_id, (purchasesByPackSize.get(o.pack_size_id) ?? 0) + n);
   }
+
+  // What each pack has cost per pack — per box, per bag — beside the per-kilo
+  // figures item_unit_costs gives. The same purchases, divided differently.
+  const packSizeByOfferId = new Map((offers ?? []).map((o) => [o.id as string, o.pack_size_id as string]));
+  const packSizeByLineId = new Map<string, string>();
+  for (const r of usageRows ?? []) {
+    const packSizeId = packSizeByOfferId.get(r.pricelist_item_id as string);
+    if (packSizeId) packSizeByLineId.set(r.id as string, packSizeId);
+  }
+  const { data: paidRows } = packSizeByLineId.size
+    ? await admin
+        .from("item_paid_unit_costs")
+        .select("line_item_id, line_total, normalized_quantity, receipt_date, submitted_at")
+        .eq("item_id", id)
+    : { data: [] };
+  const packPrices = summarisePackPrices(
+    (paidRows ?? []).flatMap((r) => {
+      const packSizeId = packSizeByLineId.get(r.line_item_id as string);
+      return packSizeId
+        ? [
+            {
+              packSizeId,
+              lineTotal: Number(r.line_total),
+              quantity: Number(r.normalized_quantity),
+              receiptDate: (r.receipt_date as string | null) ?? null,
+              submittedAt: r.submitted_at as string,
+            },
+          ]
+        : [];
+    })
+  );
 
   const { data: duplicateRows } = await admin
     .from("item_duplicate_candidates")
@@ -157,11 +204,18 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     currentCategory && !assignableCategories.some((c) => c.id === currentCategory.id)
       ? [...assignableCategories, currentCategory]
       : assignableCategories;
-  const packShapeOf = (p: { inner_quantity: number; inner_unit_id: string; pack_count: number; sold_loose?: boolean }) => ({
+  const packShapeOf = (p: {
+    inner_quantity: number;
+    inner_unit_id: string;
+    pack_count: number;
+    sold_loose?: boolean;
+    packaging?: string | null;
+  }) => ({
     innerQuantity: p.inner_quantity,
     unitLabel: unitLabelById.get(p.inner_unit_id),
     packCount: p.pack_count,
     soldLoose: p.sold_loose,
+    packaging: p.packaging,
   });
 
   const packSizeLabelById = new Map((packSizes ?? []).map((p) => [p.id, packTitle(p.label, packShapeOf(p))]));
@@ -169,7 +223,8 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   function itemDisplayValue(field: string, value: unknown): string {
     if (value == null || value === "") return "—";
     if (field === "category_id") return categoryNameById.get(String(value)) ?? "—";
-    if (field === "canonical_unit_id") {
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (field === "canonical_unit_id" || field === "inner_unit_id") {
       const label = unitLabelById.get(String(value));
       return label ? unitOptionLabel(label) : "—";
     }
@@ -260,7 +315,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-ink/70">Compare prices per</span>
+            <span className="text-ink/70">Measured in</span>
             <select
               name="canonical_unit_id"
               defaultValue={item.canonical_unit_id}
@@ -274,7 +329,9 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                 </option>
               ))}
             </select>
-            <span className="text-xs text-ink/45">e.g. kg for rice, L for milk, item for roti</span>
+            <span className="text-xs text-ink/45">
+              Prices show per box or pack, and per this unit — e.g. kg for vegetables, L for milk, item for roti
+            </span>
           </label>
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
             <span className="text-ink/70">Comments</span>
@@ -297,16 +354,44 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
         {itemCost ? (
           <div className="grid gap-4 sm:grid-cols-3">
             <Stat
-              label="Most recent"
+              label={`Most recent, per ${unitName(itemCost.base_unit_code)}`}
               value={formatUnitCost(Number(itemCost.latest_cost_per_base_unit), itemCost.base_unit_code)}
               note={itemCost.latest_receipt_date ? `as at ${itemCost.latest_receipt_date}` : null}
             />
             <Stat
-              label="Average paid"
+              label={`Average paid, per ${unitName(itemCost.base_unit_code)}`}
               value={formatUnitCost(Number(itemCost.avg_cost_per_base_unit), itemCost.base_unit_code)}
               note={`across ${itemCost.vendor_count} vendor(s)`}
             />
             <Stat label="Purchases" value={String(itemCost.purchase_count)} note="receipt lines" />
+            {packPrices.size > 0 && (
+              <div className="sm:col-span-3">
+                <p className="mb-1 text-xs uppercase tracking-wide text-ink/40">Per pack</p>
+                <ul className="flex flex-col gap-1 text-sm">
+                  {(packSizes ?? [])
+                    .filter((p) => packPrices.has(p.id))
+                    .map((p) => {
+                      const prices = packPrices.get(p.id)!;
+                      const shape = packShapeOf(p);
+                      return (
+                        <li
+                          key={p.id}
+                          className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 rounded-md border border-ink/10 bg-white px-3 py-2"
+                        >
+                          <span className="text-ink">{packSizeLabelById.get(p.id)}</span>
+                          <span className="font-mono text-ink/70">
+                            most recent {formatPackPrice(prices.latest, shape)} · average{" "}
+                            {formatPackPrice(prices.average, shape)}
+                            <span className="ml-2 text-ink/40">
+                              ({prices.purchaseCount} {prices.purchaseCount === 1 ? "purchase" : "purchases"})
+                            </span>
+                          </span>
+                        </li>
+                      );
+                    })}
+                </ul>
+              </div>
+            )}
             {!itemCost.all_contents_confirmed && (
               <p className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-ink/80 sm:col-span-3">
                 <strong>Provisional.</strong> At least one purchase is against a pack nobody has confirmed the contents
@@ -349,7 +434,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                       <StatusBadge status={o.status} />
                     </div>
                     <span className="font-mono text-ink/70">
-                      {o.pack_price != null ? `$${o.pack_price}` : "—"}
+                      {o.pack_price != null ? formatPackPrice(Number(o.pack_price), packShapeOf(p)) : "—"}
                       {cost?.cost_per_base_unit != null && (
                         <span className="ml-2 text-ink/50">
                           ({formatUnitCost(cost.cost_per_base_unit, cost.base_unit_code)})
@@ -397,6 +482,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                             itemId={item.id}
                             packSizeId={p.id}
                             offerId={o.id}
+                            priceLabel={priceFieldLabel(packShapeOf(p))}
                             totalQuantity={p.total_quantity}
                             innerUnitLabel={packUnitLabel}
                             vendorId={o.vendor_id}
@@ -459,13 +545,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
               <div key={p.id} className="rounded-md border border-ink/10 bg-white p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium text-ink">
-                    {p.label ? (
-                      <>
-                        {p.label} <span className="font-normal text-ink/60">({describePack(packShapeOf(p))})</span>
-                      </>
-                    ) : (
-                      describePack(packShapeOf(p))
-                    )}
+                    {packTitle(p.label, packShapeOf(p))}
                     {!p.contents_confirmed && (
                       <span className="ml-2 rounded-full bg-gold/20 px-2 py-0.5 text-xs font-normal text-gold-deep">
                         contents not confirmed
@@ -497,6 +577,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                         packCount={p.pack_count}
                         label={p.label}
                         soldLoose={p.sold_loose}
+                        packaging={p.packaging}
                         units={units ?? []}
                         purchaseCount={purchasesByPackSize.get(p.id) ?? 0}
                       />
@@ -537,6 +618,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                         action={addOffer}
                         itemId={item.id}
                         packSizeId={p.id}
+                        priceLabel={priceFieldLabel(packShapeOf(p))}
                         totalQuantity={p.total_quantity}
                         innerUnitLabel={packUnitLabel}
                         vendors={vendors ?? []}
@@ -557,7 +639,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             <p className="text-xs font-medium uppercase tracking-wide text-ink/40">Add another pack size</p>
             <PackFields
               units={units ?? []}
-              defaults={{ innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
+              defaults={{ soldAs: "", innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
             />
             <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
               + Add pack size

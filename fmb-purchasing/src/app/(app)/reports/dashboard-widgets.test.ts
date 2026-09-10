@@ -79,6 +79,9 @@ const paidCosts: PaidCostRow[] = [
     base_quantity: 80,
     base_unit_code: "kg",
     cost_per_base_unit: 16.5,
+    line_total: 1320,
+    normalized_quantity: 4,
+    sold_loose: false,
   },
   {
     item_id: "i-rolls",
@@ -88,6 +91,9 @@ const paidCosts: PaidCostRow[] = [
     base_quantity: 10,
     base_unit_code: "ea",
     cost_per_base_unit: 9.99,
+    line_total: 99.9,
+    normalized_quantity: 10,
+    sold_loose: false,
   },
   {
     // Same item, but on an expense from a fiscal year this widget isn't
@@ -99,6 +105,9 @@ const paidCosts: PaidCostRow[] = [
     base_quantity: 60,
     base_unit_code: "kg",
     cost_per_base_unit: 16.65,
+    line_total: 999,
+    normalized_quantity: 3,
+    sold_loose: false,
   },
 ];
 

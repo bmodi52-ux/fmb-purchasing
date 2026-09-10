@@ -466,7 +466,7 @@ export async function searchPricelistItemsAction(query: string): Promise<ItemLoo
 
   const { data: packSizes } = await admin
     .from("item_pack_sizes")
-    .select("id, item_id, inner_quantity, inner_unit_id, pack_count, label, sold_loose")
+    .select("id, item_id, inner_quantity, inner_unit_id, pack_count, label, sold_loose, packaging")
     .in("item_id", itemIds);
   const packSizeById = new Map((packSizes ?? []).map((p) => [p.id, p]));
   const packSizeIds = [...packSizeById.keys()];
@@ -506,6 +506,7 @@ export async function searchPricelistItemsAction(query: string): Promise<ItemLoo
         unitLabel: unitLabelById.get(packSize.inner_unit_id),
         packCount: packSize.pack_count,
         soldLoose: packSize.sold_loose,
+        packaging: packSize.packaging,
       }),
       brand: r.brand,
       vendorName: r.vendor_id ? (vendorNameById.get(r.vendor_id) ?? null) : null,

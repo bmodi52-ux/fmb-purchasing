@@ -87,7 +87,7 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
     // it provisional — see migration 0014.
     admin
       .from("item_pack_sizes")
-      .select("id, item_id, inner_quantity, inner_unit_id, pack_count, sold_loose, items ( name )")
+      .select("id, item_id, inner_quantity, inner_unit_id, pack_count, sold_loose, packaging, items ( name )")
       .eq("contents_confirmed", false)
       .limit(100),
 
@@ -164,6 +164,7 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
         unitLabel: unitLabelById.get(row.inner_unit_id as string),
         packCount: row.pack_count,
         soldLoose: row.sold_loose,
+        packaging: row.packaging,
       })}) — per-unit costs are provisional`,
       href: `/pricelist/${row.item_id}`,
       weight: 4,

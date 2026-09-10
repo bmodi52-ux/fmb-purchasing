@@ -1,7 +1,7 @@
 "use client";
 
 import { SubmitButton } from "@/components/submit-button";
-import { formatUnitCost, unitOptionLabel } from "@/lib/pack-description";
+import { formatUnitCost, priceFieldLabel, unitOptionLabel } from "@/lib/pack-description";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { createItem, type CreateItemState } from "./actions";
 import { PackFields, type PackFieldValues } from "./pack-fields";
@@ -12,7 +12,7 @@ type Vendor = { id: string; name: string; vendor_number: string | null };
 type Category = { id: string; name: string };
 type Unit = { id: string; code: string; label: string };
 
-const BLANK_PACK: PackFieldValues = { innerQuantity: "1", innerUnitId: "", packCount: "1" };
+const BLANK_PACK: PackFieldValues = { soldAs: "", innerQuantity: "1", innerUnitId: "", packCount: "1" };
 
 export function AddItemForm({
   vendors,
@@ -48,6 +48,13 @@ export function AddItemForm({
   }, [packPrice, totalQuantity]);
 
   const innerUnitLabel = units.find((u) => u.id === (pack.innerUnitId || canonicalUnitId))?.label ?? "";
+  const priceLabel = priceFieldLabel({
+    innerQuantity: pack.innerQuantity,
+    unitLabel: innerUnitLabel,
+    packCount: pack.packCount,
+    soldLoose: pack.soldAs === "loose",
+    packaging: pack.soldAs,
+  });
 
   // Resets local form state in response to the server action's result — an
   // external system, not a derivable value — so an effect is the right tool.
@@ -83,7 +90,7 @@ export function AddItemForm({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-ink/70">Compare prices per</span>
+          <span className="text-ink/70">Measured in</span>
           <select
             name="canonical_unit_id"
             required
@@ -98,7 +105,9 @@ export function AddItemForm({
               </option>
             ))}
           </select>
-          <span className="text-xs text-ink/45">e.g. kg for rice, L for milk, item for roti</span>
+          <span className="text-xs text-ink/45">
+            Prices show per box or pack, and per this unit — e.g. kg for vegetables, L for milk, item for roti
+          </span>
         </label>
       </div>
 
@@ -144,7 +153,7 @@ export function AddItemForm({
 
           <div className="flex gap-2">
             <label className="flex flex-1 flex-col gap-1 text-sm">
-              <span className="text-ink/70">Price for the whole pack</span>
+              <span className="text-ink/70">{priceLabel}</span>
               <input
                 name="pack_price"
                 type="number"

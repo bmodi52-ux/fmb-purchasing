@@ -143,6 +143,8 @@ export default async function ReportsPage({
       normalizedQuantity: Number(c.base_quantity),
       normalizedUnit: c.base_unit_code as string,
       perUnit: Number(c.cost_per_base_unit),
+      // A loose line's pack is one unit, so its per-pack price is the per-unit one.
+      perPack: c.sold_loose ? null : Number(c.line_total) / Number(c.normalized_quantity),
     }))
     .sort(
       (a, b) =>

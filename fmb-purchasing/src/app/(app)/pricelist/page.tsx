@@ -46,6 +46,7 @@ type OfferQueryRow = {
     total_quantity: number;
     label: string | null;
     sold_loose: boolean;
+    packaging: string | null;
     contents_confirmed: boolean;
     item_id: string;
     items: {
@@ -81,7 +82,7 @@ export default async function PricelistPage() {
       admin
         .from("pricelist_items")
         .select(
-          "id, status, vendor_id, brand, vendor_sku, comments, pack_size_id, item_pack_sizes ( id, inner_quantity, inner_unit_id, pack_count, total_quantity, label, sold_loose, contents_confirmed, item_id, items ( id, item_number, name, category_id, status ) )"
+          "id, status, vendor_id, brand, vendor_sku, comments, pack_size_id, item_pack_sizes ( id, inner_quantity, inner_unit_id, pack_count, total_quantity, label, sold_loose, packaging, contents_confirmed, item_id, items ( id, item_number, name, category_id, status ) )"
         )
         .returns<OfferQueryRow[]>(),
       admin
@@ -149,6 +150,7 @@ export default async function PricelistPage() {
         totalQuantity: packSize.total_quantity,
         packLabel: packSize.label,
         soldLoose: packSize.sold_loose,
+        packaging: packSize.packaging,
         contentsConfirmed: packSize.contents_confirmed,
         packPrice: cost?.pack_price ?? null,
         costPerBaseUnit: cost?.cost_per_base_unit ?? null,
