@@ -259,6 +259,14 @@ export function SubmitForm({
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [resolvedVendor, setResolvedVendor] = useState<ResolvedVendor | null>(null);
   const [resolvingVendor, setResolvingVendor] = useState(false);
+  /**
+   * The vendor name exactly as extraction read it, so the automatic ABR lookup
+   * below can tell an untouched field from one the submitter has since typed
+   * into. Null once they edit it, and null from the start for a manual entry.
+   */
+  const nameFromExtraction = useRef<string | null>(null);
+  /** The ABN the ABR has already been asked about, so it is asked once. */
+  const abrCheckedAbn = useRef<string | null>(null);
 
   // Work out which vendor on file this receipt belongs to, whether the name
   // arrived from extraction, a restored draft, or typing. Read-only: nothing is
@@ -298,6 +306,53 @@ export function SubmitForm({
     }, 400);
     return () => clearTimeout(handle);
   }, [vendorName, abn]);
+
+  /**
+   * Ask the ABR who owns this ABN, without waiting to be told to.
+   *
+   * The registered name was a button press away and nothing else, so a receipt
+   * whose ABN extraction had read perfectly still showed "Not in Vendors yet"
+   * until somebody thought to press it — and the name the submission was filed
+   * under stayed whatever the shopfront happened to print.
+   *
+   * Only when the vendor is not already on file: a match found locally is the
+   * answer, and overwriting its name with the ABR's would fight the name
+   * somebody chose. Once per ABN, because the answer cannot change between
+   * keystrokes, and never while editing an existing expense — that name is
+   * already settled.
+   *
+   * Silent on failure. This is a convenience running in the background; the
+   * "Look up vendor" button is still there to try again and to say why.
+   */
+  useEffect(() => {
+    if (editExpense) return;
+    const digits = abn.replace(/\D/g, "");
+    if (digits.length !== 11) return;
+    if (abrCheckedAbn.current === digits) return;
+    // Let the local check settle first — it decides whether to ask at all.
+    if (resolvingVendor) return;
+    if (resolvedVendor) {
+      abrCheckedAbn.current = digits;
+      return;
+    }
+
+    abrCheckedAbn.current = digits;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await lookupAbnAction(digits);
+        if (cancelled || "error" in result) return;
+        setVendorName((current) =>
+          !current.trim() || current === nameFromExtraction.current ? result.name : current
+        );
+      } catch {
+        // Never blocks the form; the write path matches on its own regardless.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [abn, editExpense, resolvedVendor, resolvingVendor]);
 
   // Fill the Vendor # the submitter did not have to know, once matching has
   // found it. Only when blank, so it never fights a number they typed.
@@ -346,6 +401,9 @@ export function SubmitForm({
     if (extractState.data) {
       const d = extractState.data;
       setVendorName(d.vendor ?? "");
+      // Remembered, not just set: the ABR lookup below only replaces a name
+      // still exactly as extraction left it.
+      nameFromExtraction.current = d.vendor ?? "";
       setAbn(d.abn ?? "");
       setInvoiceNumber(d.invoiceNumber ?? "");
       setReceiptDate(normalizeReceiptDate(d.date));
@@ -768,13 +826,26 @@ function ReviewForm(props: {
             next.lineTotal = round2(next.quantity * next.unitPrice);
           }
         }
+        // A pinned offer says "this line is that offer". Retyping the
+        // description or the item number is how someone says it isn't any
+        // more, so the pin goes with it — otherwise a line reading "Rice 10kg"
+        // would still be filed against the 5 kg pack that was picked first.
+        // A patch that names the pin itself is the pin being set, not edited.
+        if (
+          patch.pricelistItemId === undefined &&
+          (patch.description !== undefined || patch.itemNumber !== undefined)
+        ) {
+          next.pricelistItemId = null;
+        }
         return next;
       })
     );
   }
 
   function selectItemSuggestion(key: string, s: ItemLookupSuggestion) {
-    updateItem(key, { categoryName: s.categoryName ?? undefined });
+    // The suggestion is one approved offer — a pack, from a vendor — so
+    // choosing it settles which offer the line is, not merely its category.
+    updateItem(key, { categoryName: s.categoryName ?? undefined, pricelistItemId: s.id });
   }
 
   function addCharge(kind: StoredLineKind, amount: number) {
@@ -805,6 +876,7 @@ function ReviewForm(props: {
                 ? {}
                 : {
                     itemNumber: "",
+                    pricelistItemId: null,
                     quantity: null,
                     unitPrice: null,
                     normalizedQuantity: null,

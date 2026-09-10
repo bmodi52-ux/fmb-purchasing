@@ -8,6 +8,8 @@ import { formatDate } from "@/lib/format";
 import { FilterableSection, type SortOption } from "@/components/filterable-section";
 import { ReceiptViewer } from "@/components/receipt-viewer";
 import type { ExportColumn } from "@/lib/export";
+import { PayeeAccount } from "@/components/payee-account";
+import type { PaymentInstruction } from "@/lib/payment-instruction";
 
 export type PaymentRow = {
   id: string;
@@ -18,11 +20,19 @@ export type PaymentRow = {
   decided_at: string | null;
   submittedByName: string;
   hasReceipt: boolean;
+  /** Where the money goes, and whether anyone has vouched for the account. */
+  payment: PaymentInstruction | null;
+  payeeName: string;
+  payeeAccount: string;
+  payeeConfirmed: string;
 };
 
 const EXPORT_COLUMNS: ExportColumn[] = [
   { key: "expense_number", label: "Entry #" },
   { key: "vendor_name_raw", label: "Vendor" },
+  { key: "payeeName", label: "Pay to" },
+  { key: "payeeAccount", label: "Account" },
+  { key: "payeeConfirmed", label: "Account status" },
   { key: "submittedByName", label: "Submitted by" },
   { key: "invoice_number", label: "Invoice" },
   { key: "decided_at", label: "Approved" },
@@ -34,6 +44,9 @@ const SORT_OPTIONS: SortOption<PaymentRow>[] = [
   { key: "total", label: "Total", value: (e) => e.total },
   { key: "vendor", label: "Vendor", value: (e) => e.vendor_name_raw ?? "" },
   { key: "submitter", label: "Submitted by", value: (e) => e.submittedByName },
+  // Unconfirmed accounts first: they are the rows that need a decision before
+  // any transfer is made, and a run of thirty buries them otherwise.
+  { key: "account", label: "Account status", value: (e) => (e.payment?.status === "pending" ? 0 : 1) },
 ];
 
 const today = new Date().toISOString().slice(0, 10);
@@ -86,7 +99,9 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
   return (
     <FilterableSection
       rows={expenses}
-      searchText={(e) => `${e.vendor_name_raw ?? ""} ${e.submittedByName} ${e.invoice_number ?? ""}`}
+      searchText={(e) =>
+        `${e.vendor_name_raw ?? ""} ${e.payeeName} ${e.submittedByName} ${e.invoice_number ?? ""}`
+      }
       columns={EXPORT_COLUMNS}
       filenameBase="payments"
       title="Payments"
@@ -113,6 +128,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                     </th>
                     <th scope="col" className="p-2">Entry #</th>
                     <th scope="col" className="p-2">Vendor</th>
+                    <th scope="col" className="p-2">Pay to</th>
                     <th scope="col" className="p-2">Submitted by</th>
                     <th scope="col" className="p-2">Invoice</th>
                     <th scope="col" className="p-2">Receipt</th>
@@ -136,6 +152,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                       </td>
                       <td className="p-2 font-mono text-xs"><Link href={`/expenses/${e.id}`} className="text-ink/70 underline">{e.expense_number ?? "View"}</Link></td>
                       <td className="p-2">{e.vendor_name_raw}</td>
+                      <td className="p-2"><PayeeAccount instruction={e.payment} compact /></td>
                       <td className="p-2 text-ink/70">{e.submittedByName}</td>
                       <td className="p-2 text-ink/70">{e.invoice_number || "—"}</td>
                       <td className="p-2">{e.hasReceipt ? <ReceiptViewer expenseId={e.id} /> : <span className="text-ink/40">—</span>}</td>

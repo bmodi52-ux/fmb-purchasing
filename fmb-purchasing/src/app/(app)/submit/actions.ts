@@ -11,6 +11,7 @@ import { lookupAbn, type AbnLookupResult } from "@/lib/abn-lookup";
 import {
   matchOrCreateVendor,
   matchOrCreateOffer,
+  chosenOffer,
   preferredVendor,
 } from "@/lib/expense-matching";
 import { fiscalYearForReceipt } from "@/lib/fiscal-year";
@@ -527,6 +528,14 @@ export type LineItemInput = {
    */
   originalDescription?: string | null;
   /**
+   * The Pricelist offer the submitter picked from the item typeahead, if they
+   * picked one. Null for a line whose description was typed or extracted
+   * without choosing a suggestion, and cleared as soon as the description is
+   * edited afterwards — a pin means "this line is that offer", which stops
+   * being true the moment the wording changes underneath it.
+   */
+  pricelistItemId?: string | null;
+  /**
    * What this line is. Only "goods" is a purchase; the rest exist so the lines
    * add up to the total printed on the receipt — see migration 0026.
    */
@@ -599,7 +608,27 @@ async function buildLineRows(
     let resolvedCategoryId = categoryId;
 
     if (item.kind === "goods") {
-      const matched = await matchOrCreateOffer(admin, {
+      // A pinned offer is the submitter naming the pack from the Pricelist
+      // while looking at the invoice — better evidence than the wording, so it
+      // is tried first. A pin that no longer resolves falls through to
+      // matching rather than failing the submission.
+      const chosen = item.pricelistItemId
+        ? await chosenOffer(admin, {
+            offerId: item.pricelistItemId,
+            vendorId,
+            description: item.description,
+            originalDescription: item.originalDescription ?? null,
+            userId,
+            normalizedUnit: item.normalizedUnit,
+            line: {
+              lineTotal: item.lineTotal,
+              quantity: item.quantity,
+              normalizedQuantity: item.normalizedQuantity,
+            },
+          })
+        : null;
+
+      const matched = chosen ?? (await matchOrCreateOffer(admin, {
         vendorId,
         originalDescription: item.originalDescription ?? null,
         description: item.description,
@@ -615,7 +644,7 @@ async function buildLineRows(
           quantity: item.quantity,
           normalizedQuantity: item.normalizedQuantity,
         },
-      });
+      }));
       pricelistItemId = matched.id;
       // Prefer the category of the item this line resolved to. When the line
       // matched something a person has already classified, that beats whatever
