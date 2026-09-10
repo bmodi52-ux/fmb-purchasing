@@ -10,12 +10,15 @@ export function ItemLookupCells({
   description,
   setDescription,
   onSelect,
+  onDescriptionBlur,
 }: {
   itemNumber: string;
   setItemNumber: (v: string) => void;
   description: string;
   setDescription: (v: string) => void;
   onSelect: (s: ItemLookupSuggestion) => void;
+  /** Leaving the description, so an unlinked line can be looked for again. */
+  onDescriptionBlur?: () => void;
 }) {
   const [query, setQuery] = useState<{ field: "number" | "description"; text: string } | null>(null);
   const [suggestions, setSuggestions] = useState<ItemLookupSuggestion[]>([]);
@@ -76,7 +79,10 @@ export function ItemLookupCells({
             if (value.trim().length < 2) setSuggestions([]);
           }}
           onFocus={() => setOpen("description")}
-          onBlur={() => setTimeout(() => setOpen(null), 150)}
+          onBlur={() => {
+            setTimeout(() => setOpen(null), 150);
+            onDescriptionBlur?.();
+          }}
           autoComplete="off"
           className="w-48 rounded border border-ink/10 bg-white px-2 py-1"
         />
@@ -105,20 +111,17 @@ function SuggestionList({
       {searching && <li className="px-3 py-2 text-ink/40">Searching…</li>}
       {!searching &&
         suggestions.map((s) => (
-          <li key={s.id}>
+          <li key={s.key}>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onSelect(s)}
               className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-gold/10"
             >
-              <span className="text-ink">
-                {s.description}
-                {s.brand && <span className="text-ink/40"> ({s.brand})</span>}
-              </span>
+              <span className="text-ink">{s.description}</span>
               {s.packSizeLabel && <span className="text-sm text-ink/70">{s.packSizeLabel}</span>}
               <span className="text-xs text-ink/50">
-                {[s.itemNumber, s.vendorName].filter(Boolean).join(" · ")}
+                {[s.itemNumber, s.categoryName].filter(Boolean).join(" · ")}
               </span>
             </button>
           </li>
