@@ -1,6 +1,7 @@
 "use client";
 
 import { SubmitButton } from "@/components/submit-button";
+import { formatUnitCost } from "@/lib/pack-description";
 import { useMemo, useState } from "react";
 
 type Vendor = { id: string; name: string; vendor_number: string | null };
@@ -105,10 +106,10 @@ export function OfferForm({
               className="input"
             />
           </label>
-          <div className="flex w-32 flex-col gap-1 text-sm">
+          <div className="flex w-36 flex-col gap-1 text-sm">
             <span className="text-ink/70">Works out to</span>
             <div className="input flex items-center bg-ink/[0.03] font-mono text-ink/70">
-              {costPerUnit != null ? `${costPerUnit.toFixed(4)}/${innerUnitLabel ?? ""}` : "—"}
+              {costPerUnit != null ? formatUnitCost(costPerUnit, innerUnitLabel) : "—"}
             </div>
           </div>
         </div>

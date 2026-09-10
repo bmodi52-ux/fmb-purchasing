@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { categoryLabelsById } from "@/lib/categories";
+import { describePack } from "@/lib/pack-description";
 
 /**
  * Everything currently waiting on a person's judgement, in one place.
@@ -52,6 +53,7 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
     { data: offers },
     { data: packs },
     { data: categoryRows },
+    { data: units },
   ] = await Promise.all([
     // Money recorded against an expense that nobody has said what it was for.
     // Top of the list: it is the only entry here that represents spend with no
@@ -85,12 +87,15 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
     // it provisional — see migration 0014.
     admin
       .from("item_pack_sizes")
-      .select("id, item_id, inner_quantity, pack_count, items ( name )")
+      .select("id, item_id, inner_quantity, inner_unit_id, pack_count, sold_loose, items ( name )")
       .eq("contents_confirmed", false)
       .limit(100),
 
     admin.from("categories").select("id, name, parent_category_id"),
+
+    admin.from("units").select("id, label"),
   ]);
+  const unitLabelById = new Map((units ?? []).map((u) => [u.id as string, u.label as string]));
 
   void categoryLabelsById(categoryRows ?? []);
 
@@ -154,7 +159,12 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
       kind: "unconfirmed_pack",
       id: row.id as string,
       title: item?.name ?? "Unnamed item",
-      detail: `Pack contents unconfirmed (${row.inner_quantity} × ${row.pack_count}) — per-unit costs are provisional`,
+      detail: `Nobody has confirmed what's in this pack (${describePack({
+        innerQuantity: row.inner_quantity,
+        unitLabel: unitLabelById.get(row.inner_unit_id as string),
+        packCount: row.pack_count,
+        soldLoose: row.sold_loose,
+      })}) — per-unit costs are provisional`,
       href: `/pricelist/${row.item_id}`,
       weight: 4,
       amount: null,
