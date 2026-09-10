@@ -43,7 +43,7 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
   if (!name) return { error: "Item name is required.", success: false };
 
   const canonicalUnitId = fieldOrNull(formData, "canonical_unit_id");
-  if (!canonicalUnitId) return { error: "Canonical unit is required.", success: false };
+  if (!canonicalUnitId) return { error: "Choose what prices are compared per.", success: false };
 
   const admin = createAdminClient();
   const categoryId = fieldOrNull(formData, "category_id");

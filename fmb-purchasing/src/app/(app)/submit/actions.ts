@@ -17,6 +17,7 @@ import {
 import { fiscalYearForReceipt } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
 import { leafCategories } from "@/lib/categories";
+import { packTitle } from "@/lib/pack-description";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
 import { ilikeContains, orFilter } from "@/lib/pgrst-filter";
 import { reportError } from "@/lib/errors";
@@ -440,15 +441,6 @@ export type ItemLookupSuggestion = {
   categoryName: string | null;
 };
 
-function formatPackSizeLabel(
-  packSize: { inner_quantity: number; pack_count: number; total_quantity: number },
-  unitLabel: string
-): string {
-  return packSize.pack_count > 1
-    ? `${packSize.inner_quantity} ${unitLabel} × ${packSize.pack_count}`.trim()
-    : `${packSize.inner_quantity} ${unitLabel}`.trim();
-}
-
 /** Item #/name typeahead for manual entry line items — matches at the Item
  * level, then surfaces each approved vendor offer under it (pack size +
  * vendor) as a separate suggestion. */
@@ -474,7 +466,7 @@ export async function searchPricelistItemsAction(query: string): Promise<ItemLoo
 
   const { data: packSizes } = await admin
     .from("item_pack_sizes")
-    .select("id, item_id, inner_quantity, inner_unit_id, pack_count, total_quantity")
+    .select("id, item_id, inner_quantity, inner_unit_id, pack_count, label, sold_loose")
     .in("item_id", itemIds);
   const packSizeById = new Map((packSizes ?? []).map((p) => [p.id, p]));
   const packSizeIds = [...packSizeById.keys()];
@@ -507,7 +499,14 @@ export async function searchPricelistItemsAction(query: string): Promise<ItemLoo
       id: r.id,
       itemNumber: item.item_number,
       description: item.name,
-      packSizeLabel: formatPackSizeLabel(packSize, unitLabelById.get(packSize.inner_unit_id) ?? ""),
+      // The pack's own name first — "2 - pack" is what whoever set it up
+      // called it, and the shape beside it is what tells two packs apart.
+      packSizeLabel: packTitle(packSize.label, {
+        innerQuantity: packSize.inner_quantity,
+        unitLabel: unitLabelById.get(packSize.inner_unit_id),
+        packCount: packSize.pack_count,
+        soldLoose: packSize.sold_loose,
+      }),
       brand: r.brand,
       vendorName: r.vendor_id ? (vendorNameById.get(r.vendor_id) ?? null) : null,
       categoryName: item.category_id ? (categoryNameById.get(item.category_id) ?? null) : null,

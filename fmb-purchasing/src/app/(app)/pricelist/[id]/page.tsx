@@ -20,13 +20,15 @@ import {
 import { ReviewDecision, StatusPill } from "@/components/review-decision";
 import { OfferForm } from "./offer-form";
 import { PackSizeForm } from "./pack-size-form";
+import { PackFields } from "../pack-fields";
+import { describePack, formatUnitCost, packTitle, unitName, unitOptionLabel } from "@/lib/pack-description";
 import { MergePanel, type DuplicateCandidate } from "./merge-panel";
 import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
   name: "Name",
   category_id: "Category",
-  canonical_unit_id: "Canonical unit",
+  canonical_unit_id: "Prices compared per",
   comments: "Comments",
 };
 
@@ -155,34 +157,22 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     currentCategory && !assignableCategories.some((c) => c.id === currentCategory.id)
       ? [...assignableCategories, currentCategory]
       : assignableCategories;
-  /**
-   * "1 L × 10 (10 L)" for a carton, "Loose (per kg)" when bought by weight
-   * rather than in packs — otherwise a loose item reads as a 1 kg bag.
-   */
-  function packShape(p: {
-    inner_quantity: number;
-    inner_unit_id: string;
-    pack_count: number;
-    total_quantity: number;
-    sold_loose?: boolean;
-  }) {
-    const unit = unitLabelById.get(p.inner_unit_id) ?? "";
-    if (p.sold_loose && p.pack_count === 1 && Number(p.inner_quantity) === 1) {
-      return `Loose (per ${unit})`.trim();
-    }
-    return p.pack_count > 1
-      ? `${p.inner_quantity} ${unit} × ${p.pack_count} (${p.total_quantity} ${unit})`
-      : `${p.inner_quantity} ${unit}`.trim();
-  }
+  const packShapeOf = (p: { inner_quantity: number; inner_unit_id: string; pack_count: number; sold_loose?: boolean }) => ({
+    innerQuantity: p.inner_quantity,
+    unitLabel: unitLabelById.get(p.inner_unit_id),
+    packCount: p.pack_count,
+    soldLoose: p.sold_loose,
+  });
 
-  const packSizeLabelById = new Map(
-    (packSizes ?? []).map((p) => [p.id, p.label ? `${p.label} — ${packShape(p)}` : packShape(p)])
-  );
+  const packSizeLabelById = new Map((packSizes ?? []).map((p) => [p.id, packTitle(p.label, packShapeOf(p))]));
 
   function itemDisplayValue(field: string, value: unknown): string {
     if (value == null || value === "") return "—";
     if (field === "category_id") return categoryNameById.get(String(value)) ?? "—";
-    if (field === "canonical_unit_id") return unitLabelById.get(String(value)) ?? "—";
+    if (field === "canonical_unit_id") {
+      const label = unitLabelById.get(String(value));
+      return label ? unitOptionLabel(label) : "—";
+    }
     return String(value);
   }
 
@@ -270,7 +260,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-ink/70">Canonical unit (for costing)</span>
+            <span className="text-ink/70">Compare prices per</span>
             <select
               name="canonical_unit_id"
               defaultValue={item.canonical_unit_id}
@@ -280,10 +270,11 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             >
               {(units ?? []).map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.label}
+                  {unitOptionLabel(u.label)}
                 </option>
               ))}
             </select>
+            <span className="text-xs text-ink/45">e.g. kg for rice, L for milk, item for roti</span>
           </label>
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
             <span className="text-ink/70">Comments</span>
@@ -307,20 +298,20 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           <div className="grid gap-4 sm:grid-cols-3">
             <Stat
               label="Most recent"
-              value={`$${Number(itemCost.latest_cost_per_base_unit).toFixed(4)}/${itemCost.base_unit_code}`}
+              value={formatUnitCost(Number(itemCost.latest_cost_per_base_unit), itemCost.base_unit_code)}
               note={itemCost.latest_receipt_date ? `as at ${itemCost.latest_receipt_date}` : null}
             />
             <Stat
               label="Average paid"
-              value={`$${Number(itemCost.avg_cost_per_base_unit).toFixed(4)}/${itemCost.base_unit_code}`}
+              value={formatUnitCost(Number(itemCost.avg_cost_per_base_unit), itemCost.base_unit_code)}
               note={`across ${itemCost.vendor_count} vendor(s)`}
             />
             <Stat label="Purchases" value={String(itemCost.purchase_count)} note="receipt lines" />
             {!itemCost.all_contents_confirmed && (
               <p className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-ink/80 sm:col-span-3">
-                <strong>Provisional.</strong> At least one purchase is against a pack size whose contents haven&apos;t
-                been confirmed, so these figures are per <em>pack</em>, not per {itemCost.base_unit_code}. Set what one
-                unit contains below and they&apos;ll correct themselves.
+                <strong>Provisional.</strong> At least one purchase is against a pack nobody has confirmed the contents
+                of, so these figures are per <em>pack</em>, not per {unitName(itemCost.base_unit_code)}. Confirm
+                what&apos;s in the pack below and they&apos;ll correct themselves.
               </p>
             )}
           </div>
@@ -361,7 +352,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                       {o.pack_price != null ? `$${o.pack_price}` : "—"}
                       {cost?.cost_per_base_unit != null && (
                         <span className="ml-2 text-ink/50">
-                          (${cost.cost_per_base_unit.toFixed(4)}/{cost.base_unit_code})
+                          ({formatUnitCost(cost.cost_per_base_unit, cost.base_unit_code)})
                         </span>
                       )}
                     </span>
@@ -468,8 +459,13 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
               <div key={p.id} className="rounded-md border border-ink/10 bg-white p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium text-ink">
-                    {p.label && <span>{p.label} — </span>}
-                    <span className="font-mono">{packShape(p)}</span>
+                    {p.label ? (
+                      <>
+                        {p.label} <span className="font-normal text-ink/60">({describePack(packShapeOf(p))})</span>
+                      </>
+                    ) : (
+                      describePack(packShapeOf(p))
+                    )}
                     {!p.contents_confirmed && (
                       <span className="ml-2 rounded-full bg-gold/20 px-2 py-0.5 text-xs font-normal text-gold-deep">
                         contents not confirmed
@@ -490,7 +486,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                 {canEdit && (
                   <details className="mb-3" open={!p.contents_confirmed}>
                     <summary className="cursor-pointer text-sm text-ink/50 hover:text-ink">
-                      {p.contents_confirmed ? "Edit pack size" : "Confirm what one unit contains"}
+                      {p.contents_confirmed ? "Edit pack size" : "Confirm what's in this pack"}
                     </summary>
                     <div className="mt-2 rounded-md border border-ink/10 bg-cream/40 p-3">
                       <PackSizeForm
@@ -556,31 +552,14 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
         </div>
 
         {canEdit && (
-          <form action={addPackSize} className="mt-5 flex flex-wrap items-end gap-2 border-t border-ink/10 pt-4">
+          <form action={addPackSize} className="mt-5 flex flex-col gap-3 border-t border-ink/10 pt-4">
             <input type="hidden" name="item_id" value={item.id} />
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink/70">Each holds</span>
-              <input name="inner_quantity" type="number" step="any" defaultValue={1} required className="input w-24" />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink/70">Unit</span>
-              <select name="inner_unit_id" defaultValue={item.canonical_unit_id} required className="input w-28">
-                {(units ?? []).map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink/70">How many per pack</span>
-              <input name="pack_count" type="number" step="1" min={1} defaultValue={1} required className="input w-28" />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink/70">Label (optional)</span>
-              <input name="label" placeholder="e.g. 1L x 10 carton" className="input" />
-            </label>
-            <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink/40">Add another pack size</p>
+            <PackFields
+              units={units ?? []}
+              defaults={{ innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
+            />
+            <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
               + Add pack size
             </SubmitButton>
           </form>

@@ -116,8 +116,9 @@ function SuggestionList({
                 {s.description}
                 {s.brand && <span className="text-ink/40"> ({s.brand})</span>}
               </span>
-              <span className="font-mono text-xs text-ink/50">
-                {s.itemNumber} {s.packSizeLabel ? `· ${s.packSizeLabel}` : ""} {s.vendorName ? `· ${s.vendorName}` : ""}
+              {s.packSizeLabel && <span className="text-sm text-ink/70">{s.packSizeLabel}</span>}
+              <span className="text-xs text-ink/50">
+                {[s.itemNumber, s.vendorName].filter(Boolean).join(" · ")}
               </span>
             </button>
           </li>

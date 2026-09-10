@@ -3,6 +3,7 @@
 import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { ColumnsDataTable, type ColumnDef, type BulkAction } from "@/components/columns-data-table";
+import { formatUnitCost, packTitle } from "@/lib/pack-description";
 import { reviewOffer, bulkReviewOffers } from "./actions";
 import { collapseToItems } from "./collapse-offers";
 
@@ -37,21 +38,18 @@ export type OfferRow = {
 };
 
 
-/** "1 L × 10 (10 L)" for a carton, "Loose (per kg)" when bought by weight. */
 function formatPackSize(r: OfferRow): string {
-  const unit = r.innerUnitLabel ?? "";
-  const shape =
-    r.soldLoose && r.packCount === 1 && Number(r.innerQuantity) === 1
-      ? `Loose (per ${unit})`.trim()
-      : r.packCount > 1
-        ? `${r.innerQuantity} ${unit} × ${r.packCount} (${r.totalQuantity} ${unit})`
-        : `${r.innerQuantity} ${unit}`.trim();
-  return r.packLabel ? `${r.packLabel} — ${shape}` : shape;
+  return packTitle(r.packLabel, {
+    innerQuantity: r.innerQuantity,
+    unitLabel: r.innerUnitLabel,
+    packCount: r.packCount,
+    soldLoose: r.soldLoose,
+  });
 }
 
 function formatCostPerUnit(r: OfferRow): string {
   if (r.costPerBaseUnit == null) return "—";
-  return `$${r.costPerBaseUnit.toFixed(4)}/${r.baseUnitCode ?? ""}`;
+  return formatUnitCost(r.costPerBaseUnit, r.baseUnitCode);
 }
 
 function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
@@ -100,7 +98,7 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
           {!r.contentsConfirmed && (
             <Link
               href={`/pricelist/${r.itemId}`}
-              title="Nobody has said what one unit contains, so cost per unit is per pack"
+              title="Nobody has confirmed what's in this pack yet, so cost per unit is per pack"
               className="ml-1 text-gold-deep hover:underline"
             >
               ⚠
@@ -132,7 +130,7 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
       ),
       exportValue: (r) =>
         r.costPerBaseUnit != null
-          ? `${r.costPerBaseUnit.toFixed(4)}/${r.baseUnitCode ?? ""}${r.contentsConfirmed ? "" : " (provisional)"}`
+          ? `${formatUnitCost(r.costPerBaseUnit, r.baseUnitCode, { currency: false })}${r.contentsConfirmed ? "" : " (provisional)"}`
           : "",
     },
     { key: "comments", label: "Comments", render: (r) => r.comments || "—", exportValue: (r) => r.comments ?? "" },

@@ -1,14 +1,18 @@
 "use client";
 
 import { SubmitButton } from "@/components/submit-button";
+import { formatUnitCost, unitOptionLabel } from "@/lib/pack-description";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { createItem, type CreateItemState } from "./actions";
+import { PackFields, type PackFieldValues } from "./pack-fields";
 
 const initialState: CreateItemState = { error: null, success: false };
 
 type Vendor = { id: string; name: string; vendor_number: string | null };
 type Category = { id: string; name: string };
 type Unit = { id: string; code: string; label: string };
+
+const BLANK_PACK: PackFieldValues = { innerQuantity: "1", innerUnitId: "", packCount: "1" };
 
 export function AddItemForm({
   vendors,
@@ -24,18 +28,18 @@ export function AddItemForm({
   const [state, formAction, pending] = useActionState(createItem, initialState);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const [innerQuantity, setInnerQuantity] = useState("1");
-  const [packCount, setPackCount] = useState("1");
+  const [pack, setPack] = useState<PackFieldValues>(BLANK_PACK);
+  // The pack fields keep their own state; a new key is how they start over.
+  const [packFieldsKey, setPackFieldsKey] = useState(0);
   const [packPrice, setPackPrice] = useState("");
   const [canonicalUnitId, setCanonicalUnitId] = useState("");
-  const [innerUnitId, setInnerUnitId] = useState("");
 
   const totalQuantity = useMemo(() => {
-    const inner = Number(innerQuantity);
-    const count = Number(packCount);
+    const inner = Number(pack.innerQuantity);
+    const count = Number(pack.packCount);
     if (!inner || !count) return null;
     return Math.round(inner * count * 1000) / 1000;
-  }, [innerQuantity, packCount]);
+  }, [pack.innerQuantity, pack.packCount]);
 
   const costPerUnit = useMemo(() => {
     const price = Number(packPrice);
@@ -43,8 +47,7 @@ export function AddItemForm({
     return Math.round((price / totalQuantity) * 10000) / 10000;
   }, [packPrice, totalQuantity]);
 
-  const innerUnitLabel =
-    units.find((u) => u.id === (innerUnitId || canonicalUnitId))?.label ?? "";
+  const innerUnitLabel = units.find((u) => u.id === (pack.innerUnitId || canonicalUnitId))?.label ?? "";
 
   // Resets local form state in response to the server action's result — an
   // external system, not a derivable value — so an effect is the right tool.
@@ -52,11 +55,10 @@ export function AddItemForm({
     if (state.success) {
       formRef.current?.reset();
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setInnerQuantity("1");
-      setPackCount("1");
+      setPack(BLANK_PACK);
+      setPackFieldsKey((k) => k + 1);
       setPackPrice("");
       setCanonicalUnitId("");
-      setInnerUnitId("");
       onSuccess?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,7 +83,7 @@ export function AddItemForm({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-ink/70">Canonical unit (for costing)</span>
+          <span className="text-ink/70">Compare prices per</span>
           <select
             name="canonical_unit_id"
             required
@@ -92,65 +94,24 @@ export function AddItemForm({
             <option value="">—</option>
             {units.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.label}
+                {unitOptionLabel(u.label)}
               </option>
             ))}
           </select>
+          <span className="text-xs text-ink/45">e.g. kg for rice, L for milk, item for roti</span>
         </label>
       </div>
 
       <div className="border-t border-ink/10 pt-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/40">First pack size</p>
-        <div className="flex flex-wrap gap-2">
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            <span className="text-ink/70">Each holds</span>
-            <input
-              name="inner_quantity"
-              type="number"
-              step="any"
-              value={innerQuantity}
-              onChange={(e) => setInnerQuantity(e.target.value)}
-              className="input"
-            />
-          </label>
-          <label className="flex w-28 flex-col gap-1 text-sm">
-            <span className="text-ink/70">Unit</span>
-            <select
-              name="inner_unit_id"
-              className="input"
-              value={innerUnitId}
-              onChange={(e) => setInnerUnitId(e.target.value)}
-            >
-              <option value="">— use canonical —</option>
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex w-32 flex-col gap-1 text-sm">
-            <span className="text-ink/70">How many per pack</span>
-            <input
-              name="pack_count"
-              type="number"
-              step="1"
-              min={1}
-              value={packCount}
-              onChange={(e) => setPackCount(e.target.value)}
-              className="input"
-            />
-          </label>
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            <span className="text-ink/70">Label (optional)</span>
-            <input name="pack_label" placeholder="e.g. 1L x 10 carton" className="input" />
-          </label>
-        </div>
-        {totalQuantity != null && (
-          <p className="mt-2 font-mono text-xs text-ink/50">
-            Pack contains {totalQuantity} {innerUnitLabel}
-          </p>
-        )}
+        <PackFields
+          key={packFieldsKey}
+          units={units}
+          defaults={BLANK_PACK}
+          labelName="pack_label"
+          sameAsUnitId={canonicalUnitId}
+          onChange={setPack}
+        />
       </div>
 
       <div className="border-t border-ink/10 pt-4">
@@ -193,10 +154,10 @@ export function AddItemForm({
                 className="input"
               />
             </label>
-            <div className="flex w-32 flex-col gap-1 text-sm">
+            <div className="flex w-36 flex-col gap-1 text-sm">
               <span className="text-ink/70">Works out to</span>
               <div className="input flex items-center bg-ink/[0.03] font-mono text-ink/70">
-                {costPerUnit != null ? `${costPerUnit.toFixed(4)}/${innerUnitLabel}` : "—"}
+                {costPerUnit != null ? formatUnitCost(costPerUnit, innerUnitLabel) : "—"}
               </div>
             </div>
           </div>
