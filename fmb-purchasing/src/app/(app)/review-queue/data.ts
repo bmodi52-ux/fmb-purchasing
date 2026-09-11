@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { categoryLabelsById } from "@/lib/categories";
 import { describePack } from "@/lib/pack-description";
 
@@ -62,7 +63,7 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
       .from("expense_line_items")
       .select("id, expense_id, description_raw, line_total, expenses!inner ( expense_number, status, vendor_name_raw )")
       .eq("kind", "unallocated")
-      .neq("expenses.status", "declined")
+      .not("expenses.status", "in", NOT_SPEND_FILTER)
       .limit(100),
 
     // Extraction said "unclear" rather than guessing — the whole point of
@@ -72,7 +73,7 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
       .select("id, expense_id, description_raw, line_total, category_id, expenses!inner ( expense_number, status, vendor_name_raw )")
       .is("category_id", null)
       .eq("kind", "goods")
-      .neq("expenses.status", "declined")
+      .not("expenses.status", "in", NOT_SPEND_FILTER)
       .limit(100),
 
     admin.from("vendors").select("id, name, vendor_number, created_at").eq("status", "pending").limit(100),

@@ -82,6 +82,9 @@ export default async function AllExpensesPage({
       "id, expense_number, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at",
       { count: "exact" }
     )
+    // Withdrawn submissions were taken back before anyone decided them (0044);
+    // they stay on the submitter's own list and are not part of the ledger.
+    .neq("status", "withdrawn")
     .order("created_at", { ascending: false });
 
   if (showAllYears) query = query.range(0, ALL_YEARS_CAP - 1);

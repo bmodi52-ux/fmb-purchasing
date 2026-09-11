@@ -1,4 +1,5 @@
 import { unstable_cache, updateTag } from "next/cache";
+import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { categoryLabelsById } from "@/lib/categories";
 import { type ExpenseRecord, type LineRecord } from "./aggregate";
@@ -133,7 +134,7 @@ const loadCachedReportRows = unstable_cache(
           "id, expense_number, vendor_id, vendor_name_raw, status, receipt_date, created_at, total, gst_amount, fiscal_year_hijri"
         )
         .in("fiscal_year_hijri", years)
-        .neq("status", "declined"),
+        .not("status", "in", NOT_SPEND_FILTER),
       admin.from("categories").select("id, name, parent_category_id"),
       admin.from("vendors").select("id, name"),
     ]);

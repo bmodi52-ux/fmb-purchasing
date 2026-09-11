@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const RECEIPTS_BUCKET = "receipts";
@@ -131,7 +132,7 @@ export async function expenseIdsWithFile(
     .from("expense_attachments")
     .select("expense_id, expenses!inner ( status )")
     .eq("sha256", sha256)
-    .neq("expenses.status", "declined");
+    .not("expenses.status", "in", NOT_SPEND_FILTER);
 
   return [...new Set((data ?? []).map((row) => row.expense_id as string))];
 }

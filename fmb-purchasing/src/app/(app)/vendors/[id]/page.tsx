@@ -1,4 +1,5 @@
 import { SubmitButton } from "@/components/submit-button";
+import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -509,7 +510,7 @@ async function ProductsTab({
         .from("expense_line_items")
         .select("pricelist_item_id, line_total, quantity, expenses!inner ( receipt_date, status, created_at )")
         .in("pricelist_item_id", offerIds)
-        .neq("expenses.status", "declined")
+        .not("expenses.status", "in", NOT_SPEND_FILTER)
     : { data: [] };
 
   type Purchase = { lineTotal: number; quantity: number | null; date: string | null; submitted: string };

@@ -150,6 +150,56 @@ describe("pay_expenses", () => {
   });
 });
 
+describe("withdraw_expenses", () => {
+  test("withdraws the submitter's own waiting expenses and records it", async () => {
+    const e = await newExpense();
+    assert.equal(await scalar(db, "select withdraw_expenses($1::uuid[], $2)", [[e], ids.submitter]), 1);
+    assert.equal(await scalar(db, "select status::text from expenses where id = $1", [e]), "withdrawn");
+    assert.deepEqual(
+      (await history(e)).map((h) => [h.from_status, h.to_status]),
+      [["submitted", "withdrawn"]]
+    );
+  });
+
+  test("skips someone else's expense and anything already decided", async () => {
+    const decided = await newExpense("approved");
+    const waiting = await newExpense();
+    assert.equal(
+      await scalar(db, "select withdraw_expenses($1::uuid[], $2)", [[decided, waiting], ids.approver]),
+      0
+    );
+    assert.equal(await scalar(db, "select withdraw_expenses($1::uuid[], $2)", [[decided], ids.submitter]), 0);
+    assert.equal(await scalar(db, "select status::text from expenses where id = $1", [decided]), "approved");
+  });
+
+  test("a withdrawn purchase is not a paid unit cost", async () => {
+    const unit = await scalar<string>(db, "select id from units where code = 'kg'");
+    const item = await scalar<string>(
+      db,
+      "insert into items (name, canonical_unit_id) values ('Withdrawn Rice', $1) returning id",
+      [unit]
+    );
+    const pack = await scalar<string>(
+      db,
+      "insert into item_pack_sizes (item_id, inner_quantity, inner_unit_id, pack_count, contents_confirmed) values ($1, 10, $2, 1, true) returning id",
+      [item, unit]
+    );
+    const offer = await scalar<string>(
+      db,
+      "insert into pricelist_items (pack_size_id, status) values ($1, 'approved') returning id",
+      [pack]
+    );
+    const e = await newExpense();
+    await db.query(
+      "insert into expense_line_items (expense_id, pricelist_item_id, description_raw, quantity, line_total, kind) values ($1, $2, 'Rice 10kg', 1, 20, 'goods')",
+      [e, offer]
+    );
+    assert.equal(await scalar<number>(db, "select count(*)::int from item_paid_unit_costs where item_id = $1", [item]), 1);
+    await db.query("select withdraw_expenses($1::uuid[], $2)", [[e], ids.submitter]);
+    assert.equal(await scalar<number>(db, "select count(*)::int from item_paid_unit_costs where item_id = $1", [item]), 0);
+  });
+});
+
 describe("reverse_payment", () => {
   test("returns the expense to approved and removes a run that no longer covers anything", async () => {
     const e = await newExpense("approved", ids.payee);

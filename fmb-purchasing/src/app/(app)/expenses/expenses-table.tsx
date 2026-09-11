@@ -104,6 +104,7 @@ function StatusBadge({ status }: { status: string }) {
     approved: "bg-palm/15 text-palm",
     declined: "bg-maroon/10 text-maroon",
     paid: "bg-ink/10 text-ink/70",
+    withdrawn: "bg-ink/5 text-ink/50",
   };
   return <span className={`rounded-full px-2 py-0.5 text-xs ${styles[status] ?? ""}`}>{status}</span>;
 }

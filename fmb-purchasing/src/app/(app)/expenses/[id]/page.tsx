@@ -43,6 +43,7 @@ const STATUS_LABEL: Record<string, string> = {
   approved: "Approved",
   declined: "Declined",
   paid: "Paid",
+  withdrawn: "Withdrawn",
 };
 
 /**
@@ -55,6 +56,7 @@ const EVENT_LABEL: Record<string, string> = {
   approved: "Approved",
   declined: "Declined",
   paid: "Paid",
+  withdrawn: "Withdrawn",
 };
 
 const STATUS_CLASS: Record<string, string> = {
@@ -62,6 +64,7 @@ const STATUS_CLASS: Record<string, string> = {
   approved: "bg-palm/15 text-palm",
   declined: "bg-maroon/10 text-maroon",
   paid: "bg-palm/20 text-palm",
+  withdrawn: "bg-ink/5 text-ink/50",
 };
 
 /**

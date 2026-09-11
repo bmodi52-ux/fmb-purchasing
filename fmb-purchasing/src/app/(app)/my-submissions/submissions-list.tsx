@@ -3,7 +3,7 @@
 import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { useState } from "react";
-import { deleteExpense, bulkDeleteExpenses } from "./actions";
+import { withdrawExpense, bulkWithdrawExpenses } from "./actions";
 import { formatDate, formatPlainDate } from "@/lib/format";
 import { FilterableSection, type BulkAction, type SortOption } from "@/components/filterable-section";
 import { ReceiptViewer } from "@/components/receipt-viewer";
@@ -45,7 +45,7 @@ const SORT_OPTIONS: SortOption<SubmissionRow>[] = [
   { key: "vendor", label: "Vendor", value: (e) => e.vendor_name_raw ?? "" },
 ];
 
-type Tab = "all" | "submitted" | "approved" | "paid" | "declined";
+type Tab = "all" | "submitted" | "approved" | "paid" | "declined" | "withdrawn";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "all", label: "All" },
@@ -53,6 +53,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "approved", label: "Approved" },
   { key: "paid", label: "Paid" },
   { key: "declined", label: "Declined" },
+  { key: "withdrawn", label: "Withdrawn" },
 ];
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
@@ -90,6 +91,7 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
     approved: expenses.filter((e) => e.status === "approved").length,
     paid: expenses.filter((e) => e.status === "paid").length,
     declined: expenses.filter((e) => e.status === "declined").length,
+    withdrawn: expenses.filter((e) => e.status === "withdrawn").length,
   };
 
   const inTab = tab === "all" ? expenses : expenses.filter((e) => e.status === tab);
@@ -101,10 +103,10 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
 
   const bulkActions: BulkAction<SubmissionRow>[] = [
     {
-      label: "Delete selected",
+      label: "Withdraw selected",
       variant: "danger",
       onClick: (selected) =>
-        bulkDeleteExpenses(selected.filter((e) => e.status === "submitted").map((e) => e.id)),
+        bulkWithdrawExpenses(selected.filter((e) => e.status === "submitted").map((e) => e.id)),
     },
   ];
 
@@ -120,7 +122,9 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div role="tablist" aria-label="Show by status" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-        {TABS.map((t) => (
+        {/* Withdrawn only appears once something has been withdrawn — for
+            most people it would be an empty tab for ever. */}
+        {TABS.filter((t) => t.key !== "withdrawn" || counts.withdrawn > 0).map((t) => (
           <button
             key={t.key}
             type="button"
@@ -212,6 +216,18 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                         </div>
                       )}
 
+                      {e.status === "withdrawn" && (
+                        <div className="flex flex-col gap-2 rounded-md bg-ink/5 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-ink/70">You withdrew this. It isn&apos;t counted anywhere, but stays on the record.</p>
+                          <Link
+                            href={`/submit?resubmit=${e.id}`}
+                            className="self-start whitespace-nowrap rounded-md border border-ink/15 px-3 py-1.5 text-sm text-ink/80 hover:border-ink/30 sm:self-auto"
+                          >
+                            Submit again
+                          </Link>
+                        </div>
+                      )}
+
                       {isOpen && <SubmissionDetails expense={e} />}
                     </div>
                   </div>
@@ -228,15 +244,18 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
 /** Where the expense is along Submitted → Approved → Paid, with the dates it got there. */
 function Progress({ expense: e }: { expense: SubmissionRow }) {
   const declined = e.status === "declined";
+  const withdrawn = e.status === "withdrawn";
   const approvedOrPaid = e.status === "approved" || e.status === "paid";
 
   const steps: { label: string; date: string | null; done: boolean; bad?: boolean }[] = [
     { label: "Submitted", date: formatDate(e.created_at), done: true },
     declined
       ? { label: "Declined", date: e.decided_at ? formatDate(e.decided_at) : null, done: true, bad: true }
-      : { label: "Approved", date: e.decided_at && approvedOrPaid ? formatDate(e.decided_at) : null, done: approvedOrPaid },
+      : withdrawn
+        ? { label: "Withdrawn", date: null, done: true, bad: true }
+        : { label: "Approved", date: e.decided_at && approvedOrPaid ? formatDate(e.decided_at) : null, done: approvedOrPaid },
   ];
-  if (!declined) {
+  if (!declined && !withdrawn) {
     steps.push({
       label: "Paid",
       date: e.payment_date ? formatPlainDate(e.payment_date) : null,
@@ -303,9 +322,11 @@ function SubmissionDetails({ expense: e }: { expense: SubmissionRow }) {
             <Link href={`/submit?edit=${e.id}`} className="px-2 py-1.5 text-ink/70 underline hover:text-ink">
               Edit
             </Link>
-            <form action={deleteExpense}>
+            <form action={withdrawExpense}>
               <input type="hidden" name="expense_id" value={e.id} />
-              <SubmitButton className="px-2 py-1.5 text-maroon/70 underline hover:text-maroon">Delete</SubmitButton>
+              <SubmitButton pendingLabel="Withdrawing…" className="px-2 py-1.5 text-maroon/70 underline hover:text-maroon">
+                Withdraw
+              </SubmitButton>
             </form>
           </>
         )}
@@ -320,12 +341,14 @@ function StatusBadge({ status }: { status: string }) {
     approved: "bg-palm/15 text-palm",
     declined: "bg-maroon/10 text-maroon",
     paid: "bg-ink/10 text-ink/70",
+    withdrawn: "bg-ink/5 text-ink/50",
   };
   const labels: Record<string, string> = {
     submitted: "waiting",
     approved: "approved",
     declined: "declined",
     paid: "paid",
+    withdrawn: "withdrawn",
   };
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs ${styles[status] ?? ""}`}>{labels[status] ?? status}</span>

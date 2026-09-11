@@ -15,6 +15,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const LEDGERED_MIGRATIONS = [
   "0041_schema_migrations.sql",
   "0042_atomic_decisions_and_payments.sql",
+  "0043_withdrawn_status.sql",
+  "0044_withdraw_expenses.sql",
 ] as const;
 
 export type MigrationStatus =

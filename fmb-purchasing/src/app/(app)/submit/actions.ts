@@ -33,6 +33,7 @@ import { packTitle } from "@/lib/pack-description";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
 import { ilikeContains, orFilter } from "@/lib/pgrst-filter";
 import { reportError } from "@/lib/errors";
+import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { lineGst, lineSubtotal, reconcile, round2, sumLineGst } from "@/lib/expense-money";
 import {
   resolvePayee,
@@ -1083,7 +1084,10 @@ export type ResubmitSource = {
  * receipt file, and a note saying what it replaces — so fixing the one thing
  * that was wrong is the whole job. The declined expense stays on the record.
  *
- * Only the submitter's own, and only while it is declined.
+ * Also the way back from a withdrawn submission (0044), which is "Submit again"
+ * on My submissions.
+ *
+ * Only the submitter's own, and only while it is declined or withdrawn.
  */
 export async function getExpenseForResubmit(expenseId: string): Promise<ResubmitSource | null> {
   const user = await getCurrentUser();
@@ -1092,10 +1096,14 @@ export async function getExpenseForResubmit(expenseId: string): Promise<Resubmit
 
   const admin = createAdminClient();
   const { data: expense } = await admin.from("expenses").select("*").eq("id", expenseId).maybeSingle();
-  if (!expense || expense.submitted_by !== user.id || expense.status !== "declined") return null;
+  if (!expense || expense.submitted_by !== user.id) return null;
+  if (expense.status !== "declined" && expense.status !== "withdrawn") return null;
 
   const input = await expenseAsInput(admin, expense);
-  const note = `Corrected resubmission of ${expense.expense_number ?? "a declined expense"}.`;
+  const note =
+    expense.status === "withdrawn"
+      ? `Resubmission of ${expense.expense_number ?? "a withdrawn expense"}, which was withdrawn.`
+      : `Corrected resubmission of ${expense.expense_number ?? "a declined expense"}.`;
   return {
     sourceId: expense.id,
     sourceNumber: expense.expense_number,
@@ -1300,7 +1308,7 @@ export async function findPossibleDuplicates(input: {
         .select("id")
         .in("vendor_id", vendorIds)
         .ilike("invoice_number", invoice)
-        .neq("status", "declined")
+        .not("status", "in", NOT_SPEND_FILTER)
         .limit(5);
       for (const row of data ?? []) if (!found.has(row.id)) found.set(row.id, "same-invoice");
     }
