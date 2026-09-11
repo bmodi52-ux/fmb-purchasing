@@ -13,6 +13,9 @@ import { reopenExpense, reviewExpense } from "../../approvals/actions";
 import { ReviewDecision } from "@/components/review-decision";
 import { reversePayment } from "../../payments/actions";
 import { GST_CONCERN_LABEL, gstConcerns } from "@/lib/vendor-registration";
+import { storedGstDisagreement } from "@/lib/expense-money";
+import { setLineCapital } from "./actions";
+import { SubmitButton } from "@/components/submit-button";
 
 /**
  * The tab carries the entry number, not the word "Expense".
@@ -88,7 +91,7 @@ export default async function ExpenseDetailPage({
   const { data: expense } = await admin
     .from("expenses")
     .select(
-      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, payee_id, created_at"
+      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, payee_id, created_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -118,7 +121,7 @@ export default async function ExpenseDetailPage({
     admin
       .from("expense_line_items")
       .select(
-        "id, description_raw, category_id, pricelist_item_id, quantity, unit_price, line_subtotal, line_gst, line_total, normalized_quantity, normalized_unit, sort_order"
+        "id, description_raw, kind, category_id, pricelist_item_id, quantity, unit_price, line_subtotal, line_gst, line_total, gst_applicable, is_capital, normalized_quantity, normalized_unit, sort_order"
       )
       .eq("expense_id", id)
       .order("sort_order"),
@@ -136,8 +139,18 @@ export default async function ExpenseDetailPage({
       : Promise.resolve({ data: null }),
   ]);
 
-  // What the ABR says is wrong with GST from this vendor (#30).
-  const concerns = gstConcerns(vendor, Number(expense.gst_amount)).map((c) => GST_CONCERN_LABEL[c]);
+  // What the ABR says is wrong with GST from this vendor (#30), and whether the
+  // line GST agrees with the GST printed on the receipt (#50).
+  const printedGst = expense.gst_printed == null ? null : Number(expense.gst_printed);
+  const gstOff = storedGstDisagreement(
+    Number(expense.gst_amount),
+    printedGst,
+    (lineItems ?? []).filter((l) => l.gst_applicable).length
+  );
+  const concerns = [
+    ...gstConcerns(vendor, Number(expense.gst_amount)).map((c) => GST_CONCERN_LABEL[c]),
+    ...(gstOff === null ? [] : [`The line GST doesn't match the ${money(printedGst!)} printed on the receipt`]),
+  ];
 
   // One round trip each for the names and labels the page needs, rather than
   // a join per row.
@@ -202,6 +215,9 @@ export default async function ExpenseDetailPage({
   // before approving is on this page.
   const canDecide = can(permissions, "approvals", "approve") && expense.status === "submitted";
   const canUnpay = can(permissions, "payments", "mark_paid") && expense.status === "paid";
+  // Capital or not is a GST-return question (#50), for whoever approves or pays
+  // rather than whoever photographed the receipt.
+  const canClassify = can(permissions, "approvals", "approve") || can(permissions, "payments", "mark_paid");
 
   const backHref = can(permissions, "all_expenses", "view") ? "/expenses" : "/my-submissions";
   const backLabel = backHref === "/expenses" ? "All expenses" : "My submissions";
@@ -290,7 +306,14 @@ export default async function ExpenseDetailPage({
         <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-ink/10 pt-4">
           <dl className="flex flex-wrap gap-x-8 gap-y-2">
             <Field label="Subtotal">{money(expense.subtotal)}</Field>
-            <Field label="GST">{money(expense.gst_amount)}</Field>
+            <Field label="GST">
+              {money(expense.gst_amount)}
+              {printedGst !== null && (
+                <span className={`block text-xs ${gstOff === null ? "text-ink/45" : "text-maroon"}`}>
+                  {money(printedGst)} printed on the receipt
+                </span>
+              )}
+            </Field>
             <Field label="Total">
               <span className="text-base font-semibold">{money(expense.total)}</span>
             </Field>
@@ -354,9 +377,10 @@ export default async function ExpenseDetailPage({
                         {line.unit_price != null ? money(line.unit_price) : "—"}
                       </Field>
                     </dl>
-                    <p className="mt-3 border-t border-ink/10 pt-2 text-right font-semibold text-ink">
-                      {money(line.line_total)}
-                    </p>
+                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-ink/10 pt-2">
+                      <CapitalMark line={line} expenseId={expense.id} canClassify={canClassify} />
+                      <p className="font-semibold text-ink">{money(line.line_total)}</p>
+                    </div>
                   </li>
                 );
               })}
@@ -371,6 +395,7 @@ export default async function ExpenseDetailPage({
                   <th scope="col" className="px-4 py-2 font-medium">Pricelist item</th>
                   <th scope="col" className="px-4 py-2 text-right font-medium">Qty</th>
                   <th scope="col" className="px-4 py-2 text-right font-medium">Unit price</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Capital</th>
                   <th scope="col" className="px-4 py-2 text-right font-medium">Total</th>
                 </tr>
               </thead>
@@ -406,6 +431,9 @@ export default async function ExpenseDetailPage({
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums">
                         {line.unit_price != null ? money(line.unit_price) : "—"}
+                      </td>
+                      <td className="px-4 py-2">
+                        <CapitalMark line={line} expenseId={expense.id} canClassify={canClassify} />
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums">
                         {money(line.line_total)}
@@ -495,6 +523,47 @@ export default async function ExpenseDetailPage({
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Whether a line is a capital purchase (0048), and the switch for it.
+ *
+ * Only goods can be: a surcharge or a service is never equipment.
+ */
+function CapitalMark({
+  line,
+  expenseId,
+  canClassify,
+}: {
+  line: { id: string; kind: string | null; is_capital: boolean };
+  expenseId: string;
+  canClassify: boolean;
+}) {
+  if ((line.kind ?? "goods") !== "goods") return <span className="text-ink/30">—</span>;
+  if (!canClassify) {
+    return line.is_capital ? (
+      <span className="rounded-full bg-gold/20 px-2 py-0.5 text-xs text-gold-deep">Capital</span>
+    ) : (
+      <span className="text-ink/30">—</span>
+    );
+  }
+  return (
+    <form action={setLineCapital} className="inline-flex items-center gap-2">
+      <input type="hidden" name="line_id" value={line.id} />
+      <input type="hidden" name="expense_id" value={expenseId} />
+      <input type="hidden" name="capital" value={String(!line.is_capital)} />
+      {line.is_capital && (
+        <span className="rounded-full bg-gold/20 px-2 py-0.5 text-xs text-gold-deep">Capital</span>
+      )}
+      <SubmitButton
+        pendingLabel="…"
+        className="text-xs text-ink/55 underline hover:text-ink"
+        aria-label={line.is_capital ? "Mark as not a capital purchase" : "Mark as a capital purchase"}
+      >
+        {line.is_capital ? "Undo" : "Mark capital"}
+      </SubmitButton>
+    </form>
   );
 }
 

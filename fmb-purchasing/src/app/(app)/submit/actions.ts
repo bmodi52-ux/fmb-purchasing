@@ -36,6 +36,7 @@ import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
 import { ilikeContains, orFilter } from "@/lib/pgrst-filter";
 import { reportError } from "@/lib/errors";
 import { NOT_SPEND_FILTER } from "@/lib/expense-status";
+import { getSetting } from "@/lib/app-settings";
 import { lineGst, lineSubtotal, reconcile, round2, sumLineGst } from "@/lib/expense-money";
 import {
   resolvePayee,
@@ -846,6 +847,11 @@ export type CreateExpenseInput = {
    * rather than quietly changing this figure.
    */
   total: number;
+  /**
+   * GST as printed on the receipt, when it printed one (0048). Kept so the
+   * approver can see whether the line GST agrees with it.
+   */
+  printedGst?: number | null;
   /** Free-text note from the submitter; see migration 0025. */
   submitterComment: string | null;
   /** Who to reimburse. Null only where nobody has chosen yet. */
@@ -868,9 +874,17 @@ async function buildLineRows(
   vendorId: string,
   userId: string
 ) {
-  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
+  const [{ data: categories }, capitalThreshold] = await Promise.all([
+    admin.from("categories").select("id, name, parent_category_id, capital_purchases"),
+    getSetting(admin, "capital_purchase_threshold"),
+  ]);
   const categoryIdByName = new Map(
     leafCategories(categories ?? []).map((c) => [c.name.toLowerCase(), c.id])
+  );
+  // Equipment categories (0048): a line over the threshold in one of these is
+  // suggested as a capital purchase. Anyone who approves or pays can change it.
+  const capitalCategoryIds = new Set(
+    (categories ?? []).filter((c) => c.capital_purchases).map((c) => c.id as string)
   );
 
   const rows = [];
@@ -948,6 +962,11 @@ async function buildLineRows(
       normalized_quantity: item.normalizedQuantity,
       normalized_unit: item.normalizedUnit,
       sort_order: index,
+      is_capital:
+        item.kind === "goods" &&
+        resolvedCategoryId !== null &&
+        capitalCategoryIds.has(resolvedCategoryId) &&
+        item.lineTotal >= capitalThreshold,
     });
   }
   return rows;
@@ -1022,6 +1041,7 @@ export async function createExpense(
       p_fiscal_year_hijri: fiscalYearForReceipt(input.receiptDate),
       p_lines: lines,
       p_attachments: toAttachmentRows(input.attachments),
+      p_gst_printed: input.printedGst ?? null,
     })
     .single();
 
@@ -1142,6 +1162,7 @@ async function expenseAsInput(
     total: number;
     submitter_comment: string | null;
     payee_id: string | null;
+    gst_printed?: number | null;
   }
 ): Promise<CreateExpenseInput> {
   const [{ data: lineItems }, { data: attachments }] = await Promise.all([
@@ -1178,6 +1199,7 @@ async function expenseAsInput(
       sha256: a.sha256,
     })),
     total: Number(expense.total),
+    printedGst: expense.gst_printed == null ? null : Number(expense.gst_printed),
     submitterComment: expense.submitter_comment,
     payee: expense.payee_id ? { kind: "existing", payeeId: expense.payee_id } : null,
     lineItems: (lineItems ?? []).map((li) => ({
@@ -1249,6 +1271,7 @@ export async function updateExpense(
     p_fiscal_year_hijri: fiscalYearForReceipt(input.receiptDate),
     p_lines: lines,
     p_attachments: toAttachmentRows(input.attachments),
+    p_gst_printed: input.printedGst ?? null,
   });
 
   if (error) {

@@ -9,6 +9,7 @@ import { paymentInstructions } from "@/lib/payment-instruction";
 import { getSetting } from "@/lib/app-settings";
 import { possibleDuplicates, type DuplicateMatch } from "@/lib/duplicates";
 import { GST_CONCERN_LABEL, gstConcerns } from "@/lib/vendor-registration";
+import { storedGstDisagreement } from "@/lib/expense-money";
 
 type VendorFlagRow = { id: string; status: string; gst_registered: boolean | null; abn_active: boolean | null };
 
@@ -33,7 +34,7 @@ export default async function ApprovalsPage() {
     admin
       .from("expenses")
       .select(
-        "id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, total, submitted_by, submitter_comment, payee_id, created_at"
+        "id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, submitted_by, submitter_comment, payee_id, created_at"
       )
       .eq("status", "submitted")
       .order("created_at"),
@@ -65,7 +66,7 @@ export default async function ApprovalsPage() {
       admin.from("profiles").select("id, full_name, email").in("id", submitterIds),
       admin
         .from("expense_line_items")
-        .select("expense_id, description_raw, quantity, unit_price, line_total, category_id, pricelist_item_id")
+        .select("expense_id, description_raw, quantity, unit_price, line_total, gst_applicable, category_id, pricelist_item_id")
         .in("expense_id", expenseIds)
         .order("sort_order"),
       admin.from("categories").select("id, name, parent_category_id"),
@@ -132,10 +133,21 @@ export default async function ApprovalsPage() {
         unconfirmedAccount: instructions.get(e.id)?.status === "pending",
         newItems: lines.filter((l) => l.pricelist_item_id && newItemOfferIds.has(l.pricelist_item_id)).length,
         duplicateOf: duplicates.get(e.id) ?? [],
-        gstConcerns: gstConcerns(
-          e.vendor_id ? (vendorById.get(e.vendor_id) ?? null) : null,
-          Number(e.gst_amount)
-        ).map((c) => GST_CONCERN_LABEL[c]),
+        gstConcerns: [
+          ...gstConcerns(e.vendor_id ? (vendorById.get(e.vendor_id) ?? null) : null, Number(e.gst_amount)).map(
+            (c) => GST_CONCERN_LABEL[c]
+          ),
+          // The line GST against the figure printed on the receipt (0048).
+          ...(() => {
+            const printed = e.gst_printed == null ? null : Number(e.gst_printed);
+            const off = storedGstDisagreement(
+              Number(e.gst_amount),
+              printed,
+              lines.filter((l) => l.gst_applicable).length
+            );
+            return off === null ? [] : [`Line GST ${money(Number(e.gst_amount))} ≠ ${money(printed!)} on the receipt`];
+          })(),
+        ],
       },
       lineItems: lines.map((li) => ({
         description_raw: li.description_raw,

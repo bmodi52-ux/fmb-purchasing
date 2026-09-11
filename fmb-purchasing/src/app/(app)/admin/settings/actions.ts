@@ -15,6 +15,21 @@ async function requireSettingsAdmin() {
   return user;
 }
 
+export async function setCapitalThreshold(formData: FormData): Promise<void> {
+  const user = await requireSettingsAdmin();
+  const amount = Number(String(formData.get("amount") ?? "").replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("Enter the threshold as an amount in dollars, such as 1000.");
+  }
+
+  const { error } = await setSetting(createAdminClient(), "capital_purchase_threshold", amount, user.id);
+  if (error) {
+    await reportError({ source: "app-settings", error, detail: "capital_purchase_threshold", userId: user.id });
+    throw new Error("The setting could not be saved. Try again.");
+  }
+  revalidatePath("/admin/settings");
+}
+
 export async function setDuplicateFlags(formData: FormData): Promise<void> {
   const user = await requireSettingsAdmin();
   const on = String(formData.get("on")) === "true";

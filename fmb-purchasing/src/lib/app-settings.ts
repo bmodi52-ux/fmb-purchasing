@@ -10,6 +10,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const SETTING_DEFAULTS = {
   /** Show "Possible duplicate" on Approvals and Payments (scratchpad #21). */
   duplicate_flags_for_reviewers: true as boolean,
+  /**
+   * A line in an equipment category at or above this amount, GST included, is
+   * suggested as a capital purchase (0048, #50).
+   */
+  capital_purchase_threshold: 1000 as number,
 };
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

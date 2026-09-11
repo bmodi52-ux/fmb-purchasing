@@ -200,6 +200,35 @@ describe("withdraw_expenses", () => {
   });
 });
 
+describe("printed GST and capital lines (0048)", () => {
+  test("the create function keeps the printed GST and each line's capital flag", async () => {
+    const lines = JSON.stringify([
+      { description_raw: "Combi oven", kind: "goods", line_total: 8800, line_subtotal: 8000, line_gst: 800, gst_applicable: true, is_capital: true },
+      { description_raw: "Onions", kind: "goods", line_total: 20, line_subtotal: 20, line_gst: 0, gst_applicable: false },
+    ]);
+    const created = await db.query<{ id: string }>(
+      `select * from create_expense_with_lines(
+         $1, null, 'Equipment Co', 'INV-9', '2026-09-01'::date,
+         8020, 800, 8820, null, null, 1448, $2::jsonb, '[]'::jsonb, 800.00)`,
+      [ids.submitter, lines]
+    );
+    const id = created.rows[0].id;
+    assert.equal(Number(await scalar(db, "select gst_printed from expenses where id = $1", [id])), 800);
+    const flags = await db.query<{ description_raw: string; is_capital: boolean }>(
+      "select description_raw, is_capital from expense_line_items where expense_id = $1 order by sort_order",
+      [id]
+    );
+    assert.deepEqual(flags.rows.map((r) => r.is_capital), [true, false]);
+  });
+
+  test("equipment is the one category marked for capital purchases", async () => {
+    assert.deepEqual(
+      (await db.query<{ name: string }>("select name from categories where capital_purchases")).rows.map((r) => r.name),
+      ["Kitchen Equipment & Utensils"]
+    );
+  });
+});
+
 describe("reverse_payment", () => {
   test("returns the expense to approved and removes a run that no longer covers anything", async () => {
     const e = await newExpense("approved", ids.payee);

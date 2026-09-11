@@ -44,6 +44,8 @@ export type ManagedCategory = {
   itemCount: number;
   /** Line kinds this category is offered for first — see migration 0038. */
   appliesTo: string[] | null;
+  /** Equipment: large lines here are suggested as capital purchases (0048). */
+  capitalPurchases: boolean;
 };
 
 function CodeBadge({ code }: { code: string | null }) {
@@ -114,6 +116,9 @@ function CategoryRow({
             {category.itemCount} item{category.itemCount === 1 ? "" : "s"}
           </span>
         )}
+        {category.capitalPurchases && (
+          <span className="rounded-full bg-gold/20 px-2 py-0.5 text-[11px] text-gold-deep">capital</span>
+        )}
         <button type="button" onClick={toggle} className="text-xs text-ink/50 hover:text-ink hover:underline">
           {open ? "cancel" : "edit"}
         </button>
@@ -158,6 +163,7 @@ function CategoryRow({
                 ))}
             </select>
             <LineGroupChecks appliesTo={category.appliesTo} />
+            <CapitalCheck checked={category.capitalPurchases} />
             <SubmitButton className="rounded-md border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
               Save
             </SubmitButton>
@@ -280,6 +286,7 @@ export function CategoriesManager({ categories }: { categories: ManagedCategory[
         {/* Nothing ticked means every kind, which is the right default for a
             category whose use nobody has decided yet. */}
         <LineGroupChecks appliesTo={[]} />
+        <CapitalCheck checked={false} />
         <SubmitButton className="rounded-md border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
           + Add category
         </SubmitButton>
@@ -314,6 +321,23 @@ function LineGroupChecks({ appliesTo }: { appliesTo: string[] | null }) {
         </label>
       ))}
     </span>
+  );
+}
+
+/**
+ * Equipment categories, whose larger lines are suggested as capital purchases
+ * — reported apart from everything else on the GST return (0048). The amount
+ * is in App settings.
+ */
+function CapitalCheck({ checked }: { checked: boolean }) {
+  return (
+    <label
+      className="flex items-center gap-1 text-xs text-ink/60"
+      title="Lines here over the capital threshold in App settings are marked as capital purchases"
+    >
+      <input type="checkbox" name="capital_purchases" defaultChecked={checked} className="h-3 w-3" />
+      capital purchases
+    </label>
   );
 }
 

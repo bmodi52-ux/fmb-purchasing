@@ -871,6 +871,7 @@ export async function createCategory(
     code,
     parent_category_id: fieldOrNull(formData, "parent_category_id"),
     applies_to: appliesToFromForm(formData),
+    capital_purchases: formData.get("capital_purchases") === "on",
     sort_order: numberOrNull(formData, "sort_order") ?? 500,
   });
 
@@ -934,7 +935,13 @@ export async function updateCategory(
 
   const { error } = await admin
     .from("categories")
-    .update({ name, code, parent_category_id: parentCategoryId, applies_to: appliesToFromForm(formData) })
+    .update({
+      name,
+      code,
+      parent_category_id: parentCategoryId,
+      applies_to: appliesToFromForm(formData),
+      capital_purchases: formData.get("capital_purchases") === "on",
+    })
     .eq("id", id);
 
   if (error) {

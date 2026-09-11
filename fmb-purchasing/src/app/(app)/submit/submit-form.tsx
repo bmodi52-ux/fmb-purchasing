@@ -282,7 +282,7 @@ export function SubmitForm({
   const [invoiceNumber, setInvoiceNumber] = useState(seed?.invoiceNumber ?? "");
   const [receiptDate, setReceiptDate] = useState(seed?.receiptDate ?? "");
   const [total, setTotal] = useState(seed?.total ?? 0);
-  const [printedGst, setPrintedGst] = useState<number | null>(null);
+  const [printedGst, setPrintedGst] = useState<number | null>(seed?.printedGst ?? null);
   const [submitterComment, setSubmitterComment] = useState(seed?.submitterComment ?? "");
   const [payee, setPayee] = useState<PayeeChoice | null>(
     seed?.payee ?? (seed ? null : { kind: "me" })
@@ -1149,6 +1149,7 @@ function ReviewForm(props: {
         receiptDate: props.receiptDate || null,
         attachments: props.attachments,
         total: props.total,
+        printedGst: props.printedGst,
         submitterComment: props.submitterComment.trim() || null,
         payee: props.payee,
         lineItems: props.items

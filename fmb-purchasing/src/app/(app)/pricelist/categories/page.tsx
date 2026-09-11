@@ -25,7 +25,7 @@ export default async function PricelistCategoriesPage() {
 
   const admin = createAdminClient();
   const [{ data: categories }, { data: itemCategoryRows }] = await Promise.all([
-    admin.from("categories").select("id, name, parent_category_id, code, applies_to").order("name"),
+    admin.from("categories").select("id, name, parent_category_id, code, applies_to, capital_purchases").order("name"),
     // Every item, not just those with an offer, so the "changing the code
     // renumbers N items" warning is honest.
     admin.from("items").select("category_id"),
@@ -45,6 +45,7 @@ export default async function PricelistCategoriesPage() {
     parentCategoryId: c.parent_category_id,
     itemCount: itemCountByCategory.get(c.id) ?? 0,
     appliesTo: (c.applies_to as string[] | null) ?? null,
+    capitalPurchases: Boolean(c.capital_purchases),
   }));
 
   return (

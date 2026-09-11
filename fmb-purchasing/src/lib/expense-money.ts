@@ -124,6 +124,29 @@ export function gstDiscrepancy(lines: MoneyLine[], printedGst: number | null): n
 }
 
 /**
+ * Whether a stored expense's line GST disagrees with its printed GST by more
+ * than rounding can explain (0048).
+ *
+ * A receipt usually works GST out once, on its taxable total; the lines each
+ * round their own eleventh. That can differ by up to half a cent per taxable
+ * line without anything being wrong, so the band grows with the number of
+ * taxable lines rather than being a fixed few cents that a long invoice would
+ * trip for no reason.
+ *
+ * Returns the difference (printed minus lines) when it matters, or null.
+ */
+export function storedGstDisagreement(
+  lineGstTotal: number,
+  printedGst: number | null,
+  taxableLineCount: number
+): number | null {
+  if (printedGst == null) return null;
+  const difference = round2(printedGst - lineGstTotal);
+  const tolerance = RECONCILE_TOLERANCE + 0.005 * Math.max(1, taxableLineCount);
+  return Math.abs(difference) > tolerance ? difference : null;
+}
+
+/**
  * The kind to give a line created to absorb an unexplained difference.
  *
  * A positive difference means the receipt charged more than the lines
