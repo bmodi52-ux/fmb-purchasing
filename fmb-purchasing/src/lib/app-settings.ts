@@ -59,6 +59,19 @@ export const SETTING_DEFAULTS = {
     /** How far back the Pricelist's "cheapest recent source" looks, in days. */
     cheapestRecentDays: 90,
   },
+  /**
+   * The scheduled check of how well receipts are read (#49): the confirmed
+   * receipts are read again every so often, a few each morning, and admins
+   * are told when accuracy falls.
+   */
+  extraction_check: {
+    enabled: true as boolean,
+    everyDays: 30,
+    /** Receipts read per morning's run, so one run never outlasts the job. */
+    perMorning: 6,
+    /** Percentage points worse than the last run before anyone is told. */
+    alertDropPoints: 5,
+  },
 };
 
 export type PriceAlertSettings = (typeof SETTING_DEFAULTS)["price_alerts"];

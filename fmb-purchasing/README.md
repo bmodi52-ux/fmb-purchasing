@@ -38,6 +38,8 @@ Needs a `.env.local` — copy `.env.local.example` and fill it in:
 | `NEXT_PUBLIC_SITE_URL` | only to make reset links point somewhere local |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | push notifications — `npx web-push generate-vapid-keys`; without them push is off |
 | `CRON_SECRET` | the daily reminders job (`/api/cron/daily`, scheduled in `vercel.json`); without it the job refuses every call |
+| `INBOUND_EMAIL_SECRET` | receipts forwarded by email (`/api/inbound-email`); without it every post is refused — see `docs/receipts-by-email.md` |
+| `INBOUND_EMAIL_ADDRESS` | the forwarding address shown on Submit (optional) |
 
 ```bash
 npm test          # 323 tests, incl. migrations applied to a real Postgres

@@ -3,6 +3,7 @@ import { todayIso } from "@/lib/periods-data";
 import { runDailyReminders } from "@/lib/reminders";
 import { reportError } from "@/lib/errors";
 import { ORG_TIME_ZONE } from "@/lib/format";
+import { continueExtractionCheck } from "@/lib/extraction-check";
 
 /**
  * The once-a-day job: reminders and escalation (#27).
@@ -17,6 +18,9 @@ import { ORG_TIME_ZONE } from "@/lib/format";
  * reminders.
  */
 export const dynamic = "force-dynamic";
+
+// The receipt-reading check reads a few receipts each morning (#49).
+export const maxDuration = 300;
 
 const JOB = "daily";
 
@@ -42,7 +46,17 @@ export async function GET(request: Request): Promise<Response> {
   await admin.from("scheduled_runs").upsert({ job: JOB, last_run_on: today, last_run_at: new Date().toISOString() });
 
   try {
-    const summary = await runDailyReminders(admin, today);
+    const reminders = await runDailyReminders(admin, today);
+    // After the reminders, and on its own: a check that fails must not look
+    // like the reminders did.
+    let extractionCheck: unknown = null;
+    try {
+      extractionCheck = await continueExtractionCheck(admin);
+    } catch (err) {
+      await reportError({ source: "extraction-check", error: err });
+      extractionCheck = { state: "failed" };
+    }
+    const summary = { ...reminders, extractionCheck };
     await admin.from("scheduled_runs").update({ summary }).eq("job", JOB);
     return Response.json({ ran: today, summary });
   } catch (err) {

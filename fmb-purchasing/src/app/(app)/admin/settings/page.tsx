@@ -11,10 +11,16 @@ import {
   setDuplicateFlags,
   setReminders,
   setRemittanceEmails,
+  setExtractionCheck,
+  runExtractionCheckNow,
 } from "./actions";
+import { accuracy } from "@/lib/extraction-scoring";
 import { formatDateTime } from "@/lib/format";
 
 export const metadata = { title: "App settings" };
+
+// Starting the receipt-reading check reads a few receipts after the response.
+export const maxDuration = 300;
 
 /**
  * Settings that apply to everyone, changed without a deploy (0046).
@@ -35,11 +41,22 @@ export default async function AppSettingsPage() {
       "aba",
       "remittance_emails",
       "budget_alerts",
+      "extraction_check",
     ]),
     admin.from("teams").select("id, name").order("name"),
     admin.from("scheduled_runs").select("last_run_at, summary").eq("job", "daily").maybeSingle(),
   ]);
   const r = settings.reminders;
+
+  const [{ count: checkReceiptCount }, { data: checkRuns }] = await Promise.all([
+    admin.from("extraction_benchmark_cases").select("id", { count: "exact", head: true }).eq("active", true),
+    admin
+      .from("extraction_benchmark_runs")
+      .select("id, started_at, finished_at, model, case_count, checks, passed, failed_cases, extraction_benchmark_results ( case_id )")
+      .order("started_at", { ascending: false })
+      .limit(5),
+  ]);
+  const ec = settings.extraction_check;
 
   return (
     <div className="flex flex-col gap-8">
@@ -197,6 +214,72 @@ export default async function AppSettingsPage() {
           on={settings.duplicate_flags_for_reviewers}
           action={setDuplicateFlags}
         />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="section-title text-ink">Receipt reading check</h2>
+          <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-ink/60">
+            Receipts whose correct values have been confirmed are read again on a schedule, a few each morning, and
+            admins are told if fewer values come out right than last time — the usual cause is a change of AI model.{" "}
+            {checkReceiptCount
+              ? `${checkReceiptCount} confirmed ${checkReceiptCount === 1 ? "receipt" : "receipts"} loaded.`
+              : "No confirmed receipts are loaded yet: run scripts/load-extraction-check.mjs with the receipts folder."}
+          </p>
+        </div>
+        <form action={setExtractionCheck} className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-3 text-sm">
+          <label className="flex items-center gap-2 font-medium text-ink">
+            <input type="checkbox" name="enabled" defaultChecked={ec.enabled} />
+            Check how well receipts are read
+          </label>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <label className="flex items-center gap-2">
+              Every
+              <input type="number" min={1} max={365} name="every_days" defaultValue={ec.everyDays} className="input w-20 py-1" />
+              days
+            </label>
+            <label className="flex items-center gap-2">
+              Reading
+              <input type="number" min={1} max={20} name="per_morning" defaultValue={ec.perMorning} className="input w-16 py-1" />
+              a morning
+            </label>
+            <label className="flex items-center gap-2">
+              Tell admins when it drops more than
+              <input type="number" min={1} max={100} name="drop_points" defaultValue={ec.alertDropPoints} className="input w-16 py-1" />
+              points
+            </label>
+          </div>
+          <SubmitButton pendingLabel="Saving…" className="self-start rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30">
+            Save
+          </SubmitButton>
+        </form>
+        {(checkRuns ?? []).length > 0 && (
+          <ul className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60 text-sm">
+            {(checkRuns ?? []).map((run) => {
+              const read = ((run.extraction_benchmark_results as { case_id: string }[] | null) ?? []).length;
+              const pct = accuracy({ checks: Number(run.checks), passed: Number(run.passed) });
+              return (
+                <li key={run.id as string} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-2">
+                  <span className="text-ink">
+                    {formatDateTime(run.started_at as string)} <span className="text-xs text-ink/50">· {run.model as string}</span>
+                  </span>
+                  <span className="text-xs text-ink/65">
+                    {run.finished_at
+                      ? `${pct ?? "—"}% of ${run.checks} checked values right${Number(run.failed_cases) ? ` · ${run.failed_cases} couldn't be read` : ""}`
+                      : `Under way: ${read} of ${run.case_count} read`}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {!!checkReceiptCount && (
+          <form action={runExtractionCheckNow}>
+            <SubmitButton pendingLabel="Starting…" className="text-xs text-ink/60 underline hover:text-ink">
+              {(checkRuns ?? []).some((run) => !run.finished_at) ? "Read the next few now" : "Start a check now"}
+            </SubmitButton>
+          </form>
+        )}
       </section>
 
       <section className="flex flex-col gap-3">

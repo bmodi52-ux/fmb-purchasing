@@ -96,7 +96,8 @@ const EXTRACT_TOOL_NAME = "record_receipt";
  * push a tool call into visible text, which would surface here as "no
  * structured data" on a receipt the model had actually read.
  */
-const MODEL = "claude-sonnet-5";
+export const RECEIPT_MODEL = "claude-sonnet-5";
+const MODEL = RECEIPT_MODEL;
 const EFFORT = "medium";
 
 /**
