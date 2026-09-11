@@ -25,9 +25,25 @@ export const SETTING_DEFAULTS = {
     /** 0 is Sunday; 1 is Monday. */
     masterDataWeekday: 1,
   },
+  /** FMB's own bank details for batch payment (ABA) files (#37). */
+  aba: {
+    bankAbbreviation: "",
+    userName: "",
+    userId: "",
+    bsb: "",
+    accountNumber: "",
+    remitterName: "FMB SYDNEY",
+    description: "PAYMENTS",
+    balancing: false as boolean,
+  },
+  /** Built-in budget alerts to whoever sets budgets (#39), as percentages of the Hijri year's budget. */
+  budget_alerts: { enabled: true as boolean, percents: [80, 100] as number[] },
+  /** Email payees a remittance advice when they are paid (#37). */
+  remittance_emails: true as boolean,
 };
 
 export type ReminderSettings = (typeof SETTING_DEFAULTS)["reminders"];
+export type AbaSettingValue = (typeof SETTING_DEFAULTS)["aba"];
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
 export type SettingValue<K extends SettingKey> = (typeof SETTING_DEFAULTS)[K];

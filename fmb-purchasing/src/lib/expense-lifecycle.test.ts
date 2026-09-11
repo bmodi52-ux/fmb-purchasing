@@ -200,6 +200,24 @@ describe("withdraw_expenses", () => {
   });
 });
 
+describe("locked periods (0052)", () => {
+  test("a decision or payment dated in a lodged period cannot be undone, and can once it is unlocked", async () => {
+    const approved = await scalar<string>(
+      db,
+      `insert into expenses (submitted_by, vendor_name_raw, total, subtotal, status, fiscal_year_hijri, receipt_date)
+       values ($1, 'Locked Vendor', 50, 50, 'approved', 1447, '2026-03-10') returning id`,
+      [ids.submitter]
+    );
+    const lock = await scalar<string>(
+      db,
+      "insert into locked_periods (start_date, end_date, label) values ('2025-07-01', '2026-06-30', 'FY 2025–26') returning id"
+    );
+    await assert.rejects(db.query("select reopen_expense($1, $2, 'Mistake')", [approved, ids.approver]), /lodged/);
+    await db.query("update locked_periods set unlocked_at = now() where id = $1", [lock]);
+    assert.equal(await scalar(db, "select reopen_expense($1, $2, 'Mistake')", [approved, ids.approver]), true);
+  });
+});
+
 describe("printed GST and capital lines (0048)", () => {
   test("the create function keeps the printed GST and each line's capital flag", async () => {
     const lines = JSON.stringify([

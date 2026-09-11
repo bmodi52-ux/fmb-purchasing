@@ -7,8 +7,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { parsePeriod, previousPeriod } from "@/lib/periods";
 import { todayIso } from "@/lib/periods-data";
-import { planBudgetSave, NEW_BUDGET_ID } from "@/lib/budget-allocation";
-import { loadBudgets, type StoredBudget } from "@/lib/budgets";
+import { allocate, planBudgetSave, NEW_BUDGET_ID } from "@/lib/budget-allocation";
+import { canPhase, loadBudgets, monthsFor, type StoredBudget } from "@/lib/budgets";
 import { reportError } from "@/lib/errors";
 
 export type BudgetSaveState =
@@ -155,6 +155,59 @@ export async function saveBudget(_prev: BudgetSaveState, formData: FormData): Pr
 
   revalidatePath("/budgets");
   return { status: "saved" };
+}
+
+/**
+ * Monthly phasing for a whole-year budget (#39): what share of the year each
+ * month carries, because Ramadan is not a twelfth of anything. Twelve figures
+ * that add up to 100, or all blank to spread evenly again.
+ *
+ * Refused if the new shape would leave another budget for the category unable
+ * to hold its total — phasing moves money between days, and a budget beneath
+ * this one may have been relying on the days it moves.
+ */
+export async function setBudgetPhasing(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "budgets", "edit_master_data");
+
+  const budgetId = String(formData.get("budget_id") ?? "");
+  const raw = Array.from({ length: 12 }, (_, i) => String(formData.get(`month_${i + 1}`) ?? "").trim());
+  if (!budgetId) return;
+
+  const admin = createAdminClient();
+  const { data: row } = await admin.from("category_budgets").select("category_id, period_code").eq("id", budgetId).maybeSingle();
+  if (!row || !canPhase(row.period_code as string)) throw new Error("Only a whole year's budget can be phased by month.");
+
+  const clearing = raw.every((r) => r === "");
+  const percents = raw.map((r) => Number(r.replace("%", "")) || 0);
+  if (!clearing) {
+    if (percents.some((p) => p < 0)) throw new Error("Months can't have a negative share.");
+    const sum = percents.reduce((s, p) => s + p, 0);
+    if (Math.abs(sum - 100) > 0.5) throw new Error(`The months add up to ${Math.round(sum * 10) / 10}%, not 100%.`);
+
+    const budgets = await loadBudgets(admin, [row.category_id as string]);
+    const shaped = budgets.map((b) =>
+      b.id === budgetId ? { ...b, months: monthsFor(b.periodCode, new Map(percents.map((p, i) => [i + 1, p]))) } : b
+    );
+    const failing = [...allocate(shaped).shares.entries()].find(([, s]) => !s.holds);
+    if (failing) {
+      const label = shaped.find((b) => b.id === failing[0])?.label ?? "another budget";
+      throw new Error(`That phasing leaves the ${label} budget unable to hold its total. Adjust the months or that budget first.`);
+    }
+  }
+
+  await admin.from("category_budget_phasing").delete().eq("budget_id", budgetId);
+  if (!clearing) {
+    const { error } = await admin
+      .from("category_budget_phasing")
+      .insert(percents.map((percent, i) => ({ budget_id: budgetId, month_index: i + 1, percent })));
+    if (error) {
+      await reportError({ source: "budget-phasing", error: error.message, userId: user.id });
+      throw new Error("The phasing couldn't be saved. Try again.");
+    }
+  }
+  revalidatePath("/budgets");
 }
 
 /**

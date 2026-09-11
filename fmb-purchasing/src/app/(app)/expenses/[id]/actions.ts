@@ -25,7 +25,14 @@ export async function setLineCapital(formData: FormData): Promise<void> {
   const capital = String(formData.get("capital")) === "true";
   if (!lineId || !expenseId) return;
 
-  const { error } = await createAdminClient()
+  const admin = createAdminClient();
+  // A lodged period's figures stay as they were reported (#38).
+  const { data: locked, error: lockError } = await admin.rpc("expense_in_locked_period", { p_expense_id: expenseId });
+  if (!lockError && locked) {
+    throw new Error("This expense is dated in a period whose GST return has been lodged, so its lines can't be reclassified.");
+  }
+
+  const { error } = await admin
     .from("expense_line_items")
     .update({ is_capital: capital })
     .eq("id", lineId)

@@ -10,8 +10,19 @@ import { getSetting } from "@/lib/app-settings";
 import { possibleDuplicates, type DuplicateMatch } from "@/lib/duplicates";
 import { GST_CONCERN_LABEL, gstConcerns } from "@/lib/vendor-registration";
 import { storedGstDisagreement } from "@/lib/expense-money";
+import { mayLackTaxInvoice } from "@/lib/gst-summary";
+import { parsePeriod, periodCode, yearContaining } from "@/lib/periods";
+import { todayIso } from "@/lib/periods-data";
+import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
+import { loadReportRawData, withinRange } from "../reports/data";
 
-type VendorFlagRow = { id: string; status: string; gst_registered: boolean | null; abn_active: boolean | null };
+type VendorFlagRow = {
+  id: string;
+  status: string;
+  gst_registered: boolean | null;
+  abn_active: boolean | null;
+  abn: string | null;
+};
 
 export const metadata = { title: "Approvals" };
 
@@ -71,7 +82,7 @@ export default async function ApprovalsPage() {
         .order("sort_order"),
       admin.from("categories").select("id, name, parent_category_id"),
       vendorIds.length
-        ? admin.from("vendors").select("id, status, gst_registered, abn_active").in("id", vendorIds)
+        ? admin.from("vendors").select("id, status, gst_registered, abn_active, abn").in("id", vendorIds)
         : Promise.resolve({ data: [] as VendorFlagRow[] }),
       // Whether each payee's account has been confirmed — the same check the
       // Payments run makes, asked here so it can be noticed before approving.
@@ -113,9 +124,49 @@ export default async function ApprovalsPage() {
     itemsByExpense.set(li.expense_id, list);
   }
 
+  // Where each expense leaves its categories' budgets for the Hijri year it
+  // falls in (#39): "Meat: 82% used, this takes it to 86%". Spend already
+  // includes expenses waiting for approval, this one among them.
+  const today = todayIso();
+  const periodOf = (e: (typeof expenses)[number]) =>
+    parsePeriod(periodCode("hijri", yearContaining("hijri", e.receipt_date ?? e.created_at.slice(0, 10))), today);
+  const budgetCategoryIds = [...new Set((lineItems ?? []).map((l) => l.category_id).filter(Boolean) as string[])];
+  const budgets = budgetCategoryIds.length ? await loadBudgets(admin, budgetCategoryIds) : [];
+  const spendByPeriod = new Map<string, Map<string, number>>();
+  if (budgets.length) {
+    for (const code of [...new Set(expenses.map((e) => periodOf(e).code))]) {
+      const period = parsePeriod(code, today);
+      const raw = withinRange(await loadReportRawData(period), period);
+      const spend = new Map<string, number>();
+      for (const l of raw.allLines) if (l.categoryId) spend.set(l.categoryId, (spend.get(l.categoryId) ?? 0) + l.lineTotal);
+      spendByPeriod.set(code, spend);
+    }
+  }
+  const budgetNotesFor = (e: (typeof expenses)[number], lines: NonNullable<typeof lineItems>) => {
+    if (!budgets.length) return [];
+    const period = periodOf(e);
+    const perCategory = budgetsForPeriod(budgets, period.start, period.end);
+    const mine = new Map<string, number>();
+    for (const l of lines) if (l.category_id) mine.set(l.category_id, (mine.get(l.category_id) ?? 0) + Number(l.line_total));
+    return [...mine.entries()].flatMap(([categoryId, amount]) => {
+      const budget = perCategory.get(categoryId);
+      if (!budget || budget.amount <= 0) return [];
+      const spent = spendByPeriod.get(period.code)?.get(categoryId) ?? amount;
+      const after = spent / budget.amount;
+      const before = Math.max(0, spent - amount) / budget.amount;
+      return [
+        {
+          text: `${categoryNameById.get(categoryId) ?? "Category"}: ${Math.round(before * 100)}% of its budget used, this takes it to ${Math.round(after * 100)}%`,
+          over: after > 1,
+        },
+      ];
+    });
+  };
+
   const rows: ApprovalRow[] = expenses.map((e) => {
     const lines = itemsByExpense.get(e.id) ?? [];
     return {
+      budgetNotes: budgetNotesFor(e, lines),
       id: e.id,
       expense_number: e.expense_number,
       vendor_name_raw: e.vendor_name_raw,
@@ -147,6 +198,15 @@ export default async function ApprovalsPage() {
             );
             return off === null ? [] : [`Line GST ${money(Number(e.gst_amount))} ≠ ${money(printed!)} on the receipt`];
           })(),
+          // A GST credit over $82.50 needs a tax invoice (#38).
+          ...(mayLackTaxInvoice({
+            gst: Number(e.gst_amount),
+            total: Number(e.total),
+            hasAttachment: withFiles.has(e.id),
+            vendorAbn: e.vendor_id ? (vendorById.get(e.vendor_id)?.abn ?? null) : null,
+          })
+            ? [withFiles.has(e.id) ? "GST over $82.50, but no vendor ABN" : "GST over $82.50, but no receipt"]
+            : []),
         ],
       },
       lineItems: lines.map((li) => ({

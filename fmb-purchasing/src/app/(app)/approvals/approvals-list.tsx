@@ -47,6 +47,8 @@ export type ApprovalRow = {
   hasReceipt: boolean;
   submitterComment: string | null;
   flags: ApprovalFlags;
+  /** Where this expense leaves each of its categories' budgets (#39). */
+  budgetNotes: { text: string; over: boolean }[];
   lineItems: ApprovalLineItem[];
 };
 
@@ -237,6 +239,16 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
             </span>
           ))}
         </div>
+      )}
+
+      {e.budgetNotes.length > 0 && (
+        <ul className="flex flex-col gap-0.5 text-xs">
+          {e.budgetNotes.map((n) => (
+            <li key={n.text} className={n.over ? "text-maroon" : "text-ink/55"}>
+              {n.text}
+            </li>
+          ))}
+        </ul>
       )}
 
       {/* The submitter wrote this for whoever decides, so it is not hidden. */}

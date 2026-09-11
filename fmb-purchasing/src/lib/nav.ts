@@ -15,6 +15,8 @@ export const NAV_ITEMS: {
   { key: "vendors", label: "Vendors", href: "/vendors", action: "view" },
   { key: "approvals", label: "Approvals", href: "/approvals", action: "view" },
   { key: "payments", label: "Payments", href: "/payments", action: "view" },
+  // GST, the Xero file and lodged periods are the payer's work (#38).
+  { key: "payments", label: "Accounting", href: "/accounting", action: "mark_paid" },
   { key: "review_queue", label: "Needs attention", href: "/review-queue", action: "view" },
   { key: "reports", label: "Reports", href: "/reports", action: "view" },
   { key: "budgets", label: "Budgets", href: "/budgets", action: "view" },

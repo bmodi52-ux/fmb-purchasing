@@ -10,6 +10,11 @@ import { duplicateLabel, possibleDuplicates, type DuplicateMatch } from "@/lib/d
 
 export const metadata = { title: "Payments" };
 
+/** Whole days since an instant — how long the oldest approval has waited. */
+function daysSince(instant: string): number {
+  return Math.floor((Date.now() - new Date(instant).getTime()) / 86_400_000);
+}
+
 export default async function PaymentsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -66,14 +71,29 @@ export default async function PaymentsPage() {
     payeeConfirmed: instructions.get(e.id)?.status === "pending" ? "Unconfirmed" : "",
   }));
 
+  const unpaidTotal = (expenses ?? []).reduce((s, e) => s + Number(e.total), 0);
+  const oldestApproved = (expenses ?? [])[0]?.decided_at as string | undefined;
+  const oldestDays = oldestApproved ? daysSince(oldestApproved) : 0;
+
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="page-title text-ink">Payments</h1>
-        <p className="page-description mt-1">
-          Approved expenses ready for reimbursement. Mark paid once the bank transfer is complete — this is a
-          record-keeping step only, no payment is processed here.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="page-title text-ink">Payments</h1>
+          <p className="page-description mt-1 max-w-2xl">
+            Approved expenses waiting to be paid, oldest approval first.
+            {(expenses ?? []).length > 0 &&
+              ` ${(expenses ?? []).length} · ${unpaidTotal.toLocaleString("en-AU", { style: "currency", currency: "AUD" })} · oldest approved ${oldestDays < 1 ? "today" : `${oldestDays} ${oldestDays === 1 ? "day" : "days"} ago`}.`}{" "}
+            Select expenses to download a bank file for them, then mark them paid once the bank has the transfers — no
+            money moves from here.
+          </p>
+        </div>
+        <a
+          href="/payments/reconcile"
+          className="self-start whitespace-nowrap rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/75 hover:border-ink/30"
+        >
+          Check against a bank statement
+        </a>
       </div>
 
       <PaymentsTable expenses={rows} />

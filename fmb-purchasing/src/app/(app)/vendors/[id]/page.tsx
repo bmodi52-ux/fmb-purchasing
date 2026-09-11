@@ -213,7 +213,7 @@ async function DetailsTab({
     // replaced. See migration 0037.
     admin
       .from("payees")
-      .select("id, bank_account_name, bank_bsb, bank_account_number, notes, status, created_at, superseded_at")
+      .select("id, bank_account_name, bank_bsb, bank_account_number, notes, remittance_email, status, created_at, superseded_at")
       .eq("vendor_id", vendor.id)
       .order("created_at", { ascending: false }),
   ]);
@@ -230,6 +230,7 @@ async function DetailsTab({
         bsb: canSeeBankDetails ? ((stored.bank_bsb as string | null) ?? "") : null,
         accountNumber: canSeeBankDetails ? ((stored.bank_account_number as string | null) ?? "") : null,
         notes: canSeeBankDetails ? ((stored.notes as string | null) ?? "") : null,
+        remittanceEmail: canSeeBankDetails ? ((stored.remittance_email as string | null) ?? "") : null,
       }
     : null;
 
@@ -368,6 +369,15 @@ async function DetailsTab({
                 name="payment_notes"
                 defaultValue={payment?.notes ?? ""}
                 placeholder="e.g. pays by PayID"
+                className="input"
+              />
+            </Field>
+            <Field label="Remittance email">
+              <input
+                name="remittance_email"
+                type="email"
+                defaultValue={payment?.remittanceEmail ?? ""}
+                placeholder="accounts@vendor.com.au"
                 className="input"
               />
             </Field>

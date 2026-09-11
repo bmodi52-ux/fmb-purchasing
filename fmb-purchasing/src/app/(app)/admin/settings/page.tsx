@@ -4,7 +4,14 @@ import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/app-settings";
 import { SubmitButton } from "@/components/submit-button";
-import { setCapitalThreshold, setDuplicateFlags, setReminders } from "./actions";
+import {
+  setAbaSettings,
+  setBudgetAlerts,
+  setCapitalThreshold,
+  setDuplicateFlags,
+  setReminders,
+  setRemittanceEmails,
+} from "./actions";
 import { formatDateTime } from "@/lib/format";
 
 export const metadata = { title: "App settings" };
@@ -21,7 +28,14 @@ export default async function AppSettingsPage() {
 
   const admin = createAdminClient();
   const [settings, { data: teams }, { data: lastRun }] = await Promise.all([
-    getSettings(admin, ["duplicate_flags_for_reviewers", "capital_purchase_threshold", "reminders"]),
+    getSettings(admin, [
+      "duplicate_flags_for_reviewers",
+      "capital_purchase_threshold",
+      "reminders",
+      "aba",
+      "remittance_emails",
+      "budget_alerts",
+    ]),
     admin.from("teams").select("id, name").order("name"),
     admin.from("scheduled_runs").select("last_run_at, summary").eq("job", "daily").maybeSingle(),
   ]);
@@ -33,6 +47,69 @@ export default async function AppSettingsPage() {
         <h1 className="page-title text-ink">App settings</h1>
         <p className="page-description mt-1 max-w-xl">Settings that apply to everyone using the app.</p>
       </div>
+
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="section-title text-ink">Payments</h2>
+          <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-ink/60">
+            FMB&apos;s own account, for the batch payment (ABA) files the Payments page downloads. The user ID is the
+            six-digit number your bank issues for batch payments — ask the bank if you don&apos;t have it.
+          </p>
+        </div>
+        <form action={setAbaSettings} className="grid gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-4 text-sm sm:grid-cols-2">
+          {(
+            [
+              ["bank", "Bank code (e.g. NAB, CBA, WBC, ANZ)", settings.aba.bankAbbreviation, 3],
+              ["user_name", "FMB's name as the bank has it", settings.aba.userName, 26],
+              ["user_id", "Batch payment user ID (6 digits)", settings.aba.userId, 6],
+              ["bsb", "FMB's BSB", settings.aba.bsb, 7],
+              ["account_number", "FMB's account number", settings.aba.accountNumber, 9],
+              ["remitter_name", "Sender name payees see", settings.aba.remitterName, 16],
+              ["description", "Batch description", settings.aba.description, 12],
+            ] as const
+          ).map(([name, label, value, max]) => (
+            <label key={name} className="flex flex-col gap-1 text-xs">
+              <span className="text-ink/55">{label}</span>
+              <input name={name} defaultValue={value} maxLength={max} className="input text-sm" />
+            </label>
+          ))}
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" name="balancing" defaultChecked={settings.aba.balancing} />
+            Add a balancing line taking the total from FMB&apos;s account (some banks require it, some reject it)
+          </label>
+          <SubmitButton pendingLabel="Saving…" className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
+            Save bank file settings
+          </SubmitButton>
+        </form>
+        <SettingRow
+          title="Email a remittance advice when a payee is paid"
+          description="Lists what the transfer covered. Goes to the payee's remittance email (set on the vendor's payment details), or to a member's own address when they are reimbursed."
+          on={settings.remittance_emails}
+          action={setRemittanceEmails}
+        />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="section-title text-ink">Budgets</h2>
+        <form action={setBudgetAlerts} className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-xl">
+            <label className="flex items-center gap-2 font-medium text-ink">
+              <input type="checkbox" name="enabled" defaultChecked={settings.budget_alerts.enabled} />
+              Alert whoever sets budgets as a category passes
+            </label>
+            <p className="mt-0.5 text-xs text-ink/60">
+              Of its budget for the Hijri year, once each. For other alerts, build one on Announcements &amp; alerts.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input name="percents" defaultValue={settings.budget_alerts.percents.join(", ")} className="input w-28" aria-label="Percentages" />
+            <span className="text-xs text-ink/55">%</span>
+            <SubmitButton pendingLabel="Saving…" className="rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30">
+              Save
+            </SubmitButton>
+          </div>
+        </form>
+      </section>
 
       <section className="flex flex-col gap-3">
         <div>

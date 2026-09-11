@@ -6,7 +6,9 @@ import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/catego
 import { formatDateTime } from "@/lib/format";
 import { parsePeriod, previousPeriod } from "@/lib/periods";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
-import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
+import { budgetsForPeriod, canPhase, loadBudgets } from "@/lib/budgets";
+import { monthOf } from "@/lib/periods";
+import { BudgetPhasing } from "./budget-phasing";
 import { PeriodPicker } from "@/components/period-picker";
 import { SubmitButton } from "@/components/submit-button";
 import { loadReportRawData, withinRange } from "../reports/data";
@@ -71,11 +73,18 @@ export default async function BudgetsPage({
   const perCategory = budgetsForPeriod(budgets, period.start, period.end);
 
   // Actual spend, from the same line-level ledger Reports aggregates. Declined
-  // and withdrawn expenses are already excluded upstream.
+  // and withdrawn expenses are already excluded upstream. Split into paid, and
+  // committed — approved or still waiting — because a budget is used up as
+  // soon as the money is promised, not when the transfer happens (#39).
+  const statusOf = new Map(report.allExpenses.map((e) => [e.id, e.status]));
   const spentByCategory = new Map<string, number>();
+  const paidByCategory = new Map<string, number>();
   for (const line of report.allLines) {
     if (!line.categoryId) continue;
     spentByCategory.set(line.categoryId, (spentByCategory.get(line.categoryId) ?? 0) + line.lineTotal);
+    if (statusOf.get(line.expenseId) === "paid") {
+      paidByCategory.set(line.categoryId, (paidByCategory.get(line.categoryId) ?? 0) + line.lineTotal);
+    }
   }
 
   const rows = categories
@@ -83,12 +92,15 @@ export default async function BudgetsPage({
       const share = perCategory.get(c.id);
       const budget = share && share.uncoveredDays < share.days ? share.amount : null;
       const spent = spentByCategory.get(c.id) ?? 0;
+      const paid = paidByCategory.get(c.id) ?? 0;
       return {
         id: c.id,
         label: labels.get(c.id) ?? c.name,
         budget,
         share,
         spent,
+        paid,
+        committed: spent - paid,
         // Null when nothing is budgeted: a category with no budget is not
         // "100% over", it is undecided, and reporting it as a breach would
         // train people to ignore the column.
@@ -141,7 +153,8 @@ export default async function BudgetsPage({
 
       <div className="flex flex-wrap items-center gap-x-8 gap-y-2 rounded-xl border border-ink/10 bg-white/60 px-5 py-4">
         <Figure label="Budgeted" value={totalBudget > 0 ? money(totalBudget) : "Not set"} />
-        <Figure label="Spent" value={money(totalSpent)} />
+        <Figure label="Paid" value={money(rows.reduce((s, r) => s + r.paid, 0))} />
+        <Figure label="Committed" value={money(rows.reduce((s, r) => s + r.committed, 0))} />
         <Figure
           label="Remaining"
           value={totalBudget > 0 ? money(totalBudget - totalSpent) : "—"}
@@ -183,7 +196,10 @@ export default async function BudgetsPage({
             <tr>
               <th scope="col" className="px-4 py-2.5 font-medium">Category</th>
               <th scope="col" className="px-4 py-2.5 text-right font-medium">Budget</th>
-              <th scope="col" className="px-4 py-2.5 text-right font-medium">Spent</th>
+              <th scope="col" className="px-4 py-2.5 text-right font-medium">Paid</th>
+              <th scope="col" className="px-4 py-2.5 text-right font-medium" title="Approved or waiting for approval, not yet paid">
+                Committed
+              </th>
               <th scope="col" className="px-4 py-2.5 text-right font-medium">Remaining</th>
               <th scope="col" className="px-4 py-2.5 font-medium">Used</th>
             </tr>
@@ -211,8 +227,16 @@ export default async function BudgetsPage({
                       <span className="font-mono text-ink/70">{row.budget === null ? "—" : money(row.budget)}</span>
                     )}
                     <BudgetNote share={share} exact={!!share?.exact} />
+                    {canEdit && share?.exact && canPhase(share.exact.periodCode) && period.calendar && period.year !== null && (
+                      <BudgetPhasing
+                        budgetId={share.exact.id}
+                        months={Array.from({ length: 12 }, (_, i) => monthOf(period.calendar!, period.year!, i + 1).label)}
+                        percents={share.exact.months ? share.exact.months.map((m) => m.percent) : null}
+                      />
+                    )}
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-figures text-ink/80">{money(row.spent)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-figures text-ink/80">{money(row.paid)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-figures text-ink/60">{money(row.committed)}</td>
                   <td
                     className={`px-4 py-2.5 text-right font-mono tabular-figures ${over ? "text-maroon" : "text-ink/80"}`}
                   >

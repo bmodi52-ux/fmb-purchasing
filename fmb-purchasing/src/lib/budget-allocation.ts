@@ -35,7 +35,24 @@ export type BudgetRecord = {
   /** Higher keeps contested days. */
   priority: number;
   label: string;
+  /**
+   * Monthly phasing (#39): the share of the budget each month of its own year
+   * carries, as percentages. Without it the budget is spread evenly by day.
+   */
+  months?: { start: string; end: string; percent: number }[];
 };
+
+/**
+ * How much of a budget's remainder one of its days should carry, relative to
+ * its other days: a month's percentage shared across that month's days. Even
+ * when there is no phasing.
+ */
+function dayWeight(b: BudgetRecord, day: number): number {
+  if (!b.months?.length) return 1;
+  const month = b.months.find((m) => day >= dayNumber(m.start) && day <= dayNumber(m.end));
+  if (!month) return 0;
+  return month.percent / (dayNumber(month.end) - dayNumber(month.start) + 1);
+}
 
 export type BudgetShare = {
   /** Days no higher-priority budget had already taken. */
@@ -65,18 +82,18 @@ function byPriority(a: BudgetRecord, b: BudgetRecord): number {
   return b.priority - a.priority || a.start.localeCompare(b.start) || a.id.localeCompare(b.id);
 }
 
+/** Budgets that keep what their days carried in an earlier allocation — the override case. */
+export type Keep = { ids: Set<string>; from: Allocation };
+
 /**
  * Shares every budget's amount across its days, highest priority first.
  *
- * `keepRates` is the override case: each budget named there keeps that daily
- * amount on its own days, and its amount is reported as what its days then
- * actually carry. Any other budget whose total cannot hold puts nothing on
- * its own days and is marked as not holding.
+ * `keep` is the override case: each budget it names keeps, on each of its own
+ * days, the amount that day carried in `keep.from`, and its amount is reported
+ * as what its days then actually carry. Any other budget whose total cannot
+ * hold puts nothing on its own days and is marked as not holding.
  */
-export function allocate(
-  budgets: BudgetRecord[],
-  keepRates?: Map<string, number>
-): Allocation & { amounts: Map<string, number> } {
+export function allocate(budgets: BudgetRecord[], keep?: Keep): Allocation & { amounts: Map<string, number> } {
   const shares = new Map<string, BudgetShare>();
   const days = new Map<number, { budgetId: string; amount: number }>();
   const amounts = new Map<string, number>();
@@ -94,21 +111,38 @@ export function allocate(
 
     const remainder = b.amount - claimed;
     let holds = own.length > 0 ? remainder >= -CENT : Math.abs(remainder) <= CENT;
-
-    let rate: number;
     let amount = b.amount;
-    if (keepRates?.has(b.id)) {
-      rate = keepRates.get(b.id)!;
-      amount = round2(claimed + rate * own.length);
+    let perDay: (d: number) => number;
+
+    if (keep?.ids.has(b.id)) {
+      const previous = keep.from.days;
+      const fallback = keep.from.shares.get(b.id)?.dailyRate ?? 0;
+      perDay = (d) => (previous.get(d)?.budgetId === b.id ? previous.get(d)!.amount : fallback);
+      amount = round2(claimed + own.reduce((s, d) => s + perDay(d), 0));
       holds = true;
-    } else if (holds) {
-      rate = own.length > 0 ? Math.max(0, remainder) / own.length : 0;
+    } else if (holds && own.length > 0) {
+      const weights = own.map((d) => dayWeight(b, d));
+      const total = weights.reduce((s, w) => s + w, 0);
+      const spread = Math.max(0, remainder);
+      // Phasing whose months fall entirely on days other budgets took leaves
+      // nothing to weight by; the remainder then spreads evenly after all.
+      perDay = total > 0 ? (d) => (spread * dayWeight(b, d)) / total : () => spread / own.length;
     } else {
-      rate = 0;
+      perDay = () => 0;
     }
 
-    for (const d of own) days.set(d, { budgetId: b.id, amount: rate });
-    shares.set(b.id, { ownDays: own.length, claimed: round2(claimed), dailyRate: rate, holds });
+    let carried = 0;
+    for (const d of own) {
+      const value = perDay(d);
+      carried += value;
+      days.set(d, { budgetId: b.id, amount: value });
+    }
+    shares.set(b.id, {
+      ownDays: own.length,
+      claimed: round2(claimed),
+      dailyRate: own.length ? carried / own.length : 0,
+      holds,
+    });
     amounts.set(b.id, amount);
   }
 
@@ -197,6 +231,8 @@ export function planBudgetSave(existing: BudgetRecord[], draft: BudgetDraft): {
     // An edit keeps its place; a new budget goes beneath everything already set.
     priority: current ? current.priority : lowest - 1,
     label: draft.label,
+    // An edit keeps its monthly phasing.
+    months: current?.months,
   };
 
   const others = existing.filter((b) => b.id !== draft.id);
@@ -210,23 +246,22 @@ export function planBudgetSave(existing: BudgetRecord[], draft: BudgetDraft): {
   // holds but pushes a lower budget below zero, only the budgets that fail
   // keep their rates; the rest still recalculate to hold their totals.
   const before = allocate(existing);
-  const previousRate = (id: string) => before.shares.get(id)?.dailyRate ?? 0;
   const candidateHolds = plainAllocation.shares.get(candidateId)?.holds ?? true;
   const highest = Math.max(candidate.priority, ...others.map((b) => b.priority));
   const lifted = candidateHolds ? candidate : { ...candidate, priority: highest + 1 };
   const overrideInput = [...others, lifted];
 
-  const keep = new Map<string, number>();
+  const keep: Keep = { ids: new Set(), from: before };
   if (!candidateHolds) {
-    for (const b of others) if (overlaps(b, lifted)) keep.set(b.id, previousRate(b.id));
+    for (const b of others) if (overlaps(b, lifted)) keep.ids.add(b.id);
   }
   let overrideAllocation = allocate(overrideInput, keep);
-  // A budget that keeps its rate changes what lies beneath it, which can make
-  // a further one fail; each pass adds those, and the set only grows.
+  // A budget that keeps its days' amounts changes what lies beneath it, which
+  // can make a further one fail; each pass adds those, and the set only grows.
   for (let pass = 0; pass < overrideInput.length; pass++) {
     const failing = [...overrideAllocation.shares.entries()].filter(([id, s]) => !s.holds && id !== candidateId);
     if (failing.length === 0) break;
-    for (const [id] of failing) keep.set(id, previousRate(id));
+    for (const [id] of failing) keep.ids.add(id);
     overrideAllocation = allocate(overrideInput, keep);
   }
 
