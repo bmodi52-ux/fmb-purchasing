@@ -18,14 +18,15 @@ import Link from "next/link";
  *   3. show the digest, because that is the only thread connecting what the
  *      person saw to the entry in the platform log.
  *
- * `unstable_retry` rather than `reset`: this version of Next renamed the prop.
+ * `retry` rather than `reset`: `reset` only clears the boundary, while `retry`
+ * also refetches the segment. (It was `unstable_retry` before Next 16.3.)
  */
 export default function AppError({
   error,
-  unstable_retry,
+  retry,
 }: {
   error: Error & { digest?: string };
-  unstable_retry: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     // Server-thrown errors arrive here with their message already stripped,
@@ -45,7 +46,7 @@ export default function AppError({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          onClick={() => unstable_retry()}
+          onClick={() => retry()}
           className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-gold-deep hover:text-white"
         >
           Try again
