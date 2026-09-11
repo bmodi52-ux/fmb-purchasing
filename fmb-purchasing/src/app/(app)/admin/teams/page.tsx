@@ -4,8 +4,12 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createTeam, addTeamMember, removeTeamMember, togglePermission } from "./actions";
+import { accessChangeActor, describeAccessChange, type AccessChangeRow } from "@/lib/access-changes";
+import { formatDateTime } from "@/lib/format";
 
 export const metadata = { title: "Teams & permissions" };
+
+const RECENT_CHANGES = 50;
 
 export default async function TeamsAdminPage() {
   const user = await getCurrentUser();
@@ -13,8 +17,15 @@ export default async function TeamsAdminPage() {
   await requirePermission(user, "admin_teams", "manage_teams");
 
   const admin = createAdminClient();
-  const [{ data: teams }, { data: pages }, { data: actions }, { data: grants }, { data: profiles }, { data: members }] =
-    await Promise.all([
+  const [
+    { data: teams },
+    { data: pages },
+    { data: actions },
+    { data: grants },
+    { data: profiles },
+    { data: members },
+    { data: changes },
+  ] = await Promise.all([
       admin.from("teams").select("id, name, is_default").order("name"),
       // Only rows that are actually permission boundaries. Some app_pages
       // entries exist purely as a column-preference scope for a second view of
@@ -30,7 +41,17 @@ export default async function TeamsAdminPage() {
       admin.from("team_permissions").select("team_id, page_key, action_key"),
       admin.from("profiles").select("id, email, full_name").order("full_name"),
       admin.from("team_members").select("team_id, user_id"),
+      admin
+        .from("access_changes")
+        .select("id, changed_at, actor_id, kind, team_name, subject_name, page_key, action_key, detail")
+        .order("changed_at", { ascending: false })
+        .limit(RECENT_CHANGES),
     ]);
+
+  const pageLabel = new Map((pages ?? []).map((p) => [p.key as string, p.label as string]));
+  const actionLabel = new Map((actions ?? []).map((a) => [a.key as string, a.label as string]));
+  const profileName = new Map((profiles ?? []).map((p) => [p.id as string, (p.full_name || p.email) as string]));
+  const changeRows = (changes ?? []) as AccessChangeRow[];
 
   const grantSet = new Set(
     (grants ?? []).map((g) => `${g.team_id}:${g.page_key}:${g.action_key}`)
@@ -175,6 +196,40 @@ export default async function TeamsAdminPage() {
           );
         })}
       </div>
+
+      {/* Access to money has a history like everything else (0045): who was
+          put in which team, which grants changed, which accounts were turned
+          off — including changes made in the Supabase dashboard. */}
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="section-title text-ink">Recent changes</h2>
+          <p className="mt-0.5 text-xs text-ink/55">
+            The last {RECENT_CHANGES} changes to teams, members, permissions and accounts.
+          </p>
+        </div>
+        {changeRows.length === 0 ? (
+          <p className="text-sm text-ink/50">No changes recorded yet.</p>
+        ) : (
+          <ol className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60">
+            {changeRows.map((row) => (
+              <li key={row.id} className="flex flex-col gap-0.5 px-4 py-2.5 text-sm sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                <span className="text-ink">
+                  {describeAccessChange(row, {
+                    page: (k) => pageLabel.get(k) ?? k,
+                    action: (k) => actionLabel.get(k) ?? k,
+                  })}
+                  {row.detail && !row.detail.startsWith("Automatically") && (
+                    <span className="text-ink/50"> · {row.detail}</span>
+                  )}
+                </span>
+                <span className="shrink-0 text-xs text-ink/50">
+                  {accessChangeActor(row, (id) => profileName.get(id))} · {formatDateTime(row.changed_at)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
     </div>
   );
 }

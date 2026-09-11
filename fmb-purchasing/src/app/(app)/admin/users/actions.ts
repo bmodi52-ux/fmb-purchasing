@@ -8,6 +8,7 @@ import { requirePermission } from "@/lib/permissions";
 import { generateTemporaryPassword, normalizeEmail, isValidEmail } from "@/lib/auth/password";
 import { sendWelcomeEmail, sendTemporaryPasswordEmail } from "@/lib/auth/emails";
 import { userIdsWithPermission } from "@/lib/notifications-inapp";
+import { reportError } from "@/lib/errors";
 
 /**
  * A temporary password exists in exactly two places: the email that carries
@@ -158,7 +159,7 @@ async function wouldStrandUserAdmin(
  * is the sort of thing a future caller gets wrong exactly once, silently, on
  * the action that locks people out of the system.
  */
-async function applyActive(userIds: string[], active: boolean): Promise<void> {
+async function applyActive(actorId: string, userIds: string[], active: boolean): Promise<void> {
   if (userIds.length === 0) return;
   const admin = createAdminClient();
 
@@ -166,20 +167,30 @@ async function applyActive(userIds: string[], active: boolean): Promise<void> {
   const toChange = userIds.filter((id) => !protectedIds.includes(id));
   if (toChange.length === 0) return;
 
-  await admin.from("profiles").update({ is_active: active }).in("id", toChange);
+  // Through admin_set_active (0045) so the access-change record names who did it.
+  const { error } = await admin.rpc("admin_set_active", {
+    p_actor: actorId,
+    p_user_ids: toChange,
+    p_active: active,
+  });
+  if (error) {
+    await reportError({ source: "users-admin", error: error.message, userId: actorId });
+    throw new Error("The accounts could not be changed. Try again.");
+  }
   revalidatePath("/admin/users");
+  revalidatePath("/admin/teams");
 }
 
 export async function setUserActive(formData: FormData) {
-  await requireUsersAdmin();
+  const user = await requireUsersAdmin();
   const userId = String(formData.get("user_id"));
   // The form posts what the account should become, so this reads the same way
   // as the bulk call and as the button the person clicked.
   const active = String(formData.get("active")) === "true";
-  if (userId) await applyActive([userId], active);
+  if (userId) await applyActive(user.id, [userId], active);
 }
 
 export async function bulkSetUserActive(userIds: string[], active: boolean) {
-  await requireUsersAdmin();
-  await applyActive(userIds, active);
+  const user = await requireUsersAdmin();
+  await applyActive(user.id, userIds, active);
 }

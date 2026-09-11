@@ -17,6 +17,7 @@ export const LEDGERED_MIGRATIONS = [
   "0042_atomic_decisions_and_payments.sql",
   "0043_withdrawn_status.sql",
   "0044_withdraw_expenses.sql",
+  "0045_access_changes.sql",
 ] as const;
 
 export type MigrationStatus =
