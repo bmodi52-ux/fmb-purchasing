@@ -1,0 +1,35 @@
+# The uptime check (scratchpad #46).
+#
+# Every 15 minutes, asks the live site whether it is healthy. A failed run is
+# emailed by GitHub to whoever last changed this schedule, and shows red in the
+# Actions tab, so an outage is noticed without anyone having to look. Needs no
+# account anywhere else.
+#
+# GitHub may delay scheduled runs by some minutes when busy, and pauses a
+# schedule after 60 days with no commits to the repository; re-enable it from
+# the Actions tab if that happens.
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Health check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask the site whether it is healthy
+        run: |
+          for attempt in 1 2 3; do
+            code=$(curl -s -o body.json -w "%{http_code}" --max-time 30 https://www.fmbpurchasing.com.au/api/health || echo 000)
+            echo "Attempt $attempt: HTTP $code"
+            cat body.json 2>/dev/null || true
+            echo
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 20
+          done
+          echo "::error::The site did not report healthy after three tries."
+          exit 1

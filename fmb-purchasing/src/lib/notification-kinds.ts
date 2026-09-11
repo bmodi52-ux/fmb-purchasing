@@ -132,9 +132,11 @@ export const NOTIFICATION_KINDS: KindDefinition[] = [
   {
     kind: "system_error",
     label: "Something failed in the background",
-    description: "A receipt that would not read, an email that did not send.",
+    description: "A new kind of failure, such as a receipt that would not read or an email that did not send. Repeats of the same failure aren't sent again.",
     audience: ["admins"],
-    defaults: { in_app: true, push: false, email: false },
+    // Only the first occurrence of each fault is sent (0021), so push and
+    // email can be on without flooding anyone (#46).
+    defaults: { in_app: true, push: true, email: true },
   },
 ];
 
