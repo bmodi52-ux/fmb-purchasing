@@ -264,7 +264,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-4 section-title text-ink">Details</h2>
-        <form action={updateVendorDetails} className="grid gap-4 sm:grid-cols-2">
+        <form action={updateVendorDetails} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <input type="hidden" name="vendor_id" value={vendor.id} />
           <Field label="Vendor name">
             <input name="name" defaultValue={vendor.name} disabled={!canEdit} required className="input" />
@@ -275,7 +275,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
 
           <div className="sm:col-span-2">
             <p className="mb-2 text-sm font-medium text-ink/70">Billing address</p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <input name="billing_line1" placeholder="Address line 1" defaultValue={billing.line1 ?? ""} disabled={!canEdit} className="input sm:col-span-2" />
               <input name="billing_line2" placeholder="Address line 2" defaultValue={billing.line2 ?? ""} disabled={!canEdit} className="input sm:col-span-2" />
               <input name="billing_suburb" placeholder="Suburb" defaultValue={billing.suburb ?? ""} disabled={!canEdit} className="input" />
@@ -368,7 +368,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
         )}
 
         {canSeeBankDetails ? (
-          <form action={updateVendorPaymentDetails} className="grid gap-4 sm:grid-cols-2">
+          <form action={updateVendorPaymentDetails} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <input type="hidden" name="vendor_id" value={vendor.id} />
             <Field label="Account name">
               <input name="bank_account_name" defaultValue={payment?.bankAccountName ?? ""} className="input" />
@@ -475,7 +475,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
         </ul>
 
         {canEdit && (
-          <form action={addCollectionAddress} className="grid gap-3 sm:grid-cols-2">
+          <form action={addCollectionAddress} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input type="hidden" name="vendor_id" value={vendor.id} />
             <input name="label" placeholder="Label (e.g. Warehouse)" className="input" />
             <input name="line1" placeholder="Address line 1" required className="input" />

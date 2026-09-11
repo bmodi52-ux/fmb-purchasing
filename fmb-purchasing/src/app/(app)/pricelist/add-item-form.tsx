@@ -76,7 +76,7 @@ export function AddItemForm({
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-5">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm sm:col-span-2">
           <span className="text-ink/70">Item name</span>
           <input name="name" required placeholder="e.g. Chicken Breast" className="input" />
@@ -128,7 +128,7 @@ export function AddItemForm({
 
       <div className="border-t border-ink/10 pt-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/40">First vendor offer</p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {fixedVendor ? (
             <div className="flex flex-col gap-1 text-sm">
               <span className="text-ink/70">Vendor</span>
@@ -154,7 +154,7 @@ export function AddItemForm({
           </label>
         </div>
 
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-ink/70">
               Vendor&apos;s product code <span className="text-ink/40">(optional)</span>
@@ -163,7 +163,7 @@ export function AddItemForm({
           </label>
 
           <div className="flex gap-2">
-            <label className="flex flex-1 flex-col gap-1 text-sm">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
               <span className="text-ink/70">{priceLabel}</span>
               <input
                 name="pack_price"
@@ -174,7 +174,7 @@ export function AddItemForm({
                 className="input"
               />
             </label>
-            <div className="flex w-36 flex-col gap-1 text-sm">
+            <div className="flex w-36 shrink-0 flex-col gap-1 text-sm">
               <span className="text-ink/70">Works out to</span>
               <div className="input flex items-center bg-ink/[0.03] font-mono text-ink/70">
                 {costPerUnit != null ? formatUnitCost(costPerUnit, innerUnitLabel) : "—"}

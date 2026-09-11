@@ -51,6 +51,63 @@ Decided (2026-09-10):
 
 ## Done
 
+### 13. Submit on a phone: keep Submit pinned in reach
+
+Submit and Discard sit in a bar pinned to the bottom of the screen on phones,
+with any error explaining a refused submission right above them. On a computer
+they stay at the end of the form.
+
+### 12. Reports charts: tap to see a value
+
+Tapping a column or a line shows its value, and it stays after the finger lifts
+rather than vanishing. Tapping a ranking bar shows its full name and figures. A
+mouse still works by hovering.
+
+### 11. Receipt upload: a "Take photo" button
+
+On a phone the upload screen has "Take a photo of the receipt", which opens the
+rear camera directly. File upload, drag and paste are unchanged.
+
+### 10. Expenses, Pricelist and My submissions on a phone: a card view
+
+Every list built on the shared table (Expenses, Pricelist, Vendors, Users) shows
+a card per row on phones: the first column as the title, the rest as labelled
+values, the expand arrow kept, and a Sort by control since cards have no column
+headings. My submissions already used cards; its top row now wraps, so a long
+vendor name no longer pushes the date off screen, and Edit / Delete are easier
+to tap.
+
+### 9. Payments on a phone: one card per expense
+
+A card per expense with vendor, entry number, submitter and invoice number, the
+amount, who to pay, approval date and receipt, and the payment reference, date
+and Mark paid together at the bottom.
+
+### 8. Submit on a phone: line items as cards
+
+One card per line on phones: type and remove, item number and description with
+the Pricelist suggestions, the Pricelist match, category, quantity / unit price
+/ line total, and GST. The ten-column table stays on larger screens.
+
+### 7. Mobile review: bugs and quick wins across the app
+
+- Fields are 16px on touch screens, so iPhone no longer zooms in on every tap.
+- A grid with no phone column now gets one that shrinks, app-wide, so sections
+  no longer grow past the screen and get cut off; fields may narrow inside a
+  row rather than push a button off the edge.
+- Approvals' line items scroll on their own and the totals row wraps.
+- The phone menu is capped to the visible screen, so Sign out stays in view.
+- Phone page padding is 15px instead of 30px.
+- The phone top bar stays pinned while scrolling.
+- Popup ✕, the receipt viewer's × and remove-line × have larger tap targets.
+- iPhones get a home-screen icon.
+
+### 6. Add item popup is cut off on mobile, and can't be scrolled sideways
+
+The Add item popup, the item page's offer form, the vendor pricing popup and the
+item and vendor Details forms get one column on phones, and the price field may
+narrow, so every field fits the screen. The unit dropdown reads "— as above —".
+
 ### 5. Vendor page: the products they supply, and adding items and pricing there
 
 A Products section on every vendor page lists each item and pack size the

@@ -135,6 +135,41 @@ input[type="radio"] {
 }
 
 /* ---------------------------------------------------------------------
+   Phones
+   --------------------------------------------------------------------- */
+
+@layer base {
+  /* A grid with no columns of its own gets one column that can shrink.
+     Left implicit, that column is sized to its widest content — a dropdown of
+     long vendor names, an input beside a button — and on a phone it grew past
+     the screen. The app shell clips sideways overflow, so the fields were cut
+     off with no way to scroll to them. Any grid-cols-* utility still wins. */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* A field may give up width inside a flex row, rather than pushing the
+     button beside it off the edge. */
+  input,
+  select,
+  textarea {
+    min-width: 0;
+  }
+}
+
+/* iOS zooms the whole page into any field whose text is under 16px, and does
+   not zoom back out — so every tap on a 13px input left the form magnified and
+   half off screen. Touch screens get 16px fields; a mouse keeps the tighter
+   size. Unlayered on purpose, so it holds over text-xs on a field. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* ---------------------------------------------------------------------
    Navigation feedback
    ---------------------------------------------------------------------
    Every nav link sets prefetch={false} (for the reasons in the perf work),

@@ -18,6 +18,7 @@ export function LineMatchRow({
   onReject,
   onChoosePack,
   onChooseItem,
+  layout = "row",
 }: {
   description: string;
   match: LineMatchResult | null | undefined;
@@ -25,20 +26,28 @@ export function LineMatchRow({
   onReject: () => void;
   onChoosePack: (packSizeId: string | null) => void;
   onChooseItem: (itemId: string) => void;
+  /** "row" under a table row; "stack" inside the card a phone shows instead. */
+  layout?: "row" | "stack";
 }) {
   if (!description.trim()) return null;
+
+  const summary = (
+    <MatchSummary
+      match={match}
+      onConfirm={onConfirm}
+      onReject={onReject}
+      onChoosePack={onChoosePack}
+      onChooseItem={onChooseItem}
+    />
+  );
+
+  if (layout === "stack") return <div className="text-xs">{summary}</div>;
 
   return (
     <tr>
       <td />
       <td colSpan={9} className="px-1 pb-2 text-xs">
-        <MatchSummary
-          match={match}
-          onConfirm={onConfirm}
-          onReject={onReject}
-          onChoosePack={onChoosePack}
-          onChooseItem={onChooseItem}
-        />
+        {summary}
       </td>
     </tr>
   );

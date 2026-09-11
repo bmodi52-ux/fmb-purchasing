@@ -98,9 +98,9 @@ export function PackFields({
       aria-label="Unit"
       value={values.innerUnitId}
       onChange={(e) => update({ innerUnitId: e.target.value })}
-      className="input w-32"
+      className="input w-36"
     >
-      {sameAsUnitId !== undefined && <option value="">— same as above —</option>}
+      {sameAsUnitId !== undefined && <option value="">— as above —</option>}
       {units.map((u) => (
         <option key={u.id} value={u.id}>
           {unitOptionLabel(u.label)}

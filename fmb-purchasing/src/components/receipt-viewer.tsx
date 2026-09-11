@@ -127,7 +127,7 @@ export function ReceiptViewer({ expenseId, label = "View receipt" }: { expenseId
                   type="button"
                   onClick={close}
                   aria-label="Close"
-                  className="text-ink/60 hover:text-ink"
+                  className="-m-2 p-2 text-xl leading-none text-ink/60 hover:text-ink"
                 >
                   ×
                 </button>

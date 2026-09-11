@@ -204,9 +204,9 @@ function AddOfferForm({
 
           {pack && (
             <>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex gap-2 sm:col-span-2">
-                  <label className="flex flex-1 flex-col gap-1 text-sm">
+                  <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
                     <span className="text-ink/70">{pack.priceLabel}</span>
                     <input
                       name="pack_price"
@@ -218,7 +218,7 @@ function AddOfferForm({
                       className="input"
                     />
                   </label>
-                  <div className="flex w-36 flex-col gap-1 text-sm">
+                  <div className="flex w-36 shrink-0 flex-col gap-1 text-sm">
                     <span className="text-ink/70">Works out to</span>
                     <div className="input flex items-center bg-ink/[0.03] font-mono text-ink/70">
                       {costPerUnit != null ? formatUnitCost(costPerUnit, pack.unitLabel) : "—"}

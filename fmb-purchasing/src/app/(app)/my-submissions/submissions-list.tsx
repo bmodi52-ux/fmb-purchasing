@@ -82,7 +82,9 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
           {rows.map((e) => (
             <div key={e.id} className="rounded-lg border border-ink/10 bg-white/60 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
+                {/* Wraps: a long vendor name on a phone otherwise pushed the date
+                    past the edge of the card. */}
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                   <input
                     type="checkbox"
                     checked={selection.isSelected(e.id)}
@@ -90,8 +92,8 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                     aria-label="Select submission"
                   />
                   <Link href={`/expenses/${e.id}`} className="font-mono text-xs text-ink/70 underline">{e.expense_number ?? "View"}</Link>
-                  <span className="font-medium text-ink">{e.vendor_name_raw}</span>
-                  <span className="ml-2 text-sm text-ink/50">{formatDate(e.created_at)}</span>
+                  <span className="min-w-0 break-words font-medium text-ink">{e.vendor_name_raw}</span>
+                  <span className="text-sm text-ink/50">{formatDate(e.created_at)}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   {e.hasReceipt && <ReceiptViewer expenseId={e.id} label="Receipt" />}
@@ -126,13 +128,13 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
               )}
 
               {e.status === "submitted" && (
-                <div className="mt-3 flex gap-3 text-sm">
-                  <Link href={`/submit?edit=${e.id}`} className="text-ink/70 underline hover:text-ink">
+                <div className="mt-2 flex gap-2 text-sm">
+                  <Link href={`/submit?edit=${e.id}`} className="-ml-2 px-2 py-1.5 text-ink/70 underline hover:text-ink">
                     Edit
                   </Link>
                   <form action={deleteExpense}>
                     <input type="hidden" name="expense_id" value={e.id} />
-                    <SubmitButton className="text-maroon/70 underline hover:text-maroon">
+                    <SubmitButton className="px-2 py-1.5 text-maroon/70 underline hover:text-maroon">
                       Delete
                     </SubmitButton>
                   </form>

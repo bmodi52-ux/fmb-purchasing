@@ -29,7 +29,10 @@ export default async function AppLayout({
 
   return (
     <PendingProvider>
-      <div className="flex min-h-screen flex-col overflow-x-hidden md:flex-row">
+      {/* overflow-x-clip rather than -hidden: hidden quietly makes this a
+          scroll container, and nothing inside a scroll container that never
+          scrolls can be sticky — the phone's top bar included. */}
+      <div className="flex min-h-screen flex-col overflow-x-clip md:flex-row">
         <AppSidebar
           navItems={visibleNav}
           userName={user.fullName || user.email}
@@ -37,7 +40,9 @@ export default async function AppLayout({
           unreadCount={unread}
         />
 
-        <main className="min-w-0 flex-1 px-8 py-12 md:px-16">{children}</main>
+        {/* Desktop spacing cost a phone 60px of a 375px screen before any
+            card added padding of its own. */}
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-12 md:px-16">{children}</main>
       </div>
     </PendingProvider>
   );
