@@ -6,6 +6,12 @@ import { ApprovalsList, type ApprovalRow } from "./approvals-list";
 import { categoryLabelsById } from "@/lib/categories";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { paymentInstructions } from "@/lib/payment-instruction";
+import { getSetting } from "@/lib/app-settings";
+import { possibleDuplicates, type DuplicateMatch } from "@/lib/duplicates";
+import { GST_CONCERN_LABEL, gstConcerns } from "@/lib/vendor-registration";
+import { storedGstDisagreement } from "@/lib/expense-money";
+
+type VendorFlagRow = { id: string; status: string; gst_registered: boolean | null; abn_active: boolean | null };
 
 export const metadata = { title: "Approvals" };
 
@@ -28,7 +34,7 @@ export default async function ApprovalsPage() {
     admin
       .from("expenses")
       .select(
-        "id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, total, submitted_by, submitter_comment, payee_id, created_at"
+        "id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, submitted_by, submitter_comment, payee_id, created_at"
       )
       .eq("status", "submitted")
       .order("created_at"),
@@ -48,23 +54,35 @@ export default async function ApprovalsPage() {
   const expenseIds = expenses.map((e) => e.id);
   const vendorIds = [...new Set(expenses.map((e) => e.vendor_id).filter(Boolean))] as string[];
 
-  const [{ data: profiles }, { data: lineItems }, { data: categories }, { data: vendors }, instructions, withFiles] =
-    await Promise.all([
+  const [
+    { data: profiles },
+    { data: lineItems },
+    { data: categories },
+    { data: vendors },
+    instructions,
+    withFiles,
+    duplicates,
+  ] = await Promise.all([
       admin.from("profiles").select("id, full_name, email").in("id", submitterIds),
       admin
         .from("expense_line_items")
-        .select("expense_id, description_raw, quantity, unit_price, line_total, category_id, pricelist_item_id")
+        .select("expense_id, description_raw, quantity, unit_price, line_total, gst_applicable, category_id, pricelist_item_id")
         .in("expense_id", expenseIds)
         .order("sort_order"),
       admin.from("categories").select("id, name, parent_category_id"),
       vendorIds.length
-        ? admin.from("vendors").select("id, status").in("id", vendorIds)
-        : Promise.resolve({ data: [] as { id: string; status: string }[] }),
+        ? admin.from("vendors").select("id, status, gst_registered, abn_active").in("id", vendorIds)
+        : Promise.resolve({ data: [] as VendorFlagRow[] }),
       // Whether each payee's account has been confirmed — the same check the
       // Payments run makes, asked here so it can be noticed before approving.
       paymentInstructions(admin, expenses, { canSeeBankDetails: can(permissions, "payments", "mark_paid") }),
       // One query for the whole page rather than one per row.
       expenseIdsWithAttachments(admin, expenseIds),
+      // The warning the submitter already saw, and could ignore — shown to the
+      // person who can actually stop a double payment. Switchable (#21).
+      getSetting(admin, "duplicate_flags_for_reviewers").then((on) =>
+        on ? possibleDuplicates(admin, expenses) : new Map<string, DuplicateMatch[]>()
+      ),
     ]);
 
   // Lines whose Pricelist item was created by this receipt and nobody has
@@ -84,9 +102,9 @@ export default async function ApprovalsPage() {
 
   const submitterNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
   const categoryNameById = categoryLabelsById(categories ?? []);
-  const pendingVendorIds = new Set(
-    ((vendors ?? []) as { id: string; status: string }[]).filter((v) => v.status === "pending").map((v) => v.id)
-  );
+  const vendorRows = (vendors ?? []) as VendorFlagRow[];
+  const pendingVendorIds = new Set(vendorRows.filter((v) => v.status === "pending").map((v) => v.id));
+  const vendorById = new Map(vendorRows.map((v) => [v.id, v]));
 
   const itemsByExpense = new Map<string, NonNullable<typeof lineItems>>();
   for (const li of lineItems ?? []) {
@@ -114,6 +132,22 @@ export default async function ApprovalsPage() {
         newVendor: e.vendor_id ? pendingVendorIds.has(e.vendor_id) : false,
         unconfirmedAccount: instructions.get(e.id)?.status === "pending",
         newItems: lines.filter((l) => l.pricelist_item_id && newItemOfferIds.has(l.pricelist_item_id)).length,
+        duplicateOf: duplicates.get(e.id) ?? [],
+        gstConcerns: [
+          ...gstConcerns(e.vendor_id ? (vendorById.get(e.vendor_id) ?? null) : null, Number(e.gst_amount)).map(
+            (c) => GST_CONCERN_LABEL[c]
+          ),
+          // The line GST against the figure printed on the receipt (0048).
+          ...(() => {
+            const printed = e.gst_printed == null ? null : Number(e.gst_printed);
+            const off = storedGstDisagreement(
+              Number(e.gst_amount),
+              printed,
+              lines.filter((l) => l.gst_applicable).length
+            );
+            return off === null ? [] : [`Line GST ${money(Number(e.gst_amount))} ≠ ${money(printed!)} on the receipt`];
+          })(),
+        ],
       },
       lineItems: lines.map((li) => ({
         description_raw: li.description_raw,

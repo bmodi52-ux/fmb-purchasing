@@ -255,15 +255,20 @@ export function ReportsView({
                     value={formatMoney(now.averageExpense)}
                     trend={monthly.map((m) => m.spend)}
                   />
-                  {hasCategoryOrItemFilter ? (
-                    <StatTile
-                      label="Lines in this slice"
-                      value={String(now.lineCount)}
-                      hint="GST is recorded per expense, so it isn't shown for a partial receipt"
-                    />
-                  ) : (
-                    <StatTile label="GST" value={formatMoney(now.gst)} hint="Included in total spend" />
-                  )}
+                  {/* GST is on every line, so it holds under any filter. Older
+                      lines had it shared out across their receipt; say so
+                      when they are in play and the split is by category. */}
+                  <StatTile
+                    label="GST"
+                    value={formatMoney(now.gst)}
+                    hint={
+                      hasCategoryOrItemFilter && now.apportionedGstLines > 0
+                        ? `On the matching lines — ${now.apportionedGstLines} older ${now.apportionedGstLines === 1 ? "line has" : "lines have"} GST estimated from the receipt total`
+                        : hasCategoryOrItemFilter
+                          ? `On the ${now.lineCount} matching ${now.lineCount === 1 ? "line" : "lines"}`
+                          : "Included in total spend"
+                    }
+                  />
                 </div>
               </section>
             </Printable>
@@ -471,7 +476,7 @@ function DimensionSection({
           onExport={() =>
             downloadCsv(
               `spend-by-${dimension}.csv`,
-              ranked.map((b) => ({ [dimension]: b.label, [unit]: b.count, total: b.spend }))
+              ranked.map((b) => ({ [dimension]: b.label, [unit]: b.count, total: b.spend, gst: b.gst }))
             )
           }
         >
@@ -505,6 +510,7 @@ function DimensionSection({
                   <th scope="col" className="py-2 pr-4 font-medium">{title.replace(/s$/, "")}</th>
                   <th scope="col" className="py-2 pr-4 text-right font-medium capitalize">{unit}</th>
                   <th scope="col" className="py-2 pr-4 text-right font-medium">Total</th>
+                  <th scope="col" className="py-2 pr-4 text-right font-medium">GST</th>
                   <th scope="col" className="py-2 pr-4 text-right font-medium">Share</th>
                 </tr>
               </thead>
@@ -519,6 +525,9 @@ function DimensionSection({
                       {formatMoney(b.spend)}
                     </td>
                     <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
+                      {formatMoney(b.gst)}
+                    </td>
+                    <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
                       {total > 0 ? `${Math.round((b.spend / total) * 100)}%` : "—"}
                     </td>
                   </tr>
@@ -529,6 +538,9 @@ function DimensionSection({
                     {ranked.reduce((s, b) => s + b.count, 0)}
                   </td>
                   <td className="py-2 pr-4 text-right font-mono tabular-nums">{formatMoney(total)}</td>
+                  <td className="py-2 pr-4 text-right font-mono tabular-nums">
+                    {formatMoney(ranked.reduce((s, b) => s + b.gst, 0))}
+                  </td>
                   <td className="py-2 pr-4 text-right font-mono tabular-nums">100%</td>
                 </tr>
               </tbody>

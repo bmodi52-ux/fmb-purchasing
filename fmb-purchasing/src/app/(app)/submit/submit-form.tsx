@@ -282,7 +282,7 @@ export function SubmitForm({
   const [invoiceNumber, setInvoiceNumber] = useState(seed?.invoiceNumber ?? "");
   const [receiptDate, setReceiptDate] = useState(seed?.receiptDate ?? "");
   const [total, setTotal] = useState(seed?.total ?? 0);
-  const [printedGst, setPrintedGst] = useState<number | null>(null);
+  const [printedGst, setPrintedGst] = useState<number | null>(seed?.printedGst ?? null);
   const [submitterComment, setSubmitterComment] = useState(seed?.submitterComment ?? "");
   const [payee, setPayee] = useState<PayeeChoice | null>(
     seed?.payee ?? (seed ? null : { kind: "me" })
@@ -1092,12 +1092,24 @@ function ReviewForm(props: {
     );
   }
 
+  // What the ABR says about registration, beside the ABN (#30) — so a GST line
+  // from a business that can't charge GST is noticed while the receipt is open.
+  const [abnNote, setAbnNote] = useState<{ text: string; warn: boolean } | null>(null);
+
   function handleAbnLookup() {
     setError(null);
+    setAbnNote(null);
     startAbnLookup(async () => {
       const result = await lookupAbnAction(props.abn);
-      if ("error" in result) setError(result.error);
-      else props.setVendorName(result.name);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      props.setVendorName(result.name);
+      if (result.abnActive === false) setAbnNote({ text: "This ABN has been cancelled.", warn: true });
+      else if (result.gstRegistered === false)
+        setAbnNote({ text: "Not registered for GST — this business shouldn't charge GST.", warn: true });
+      else if (result.gstRegistered) setAbnNote({ text: "Registered for GST.", warn: false });
     });
   }
 
@@ -1137,6 +1149,7 @@ function ReviewForm(props: {
         receiptDate: props.receiptDate || null,
         attachments: props.attachments,
         total: props.total,
+        printedGst: props.printedGst,
         submitterComment: props.submitterComment.trim() || null,
         payee: props.payee,
         lineItems: props.items
@@ -1249,6 +1262,9 @@ function ReviewForm(props: {
               {lookingUpAbn ? "Looking up…" : "Look up vendor"}
             </button>
           </div>
+          {abnNote && (
+            <p className={`mt-1 text-xs ${abnNote.warn ? "text-maroon" : "text-ink/55"}`}>{abnNote.text}</p>
+          )}
         </Field>
       </div>
 

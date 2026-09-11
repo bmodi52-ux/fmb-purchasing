@@ -7,6 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { lookupAbn, searchAbnByName, type AbnLookupResult } from "@/lib/abn-lookup";
+import { after } from "next/server";
+import { refreshVendorRegistration } from "@/lib/vendor-registration";
 
 async function requireVendorEdit() {
   const user = await getCurrentUser();
@@ -73,6 +75,9 @@ export async function createVendor(
     .select("id")
     .single();
   if (error || !vendor) return { error: error?.message ?? "Could not create vendor.", success: false };
+
+  // GST registration from the ABR, once the response has gone (#30).
+  if (abn) after(() => refreshVendorRegistration(admin, vendor.id, abn));
 
   const contactName = fieldOrNull(formData, "contact_name");
   if (contactName) {

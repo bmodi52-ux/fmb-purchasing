@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { refreshVendorRegistration, registrationIsStale } from "@/lib/vendor-registration";
 import { revalidatePath } from "next/cache";
 import { revalidateReports } from "../reports/data";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -33,6 +35,8 @@ import { packTitle } from "@/lib/pack-description";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
 import { ilikeContains, orFilter } from "@/lib/pgrst-filter";
 import { reportError } from "@/lib/errors";
+import { NOT_SPEND_FILTER } from "@/lib/expense-status";
+import { getSetting } from "@/lib/app-settings";
 import { lineGst, lineSubtotal, reconcile, round2, sumLineGst } from "@/lib/expense-money";
 import {
   resolvePayee,
@@ -843,6 +847,11 @@ export type CreateExpenseInput = {
    * rather than quietly changing this figure.
    */
   total: number;
+  /**
+   * GST as printed on the receipt, when it printed one (0048). Kept so the
+   * approver can see whether the line GST agrees with it.
+   */
+  printedGst?: number | null;
   /** Free-text note from the submitter; see migration 0025. */
   submitterComment: string | null;
   /** Who to reimburse. Null only where nobody has chosen yet. */
@@ -865,9 +874,17 @@ async function buildLineRows(
   vendorId: string,
   userId: string
 ) {
-  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
+  const [{ data: categories }, capitalThreshold] = await Promise.all([
+    admin.from("categories").select("id, name, parent_category_id, capital_purchases"),
+    getSetting(admin, "capital_purchase_threshold"),
+  ]);
   const categoryIdByName = new Map(
     leafCategories(categories ?? []).map((c) => [c.name.toLowerCase(), c.id])
+  );
+  // Equipment categories (0048): a line over the threshold in one of these is
+  // suggested as a capital purchase. Anyone who approves or pays can change it.
+  const capitalCategoryIds = new Set(
+    (categories ?? []).filter((c) => c.capital_purchases).map((c) => c.id as string)
   );
 
   const rows = [];
@@ -945,6 +962,11 @@ async function buildLineRows(
       normalized_quantity: item.normalizedQuantity,
       normalized_unit: item.normalizedUnit,
       sort_order: index,
+      is_capital:
+        item.kind === "goods" &&
+        resolvedCategoryId !== null &&
+        capitalCategoryIds.has(resolvedCategoryId) &&
+        item.lineTotal >= capitalThreshold,
     });
   }
   return rows;
@@ -989,6 +1011,7 @@ export async function createExpense(
     abn: input.abn,
     userId: user.id,
   });
+  keepVendorRegistrationCurrent(admin, vendor.id);
 
   const lines = await buildLineRows(admin, input, vendor.id, user.id);
   const payeeId = await resolvePayee(admin, input.payee, user, {
@@ -1018,6 +1041,7 @@ export async function createExpense(
       p_fiscal_year_hijri: fiscalYearForReceipt(input.receiptDate),
       p_lines: lines,
       p_attachments: toAttachmentRows(input.attachments),
+      p_gst_printed: input.printedGst ?? null,
     })
     .single();
 
@@ -1040,6 +1064,20 @@ export async function createExpense(
   revalidatePath("/expenses");
   revalidateReports();
   return { expenseId: created.id };
+}
+
+/**
+ * Re-asks the ABR about a vendor's GST registration once its last answer is
+ * over 30 days old (#30), after the response has gone — a submission never
+ * waits on the ABR, and an unreachable ABR never fails one.
+ */
+function keepVendorRegistrationCurrent(admin: ReturnType<typeof createAdminClient>, vendorId: string) {
+  after(async () => {
+    const { data } = await admin.from("vendors").select("abn, abr_checked_at").eq("id", vendorId).maybeSingle();
+    if (data?.abn && registrationIsStale(data.abr_checked_at)) {
+      await refreshVendorRegistration(admin, vendorId, data.abn);
+    }
+  });
 }
 
 function toAttachmentRows(attachments: AttachmentInput[]) {
@@ -1083,7 +1121,10 @@ export type ResubmitSource = {
  * receipt file, and a note saying what it replaces — so fixing the one thing
  * that was wrong is the whole job. The declined expense stays on the record.
  *
- * Only the submitter's own, and only while it is declined.
+ * Also the way back from a withdrawn submission (0044), which is "Submit again"
+ * on My submissions.
+ *
+ * Only the submitter's own, and only while it is declined or withdrawn.
  */
 export async function getExpenseForResubmit(expenseId: string): Promise<ResubmitSource | null> {
   const user = await getCurrentUser();
@@ -1092,10 +1133,14 @@ export async function getExpenseForResubmit(expenseId: string): Promise<Resubmit
 
   const admin = createAdminClient();
   const { data: expense } = await admin.from("expenses").select("*").eq("id", expenseId).maybeSingle();
-  if (!expense || expense.submitted_by !== user.id || expense.status !== "declined") return null;
+  if (!expense || expense.submitted_by !== user.id) return null;
+  if (expense.status !== "declined" && expense.status !== "withdrawn") return null;
 
   const input = await expenseAsInput(admin, expense);
-  const note = `Corrected resubmission of ${expense.expense_number ?? "a declined expense"}.`;
+  const note =
+    expense.status === "withdrawn"
+      ? `Resubmission of ${expense.expense_number ?? "a withdrawn expense"}, which was withdrawn.`
+      : `Corrected resubmission of ${expense.expense_number ?? "a declined expense"}.`;
   return {
     sourceId: expense.id,
     sourceNumber: expense.expense_number,
@@ -1117,6 +1162,7 @@ async function expenseAsInput(
     total: number;
     submitter_comment: string | null;
     payee_id: string | null;
+    gst_printed?: number | null;
   }
 ): Promise<CreateExpenseInput> {
   const [{ data: lineItems }, { data: attachments }] = await Promise.all([
@@ -1153,6 +1199,7 @@ async function expenseAsInput(
       sha256: a.sha256,
     })),
     total: Number(expense.total),
+    printedGst: expense.gst_printed == null ? null : Number(expense.gst_printed),
     submitterComment: expense.submitter_comment,
     payee: expense.payee_id ? { kind: "existing", payeeId: expense.payee_id } : null,
     lineItems: (lineItems ?? []).map((li) => ({
@@ -1193,6 +1240,7 @@ export async function updateExpense(
     abn: input.abn,
     userId: user.id,
   });
+  keepVendorRegistrationCurrent(admin, vendor.id);
 
   const lines = await buildLineRows(admin, input, vendor.id, user.id);
   const payeeId = await resolvePayee(admin, input.payee, user, {
@@ -1223,6 +1271,7 @@ export async function updateExpense(
     p_fiscal_year_hijri: fiscalYearForReceipt(input.receiptDate),
     p_lines: lines,
     p_attachments: toAttachmentRows(input.attachments),
+    p_gst_printed: input.printedGst ?? null,
   });
 
   if (error) {
@@ -1300,7 +1349,7 @@ export async function findPossibleDuplicates(input: {
         .select("id")
         .in("vendor_id", vendorIds)
         .ilike("invoice_number", invoice)
-        .neq("status", "declined")
+        .not("status", "in", NOT_SPEND_FILTER)
         .limit(5);
       for (const row of data ?? []) if (!found.has(row.id)) found.set(row.id, "same-invoice");
     }

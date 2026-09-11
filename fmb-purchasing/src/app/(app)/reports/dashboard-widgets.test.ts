@@ -48,6 +48,8 @@ const lines: LineRecord[] = [
     itemId: "i-mutton",
     itemName: "Mutton",
     lineTotal: 1320,
+    gst: 0,
+    gstApportioned: false,
     quantity: 80,
   },
   {
@@ -57,6 +59,8 @@ const lines: LineRecord[] = [
     itemId: "i-rolls",
     itemName: "Dinner Rolls",
     lineTotal: 300,
+    gst: 0,
+    gstApportioned: false,
     quantity: 10,
   },
   {
@@ -66,6 +70,8 @@ const lines: LineRecord[] = [
     itemId: "i-mutton",
     itemName: "Mutton",
     lineTotal: 999,
+    gst: 0,
+    gstApportioned: false,
     quantity: 60,
   },
 ];

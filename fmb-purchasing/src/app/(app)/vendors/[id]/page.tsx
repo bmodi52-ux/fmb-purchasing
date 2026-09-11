@@ -1,4 +1,5 @@
 import { SubmitButton } from "@/components/submit-button";
+import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -12,6 +13,7 @@ import {
   removeContact,
   updateVendorPaymentDetails,
   reviewProposedVendorAccount,
+  checkVendorRegistration,
 } from "./actions";
 import { reviewVendor } from "../actions";
 import { formatDate, formatPlainDate } from "@/lib/format";
@@ -50,6 +52,10 @@ type Vendor = {
   vendor_number: string | null;
   status: string;
   billing_address: Record<string, string | null> | null;
+  gst_registered: boolean | null;
+  gst_registered_from: string | null;
+  abn_active: boolean | null;
+  abr_checked_at: string | null;
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -87,7 +93,13 @@ export default async function VendorDetailPage({
 
   const admin = createAdminClient();
   const [{ data: vendor }, { count: productCount }] = await Promise.all([
-    admin.from("vendors").select("id, name, abn, vendor_number, status, billing_address").eq("id", id).maybeSingle<Vendor>(),
+    admin
+      .from("vendors")
+      .select(
+        "id, name, abn, vendor_number, status, billing_address, gst_registered, gst_registered_from, abn_active, abr_checked_at"
+      )
+      .eq("id", id)
+      .maybeSingle<Vendor>(),
     admin
       .from("pricelist_items")
       .select("id", { count: "exact", head: true })
@@ -152,6 +164,21 @@ export default async function VendorDetailPage({
       )}
     </div>
   );
+}
+
+function registrationSummary(v: Vendor): string {
+  if (!v.abr_checked_at) return "GST registration not checked with the ABR yet.";
+  const checked = `checked ${formatDate(v.abr_checked_at)}`;
+  if (v.abn_active === false) return `The ABR lists this ABN as cancelled — ${checked}.`;
+  if (v.gst_registered === true) {
+    return `Registered for GST${v.gst_registered_from ? ` since ${formatPlainDate(v.gst_registered_from)}` : ""} — ${checked}.`;
+  }
+  if (v.gst_registered === false) return `Not registered for GST, so it shouldn't charge GST — ${checked}.`;
+  return `The ABR didn't say whether this business is registered for GST — ${checked}.`;
+}
+
+function registrationTone(v: Vendor): string {
+  return v.abn_active === false || v.gst_registered === false ? "text-maroon" : "text-ink/60";
 }
 
 function TabLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
@@ -239,6 +266,25 @@ async function DetailsTab({
             </SubmitButton>
           )}
         </form>
+
+        {/* What the ABR says, kept current by incoming expenses (#30). Its own
+            form, since forms cannot nest. */}
+        {vendor.abn && (
+          <div className="mt-5 flex flex-col gap-2 border-t border-ink/10 pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className={registrationTone(vendor)}>{registrationSummary(vendor)}</p>
+            {canEdit && (
+              <form action={checkVendorRegistration}>
+                <input type="hidden" name="vendor_id" value={vendor.id} />
+                <SubmitButton
+                  pendingLabel="Checking…"
+                  className="whitespace-nowrap rounded-md border border-ink/15 px-3 py-1.5 text-xs text-ink/70 hover:border-ink/30"
+                >
+                  Check with the ABR
+                </SubmitButton>
+              </form>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
@@ -509,7 +555,7 @@ async function ProductsTab({
         .from("expense_line_items")
         .select("pricelist_item_id, line_total, quantity, expenses!inner ( receipt_date, status, created_at )")
         .in("pricelist_item_id", offerIds)
-        .neq("expenses.status", "declined")
+        .not("expenses.status", "in", NOT_SPEND_FILTER)
     : { data: [] };
 
   type Purchase = { lineTotal: number; quantity: number | null; date: string | null; submitted: string };

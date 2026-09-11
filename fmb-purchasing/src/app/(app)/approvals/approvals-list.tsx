@@ -9,6 +9,7 @@ import { reviewExpense, bulkReviewExpenses } from "./actions";
 import { formatDate, formatPlainDate } from "@/lib/format";
 import { FilterableSection, type BulkAction, type SortOption } from "@/components/filterable-section";
 import type { ExportColumn } from "@/lib/export";
+import { duplicateLabel, type DuplicateMatch } from "@/lib/duplicates";
 
 export type ApprovalLineItem = {
   description_raw: string;
@@ -26,6 +27,10 @@ export type ApprovalFlags = {
   unconfirmedAccount: boolean;
   /** Lines filed against Pricelist items this receipt created. */
   newItems: number;
+  /** Other expenses with the same file, or the same vendor and invoice number. */
+  duplicateOf: DuplicateMatch[];
+  /** What the ABR says is wrong with GST from this vendor, in words. */
+  gstConcerns: string[];
 };
 
 export type ApprovalRow = {
@@ -196,6 +201,8 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
   ].filter(Boolean);
 
   const flags: { label: string; serious?: boolean }[] = [];
+  if (e.flags.duplicateOf.length > 0) flags.push({ label: duplicateLabel(e.flags.duplicateOf), serious: true });
+  for (const concern of e.flags.gstConcerns) flags.push({ label: concern, serious: true });
   if (e.flags.unconfirmedAccount) flags.push({ label: "Bank account not confirmed", serious: true });
   if (e.flags.newVendor) flags.push({ label: "New vendor" });
   if (e.flags.newItems > 0) {

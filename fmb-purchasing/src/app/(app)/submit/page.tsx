@@ -48,7 +48,7 @@ export default async function SubmitExpensePage({
           {editExpense
             ? "You can edit this until it's approved or declined."
             : resubmitFrom
-              ? `A corrected copy of ${resubmitFrom.sourceNumber ?? "your declined expense"}. Fix what's needed and submit — the declined one stays on record.`
+              ? `A copy of ${resubmitFrom.sourceNumber ?? "your earlier expense"}. Fix what's needed and submit — the original stays on record.`
               : "Upload a receipt for AI extraction, or enter the details manually. A receipt is never required."}
         </p>
       </div>

@@ -23,4 +23,5 @@ export const NAV_ITEMS: {
   // Shares the users-admin grant rather than adding a page key nobody has
   // been granted; whoever administers accounts is who should see breakage.
   { key: "admin_users", label: "System errors", href: "/admin/errors", action: "manage_users" },
+  { key: "admin_users", label: "App settings", href: "/admin/settings", action: "manage_users" },
 ];

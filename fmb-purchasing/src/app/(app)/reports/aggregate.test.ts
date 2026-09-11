@@ -69,6 +69,8 @@ const lines: LineRecord[] = [
     itemId: "i-mutton",
     itemName: "Mutton",
     lineTotal: 1320,
+    gst: 120,
+    gstApportioned: false,
     quantity: 80,
   },
   {
@@ -78,6 +80,8 @@ const lines: LineRecord[] = [
     itemId: "i-chicken",
     itemName: "Chicken",
     lineTotal: 180,
+    gst: 16.36,
+    gstApportioned: false,
     quantity: 10,
   },
   {
@@ -87,6 +91,8 @@ const lines: LineRecord[] = [
     itemId: "i-rolls",
     itemName: "Dinner Rolls",
     lineTotal: 120,
+    gst: 10.91,
+    gstApportioned: false,
     quantity: 12,
   },
   {
@@ -96,6 +102,8 @@ const lines: LineRecord[] = [
     itemId: "i-rolls",
     itemName: "Dinner Rolls",
     lineTotal: 200,
+    gst: 18.18,
+    gstApportioned: false,
     quantity: 20,
   },
 ];
@@ -150,6 +158,23 @@ describe("totals", () => {
     assert.equal(totals(all).averageExpense, 1820 / 3);
   });
 
+  test("GST comes from the lines, and agrees with the receipts when unfiltered", () => {
+    const viaExpenses = expenses.reduce((s, e) => s + e.gst, 0);
+    assert.equal(Math.round(totals(all).gst * 100), Math.round(viaExpenses * 100));
+  });
+
+  test("GST under a category filter is the GST on the matching lines only", () => {
+    const bakery = applyFilters(expenses, lines, { ...NO_FILTERS, categoryIds: ["c-bakery"] });
+    assert.equal(Math.round(totals(bakery).gst * 100), 2909);
+    assert.equal(Math.round(byCategory(all).find((b) => b.key === "c-meat")!.gst * 100), 13636);
+  });
+
+  test("counts lines whose GST was shared out before per-line GST", () => {
+    const older = lines.map((l, i) => (i === 0 ? { ...l, gstApportioned: true } : l));
+    assert.equal(totals(applyFilters(expenses, older, NO_FILTERS)).apportionedGstLines, 1);
+    assert.equal(totals(all).apportionedGstLines, 0);
+  });
+
   test("average is zero rather than NaN on an empty slice", () => {
     const empty = applyFilters([], [], NO_FILTERS);
     assert.equal(totals(empty).averageExpense, 0);
@@ -164,6 +189,8 @@ describe("totals", () => {
       itemId: "i",
       itemName: "I",
       lineTotal: v,
+      gst: 0,
+      gstApportioned: false,
       quantity: 1,
     }));
     const slice = { expenses: [], lines: noisy };
@@ -328,6 +355,8 @@ describe("byMonthBreakdown", () => {
       itemId: `item-${i}`,
       itemName: `Item ${i}`,
       lineTotal: 100 - i, // descending, so ranking is predictable
+      gst: 0,
+      gstApportioned: false,
       quantity: 1,
     }));
     const slice = { expenses: [expenses[0]], lines: many };

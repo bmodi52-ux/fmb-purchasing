@@ -6,11 +6,31 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
+import { after } from "next/server";
+import { refreshVendorRegistration } from "@/lib/vendor-registration";
 
 async function requireVendorEdit() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "vendors", "edit_master_data");
+}
+
+/** Asks the ABR now, rather than waiting for the next expense to (#30). */
+export async function checkVendorRegistration(formData: FormData) {
+  await requireVendorEdit();
+  const vendorId = String(formData.get("vendor_id"));
+  if (!vendorId) return;
+
+  const admin = createAdminClient();
+  const { data: vendor } = await admin.from("vendors").select("abn").eq("id", vendorId).maybeSingle();
+  if (!vendor) return;
+
+  const refreshed = await refreshVendorRegistration(admin, vendorId, vendor.abn as string | null);
+  if (!refreshed && vendor.abn) {
+    throw new Error("The ABR couldn't be reached, or doesn't recognise this ABN. Check the ABN and try again.");
+  }
+  revalidatePath(`/vendors/${vendorId}`);
+  revalidatePath("/approvals");
 }
 
 export async function updateVendorDetails(formData: FormData) {
@@ -33,10 +53,16 @@ export async function updateVendorDetails(formData: FormData) {
   );
 
   const admin = createAdminClient();
+  const { data: before } = await admin.from("vendors").select("abn").eq("id", vendorId).maybeSingle();
   await admin
     .from("vendors")
     .update({ name, abn, billing_address: hasAnyAddressField ? billingAddress : null })
     .eq("id", vendorId);
+
+  // A changed ABN makes the recorded GST registration someone else's (#30).
+  if ((before?.abn ?? null) !== abn) {
+    after(() => refreshVendorRegistration(admin, vendorId, abn));
+  }
 
   revalidatePath(`/vendors/${vendorId}`);
   revalidatePath("/vendors");

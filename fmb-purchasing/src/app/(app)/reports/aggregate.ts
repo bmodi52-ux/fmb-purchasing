@@ -32,6 +32,18 @@ export type LineRecord = {
   itemId: string | null;
   itemName: string;
   lineTotal: number;
+  /**
+   * GST on this line. Recorded per line since migration 0026, so GST can be
+   * cut by category and item exactly like spend.
+   */
+  gst: number;
+  /**
+   * True for lines written before 0026, whose GST was shared out across the
+   * receipt in proportion to each line's total rather than read per line. It
+   * adds up to the receipt's GST, but its split across categories is an
+   * estimate.
+   */
+  gstApportioned: boolean;
   quantity: number | null;
 };
 
@@ -168,6 +180,8 @@ export function applyFilters(
 export type Totals = {
   spend: number;
   gst: number;
+  /** How many of the slice's lines carry GST shared out before 0026. */
+  apportionedGstLines: number;
   expenseCount: number;
   lineCount: number;
   averageExpense: number;
@@ -175,13 +189,16 @@ export type Totals = {
 
 export function totals(slice: Slice): Totals {
   const spend = sum(slice.lines.map((l) => l.lineTotal));
-  // GST is only recorded per expense, so it is only meaningful when whole
-  // expenses are in play. Under a category or item filter the lines are a
-  // subset and this would overstate; callers hide it in that case.
-  const gst = sum(slice.expenses.map((e) => e.gst));
+  // From the lines, not the expenses. This used to read each expense's GST
+  // total and was therefore hidden under a category or item filter, where
+  // only some of a receipt's lines are in play. Every line has carried its own
+  // GST since 0026, so the filtered figure is exact — except on older lines,
+  // counted below so the page can say so.
+  const gst = sum(slice.lines.map((l) => l.gst));
   return {
     spend,
     gst,
+    apportionedGstLines: slice.lines.filter((l) => l.gstApportioned && l.gst !== 0).length,
     expenseCount: slice.expenses.length,
     lineCount: slice.lines.length,
     averageExpense: slice.expenses.length === 0 ? 0 : spend / slice.expenses.length,
@@ -202,6 +219,8 @@ export type Bucket = {
   key: string;
   label: string;
   spend: number;
+  /** GST within `spend`, from the lines. */
+  gst: number;
   count: number;
 };
 
@@ -217,8 +236,9 @@ export function byMonth(slice: Slice): Bucket[] {
     const date = dateByExpense.get(line.expenseId);
     if (!date) continue;
     const key = monthKey(date);
-    const bucket = out.get(key) ?? { key, label: formatMonthLabel(key), spend: 0, count: 0 };
+    const bucket = out.get(key) ?? { key, label: formatMonthLabel(key), spend: 0, gst: 0, count: 0 };
     bucket.spend += line.lineTotal;
+    bucket.gst += line.gst;
     out.set(key, bucket);
   }
   for (const e of slice.expenses) {
@@ -235,8 +255,9 @@ export function byCategory(slice: Slice): Bucket[] {
   const out = new Map<string, Bucket>();
   for (const line of slice.lines) {
     const { key, label } = categoryKeyOf(line);
-    const bucket = out.get(key) ?? { key, label, spend: 0, count: 0 };
+    const bucket = out.get(key) ?? { key, label, spend: 0, gst: 0, count: 0 };
     bucket.spend += line.lineTotal;
+    bucket.gst += line.gst;
     bucket.count += 1;
     out.set(key, bucket);
   }
@@ -245,15 +266,18 @@ export function byCategory(slice: Slice): Bucket[] {
 
 export function byVendor(slice: Slice): Bucket[] {
   const spendByExpense = new Map<string, number>();
+  const gstByExpense = new Map<string, number>();
   for (const line of slice.lines) {
     spendByExpense.set(line.expenseId, (spendByExpense.get(line.expenseId) ?? 0) + line.lineTotal);
+    gstByExpense.set(line.expenseId, (gstByExpense.get(line.expenseId) ?? 0) + line.gst);
   }
 
   const out = new Map<string, Bucket>();
   for (const e of slice.expenses) {
     const { key, label } = vendorKeyOf(e);
-    const bucket = out.get(key) ?? { key, label, spend: 0, count: 0 };
+    const bucket = out.get(key) ?? { key, label, spend: 0, gst: 0, count: 0 };
     bucket.spend += spendByExpense.get(e.id) ?? 0;
+    bucket.gst += gstByExpense.get(e.id) ?? 0;
     bucket.count += 1;
     out.set(key, bucket);
   }
@@ -264,8 +288,9 @@ export function byItem(slice: Slice): Bucket[] {
   const out = new Map<string, Bucket>();
   for (const line of slice.lines) {
     const { key, label } = itemKeyOf(line);
-    const bucket = out.get(key) ?? { key, label, spend: 0, count: 0 };
+    const bucket = out.get(key) ?? { key, label, spend: 0, gst: 0, count: 0 };
     bucket.spend += line.lineTotal;
+    bucket.gst += line.gst;
     bucket.count += 1;
     out.set(key, bucket);
   }
@@ -461,8 +486,10 @@ function countOccurrences(slice: Slice, dimension: Dimension): Map<string, numbe
 
 export function byStatus(slice: Slice): Bucket[] {
   const spendByExpense = new Map<string, number>();
+  const gstByExpense = new Map<string, number>();
   for (const line of slice.lines) {
     spendByExpense.set(line.expenseId, (spendByExpense.get(line.expenseId) ?? 0) + line.lineTotal);
+    gstByExpense.set(line.expenseId, (gstByExpense.get(line.expenseId) ?? 0) + line.gst);
   }
 
   // Fixed order — a pipeline, so it should read in pipeline order rather
@@ -481,9 +508,11 @@ export function byStatus(slice: Slice): Bucket[] {
       key: e.status,
       label: LABEL[e.status] ?? e.status,
       spend: 0,
+      gst: 0,
       count: 0,
     };
     bucket.spend += spendByExpense.get(e.id) ?? 0;
+    bucket.gst += gstByExpense.get(e.id) ?? 0;
     bucket.count += 1;
     out.set(e.status, bucket);
   }

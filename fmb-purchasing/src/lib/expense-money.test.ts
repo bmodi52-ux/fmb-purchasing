@@ -7,6 +7,7 @@ import {
   sumLineGst,
   reconcile,
   gstDiscrepancy,
+  storedGstDisagreement,
   suggestedKindForDifference,
   residualFor,
   type MoneyLine,
@@ -127,6 +128,23 @@ describe("gstDiscrepancy", () => {
     // printing GST $0.00, with a line wrongly flagged taxable.
     const lines = [goods(975, true)];
     assert.equal(gstDiscrepancy(lines, 0), -88.64);
+  });
+});
+
+describe("storedGstDisagreement", () => {
+  test("nothing to compare when the receipt printed no GST", () => {
+    assert.equal(storedGstDisagreement(12.5, null, 3), null);
+  });
+
+  test("half a cent per taxable line is rounding, not a disagreement", () => {
+    // Twelve taxable lines each rounding their own eleventh can drift 6c from
+    // GST worked out once on the total.
+    assert.equal(storedGstDisagreement(45.0, 45.06, 12), null);
+  });
+
+  test("a missed taxable line is a disagreement", () => {
+    assert.equal(storedGstDisagreement(0, 10, 1), 10);
+    assert.equal(storedGstDisagreement(88.64, 0, 1), -88.64);
   });
 });
 
