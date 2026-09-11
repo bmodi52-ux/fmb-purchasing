@@ -149,7 +149,7 @@ const loadCachedReportRows = unstable_cache(
           admin
             .from("expense_line_items")
             .select(
-              "expense_id, category_id, line_total, quantity, description_raw, pricelist_item_id, pricelist_items ( item_pack_sizes ( items ( id, name ) ) )"
+              "expense_id, category_id, line_total, line_gst, gst_applicable, quantity, description_raw, pricelist_item_id, pricelist_items ( item_pack_sizes ( items ( id, name ) ) )"
             )
             .in("expense_id", expenseIds),
           admin
@@ -198,6 +198,9 @@ const loadCachedReportRows = unstable_cache(
         // up under a name a person recognises rather than vanishing.
         itemName: item?.name ?? l.description_raw,
         lineTotal: Number(l.line_total),
+        gst: Number(l.line_gst ?? 0),
+        // Null only on lines written before 0026, when GST was shared out.
+        gstApportioned: l.gst_applicable == null,
         quantity: l.quantity == null ? null : Number(l.quantity),
       };
     });
