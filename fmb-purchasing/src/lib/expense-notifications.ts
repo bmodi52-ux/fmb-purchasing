@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify, userIdsWithPermission } from "@/lib/notifications-inapp";
+import { alertOnExpense } from "@/lib/expense-alerts";
 
 /**
  * Expense notifications, delivered in the app rather than by email.
@@ -55,6 +56,8 @@ export async function notifyExpenseSubmitted(expense: ExpenseSummary) {
         expenseId: expense.id,
       })),
   ]);
+
+  alertOnExpense(admin, "expense_submitted", expense);
 }
 
 export async function notifyExpenseDecision(
@@ -80,6 +83,8 @@ export async function notifyExpenseDecision(
       expenseId: expense.id,
     },
   ]);
+
+  if (decision === "approved") alertOnExpense(admin, "expense_approved", expense);
 }
 
 export async function notifyExpensePaid(expense: ExpenseSummary, paymentReference: string | null) {
@@ -95,4 +100,6 @@ export async function notifyExpensePaid(expense: ExpenseSummary, paymentReferenc
       expenseId: expense.id,
     },
   ]);
+
+  alertOnExpense(admin, "expense_paid", expense);
 }

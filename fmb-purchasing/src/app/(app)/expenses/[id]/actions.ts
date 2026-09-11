@@ -17,7 +17,7 @@ import { reportError } from "@/lib/errors";
 export async function setLineCapital(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const permissions = await getUserPermissions(user.teamIds);
+  const permissions = await getUserPermissions(user);
   if (!can(permissions, "approvals", "approve") && !can(permissions, "payments", "mark_paid")) redirect("/");
 
   const lineId = String(formData.get("line_id"));

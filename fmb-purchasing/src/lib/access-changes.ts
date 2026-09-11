@@ -45,6 +45,10 @@ export function describeAccessChange(
       return `Deactivated ${who}'s account`;
     case "account_reactivated":
       return `Reactivated ${who}'s account`;
+    case "stand_in_nominated":
+      return `Named ${who} as a stand-in`;
+    case "stand_in_cancelled":
+      return `Ended ${who}'s stand-in`;
     default:
       return row.kind;
   }

@@ -13,11 +13,14 @@ export function AppSidebar({
   userName,
   signOutAction,
   unreadCount,
+  canNameStandIn,
 }: {
   navItems: NavItem[];
   userName: string;
   signOutAction: (formData: FormData) => void;
   unreadCount: number;
+  /** Whether this person approves or pays, and so can hand that over while away (#35). */
+  canNameStandIn: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -90,6 +93,22 @@ export function AppSidebar({
 
         <div className="flex flex-col gap-1 border-t border-ink/10 pt-4 text-sm">
           <p className="px-3 text-ink/60">{userName}</p>
+          <Link
+            href="/notifications/settings"
+            onClick={() => setOpen(false)}
+            className="rounded-md px-3 py-2 text-ink/70 transition-colors hover:bg-gold/15 hover:text-ink"
+          >
+            Notification settings
+          </Link>
+          {canNameStandIn && (
+            <Link
+              href="/stand-in"
+              onClick={() => setOpen(false)}
+              className="rounded-md px-3 py-2 text-ink/70 transition-colors hover:bg-gold/15 hover:text-ink"
+            >
+              Away? Name a stand-in
+            </Link>
+          )}
           <Link
             href="/change-password"
             onClick={() => setOpen(false)}

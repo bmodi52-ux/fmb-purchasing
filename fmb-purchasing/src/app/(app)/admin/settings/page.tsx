@@ -4,7 +4,8 @@ import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/app-settings";
 import { SubmitButton } from "@/components/submit-button";
-import { setCapitalThreshold, setDuplicateFlags } from "./actions";
+import { setCapitalThreshold, setDuplicateFlags, setReminders } from "./actions";
+import { formatDateTime } from "@/lib/format";
 
 export const metadata = { title: "App settings" };
 
@@ -18,10 +19,13 @@ export default async function AppSettingsPage() {
   if (!user) redirect("/login");
   await requirePermission(user, "admin_users", "manage_users");
 
-  const settings = await getSettings(createAdminClient(), [
-    "duplicate_flags_for_reviewers",
-    "capital_purchase_threshold",
+  const admin = createAdminClient();
+  const [settings, { data: teams }, { data: lastRun }] = await Promise.all([
+    getSettings(admin, ["duplicate_flags_for_reviewers", "capital_purchase_threshold", "reminders"]),
+    admin.from("teams").select("id, name").order("name"),
+    admin.from("scheduled_runs").select("last_run_at, summary").eq("job", "daily").maybeSingle(),
   ]);
+  const r = settings.reminders;
 
   return (
     <div className="flex flex-col gap-8">
@@ -29,6 +33,84 @@ export default async function AppSettingsPage() {
         <h1 className="page-title text-ink">App settings</h1>
         <p className="page-description mt-1 max-w-xl">Settings that apply to everyone using the app.</p>
       </div>
+
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="section-title text-ink">Reminders</h2>
+          <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-ink/60">
+            Once a day at 8am Sydney time, anyone with something waiting longer than the first limit gets one summary.
+            Past the second limit, the person&apos;s stand-in is told, or the team chosen below if nobody is standing in.
+            {lastRun?.last_run_at ? ` Last ran ${formatDateTime(lastRun.last_run_at as string)}.` : " Hasn't run yet."}
+          </p>
+        </div>
+        <form action={setReminders} className="flex flex-col gap-4 rounded-lg border border-ink/10 bg-white/60 px-4 py-4 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="enabled" defaultChecked={r.enabled} />
+            Send reminders
+          </label>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-left text-xs text-ink/55">
+                <tr>
+                  <th scope="col" className="py-1.5 pr-4 font-medium">What&apos;s waiting</th>
+                  <th scope="col" className="py-1.5 pr-4 font-medium">First reminder after</th>
+                  <th scope="col" className="py-1.5 pr-4 font-medium">Escalate after</th>
+                  <th scope="col" className="py-1.5 font-medium">Escalate to, if nobody is standing in</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(
+                  [
+                    ["approvals", "Expenses to approve"],
+                    ["payments", "Approved, not yet paid"],
+                    ["bankAccounts", "Bank accounts not confirmed"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <tr key={key} className="border-t border-ink/5">
+                    <th scope="row" className="py-2 pr-4 text-left font-normal">{label}</th>
+                    <td className="py-2 pr-4">
+                      <input type="number" min={0} max={365} name={`${key}_first`} defaultValue={r[key].firstAfterDays} className="input w-20 py-1" aria-label={`${label}: first reminder after days`} /> days
+                    </td>
+                    <td className="py-2 pr-4">
+                      <input type="number" min={0} max={365} name={`${key}_escalate`} defaultValue={r[key].escalateAfterDays} className="input w-20 py-1" aria-label={`${label}: escalate after days`} /> days
+                    </td>
+                    <td className="py-2">
+                      <select name={`${key}_team`} defaultValue={r[key].escalateTeamId ?? ""} className="input py-1" aria-label={`${label}: escalate to team`}>
+                        <option value="">Nobody</option>
+                        {(teams ?? []).map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <label className="flex items-center gap-2">
+              Remind a submitter once, if a declined expense isn&apos;t resubmitted after
+              <input type="number" min={0} max={365} name="declined" defaultValue={r.declinedAfterDays} className="input w-20 py-1" />
+              days
+            </label>
+            <label className="flex items-center gap-2">
+              New vendors, items and packs: weekly, on
+              <select name="weekday" defaultValue={r.masterDataWeekday} className="input py-1">
+                {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d, i) => (
+                  <option key={d} value={i}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <SubmitButton pendingLabel="Saving…" className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep">
+            Save reminders
+          </SubmitButton>
+        </form>
+      </section>
 
       <section className="flex flex-col gap-3">
         <h2 className="section-title text-ink">Checks</h2>

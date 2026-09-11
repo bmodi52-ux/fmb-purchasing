@@ -38,7 +38,7 @@ export default async function ApprovalsPage() {
       )
       .eq("status", "submitted")
       .order("created_at"),
-    getUserPermissions(user.teamIds),
+    getUserPermissions(user),
   ]);
 
   if (!expenses || expenses.length === 0) {

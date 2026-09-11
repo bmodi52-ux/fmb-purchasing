@@ -78,7 +78,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   if (!user) redirect("/login");
   await requirePermission(user, "pricelist", "view");
 
-  const permissions = await getUserPermissions(user.teamIds);
+  const permissions = await getUserPermissions(user);
   const canEdit = can(permissions, "pricelist", "edit_master_data");
   const canApprove = can(permissions, "pricelist", "approve_master_data");
 

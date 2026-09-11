@@ -22,7 +22,7 @@ export default async function AppLayout({
   // Both are per-request cached, and the count is a single indexed COUNT, so
   // running it alongside the permission fetch costs one extra round trip.
   const [permissions, unread] = await Promise.all([
-    getUserPermissions(user.teamIds),
+    getUserPermissions(user),
     unreadCount(user.id),
   ]);
   const visibleNav = NAV_ITEMS.filter((item) => can(permissions, item.key, item.action));
@@ -38,6 +38,7 @@ export default async function AppLayout({
           userName={user.fullName || user.email}
           signOutAction={signOut}
           unreadCount={unread}
+          canNameStandIn={can(permissions, "approvals", "approve") || can(permissions, "payments", "mark_paid")}
         />
 
         {/* Desktop spacing cost a phone 60px of a 375px screen before any

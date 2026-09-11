@@ -37,6 +37,7 @@ import { ilikeContains, orFilter } from "@/lib/pgrst-filter";
 import { reportError } from "@/lib/errors";
 import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { getSetting } from "@/lib/app-settings";
+import { alertOnVendorAdded } from "@/lib/expense-alerts";
 import { lineGst, lineSubtotal, reconcile, round2, sumLineGst } from "@/lib/expense-money";
 import {
   resolvePayee,
@@ -1012,6 +1013,7 @@ export async function createExpense(
     userId: user.id,
   });
   keepVendorRegistrationCurrent(admin, vendor.id);
+  if (vendor.status === "created") alertOnVendorAdded(admin, { id: vendor.id, name: input.vendorName.trim() });
 
   const lines = await buildLineRows(admin, input, vendor.id, user.id);
   const payeeId = await resolvePayee(admin, input.payee, user, {
@@ -1241,6 +1243,7 @@ export async function updateExpense(
     userId: user.id,
   });
   keepVendorRegistrationCurrent(admin, vendor.id);
+  if (vendor.status === "created") alertOnVendorAdded(admin, { id: vendor.id, name: input.vendorName.trim() });
 
   const lines = await buildLineRows(admin, input, vendor.id, user.id);
   const payeeId = await resolvePayee(admin, input.payee, user, {

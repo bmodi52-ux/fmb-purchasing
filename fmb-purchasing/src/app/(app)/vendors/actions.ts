@@ -9,6 +9,7 @@ import { requirePermission } from "@/lib/permissions";
 import { lookupAbn, searchAbnByName, type AbnLookupResult } from "@/lib/abn-lookup";
 import { after } from "next/server";
 import { refreshVendorRegistration } from "@/lib/vendor-registration";
+import { alertOnVendorAdded } from "@/lib/expense-alerts";
 
 async function requireVendorEdit() {
   const user = await getCurrentUser();
@@ -78,6 +79,7 @@ export async function createVendor(
 
   // GST registration from the ABR, once the response has gone (#30).
   if (abn) after(() => refreshVendorRegistration(admin, vendor.id, abn));
+  alertOnVendorAdded(admin, { id: vendor.id, name });
 
   const contactName = fieldOrNull(formData, "contact_name");
   if (contactName) {

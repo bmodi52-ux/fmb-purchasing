@@ -104,6 +104,25 @@ describe("access_changes", () => {
     );
   });
 
+  test("stand-in nominations are a kind of access change (0051), and a stand-in can't be yourself", async () => {
+    await db.query(
+      "insert into access_changes (actor_id, kind, subject_id, subject_name, detail) values ($1, 'stand_in_nominated', $2, 'Member Person', 'Covering approving')",
+      [adminId, memberId]
+    );
+    await assert.rejects(
+      db.query(
+        "insert into stand_ins (user_id, stand_in_id, duty, starts_on, ends_on) values ($1, $1, 'approve', '2026-09-01', '2026-09-02')",
+        [adminId]
+      )
+    );
+    await assert.rejects(
+      db.query(
+        "insert into stand_ins (user_id, stand_in_id, duty, starts_on, ends_on) values ($1, $2, 'approve', '2026-09-05', '2026-09-02')",
+        [adminId, memberId]
+      )
+    );
+  });
+
   test("deleting a team with members and grants is not blocked by the record", async () => {
     const teamId = await scalar<string>(db, "select admin_create_team($1, 'Short-lived')", [adminId]);
     await db.query("select admin_set_membership($1, $2, $3, true)", [adminId, teamId, adminId]);

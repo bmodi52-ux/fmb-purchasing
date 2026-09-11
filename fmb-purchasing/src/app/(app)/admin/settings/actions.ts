@@ -30,6 +30,40 @@ export async function setCapitalThreshold(formData: FormData): Promise<void> {
   revalidatePath("/admin/settings");
 }
 
+/** The reminder limits and escalation teams (#27). */
+export async function setReminders(formData: FormData): Promise<void> {
+  const user = await requireSettingsAdmin();
+  const days = (key: string, fallback: number) => {
+    const n = Math.round(Number(formData.get(key)));
+    return Number.isFinite(n) && n >= 0 && n <= 365 ? n : fallback;
+  };
+  const team = (key: string) => String(formData.get(key) ?? "") || null;
+  const queue = (name: string, first: number, escalate: number) => {
+    const firstAfterDays = days(`${name}_first`, first);
+    return {
+      firstAfterDays,
+      escalateAfterDays: Math.max(firstAfterDays, days(`${name}_escalate`, escalate)),
+      escalateTeamId: team(`${name}_team`),
+    };
+  };
+
+  const value = {
+    enabled: formData.get("enabled") === "on",
+    approvals: queue("approvals", 2, 5),
+    payments: queue("payments", 3, 7),
+    bankAccounts: queue("bankAccounts", 1, 3),
+    declinedAfterDays: days("declined", 3),
+    masterDataWeekday: Math.min(6, days("weekday", 1)),
+  };
+
+  const { error } = await setSetting(createAdminClient(), "reminders", value, user.id);
+  if (error) {
+    await reportError({ source: "app-settings", error, detail: "reminders", userId: user.id });
+    throw new Error("The reminder settings could not be saved. Try again.");
+  }
+  revalidatePath("/admin/settings");
+}
+
 export async function setDuplicateFlags(formData: FormData): Promise<void> {
   const user = await requireSettingsAdmin();
   const on = String(formData.get("on")) === "true";

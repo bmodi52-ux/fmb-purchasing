@@ -36,6 +36,8 @@ Needs a `.env.local` — copy `.env.local.example` and fill it in:
 | `ABN_LOOKUP_GUID` | ABN lookup — optional, but **silently degrades to "no matches" when unset** |
 | `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | welcome, temporary-password and reset emails |
 | `NEXT_PUBLIC_SITE_URL` | only to make reset links point somewhere local |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | push notifications — `npx web-push generate-vapid-keys`; without them push is off |
+| `CRON_SECRET` | the daily reminders job (`/api/cron/daily`, scheduled in `vercel.json`); without it the job refuses every call |
 
 ```bash
 npm test          # 323 tests, incl. migrations applied to a real Postgres
