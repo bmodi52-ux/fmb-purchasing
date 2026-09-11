@@ -3,7 +3,9 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
-import { loadReportRawData, type PaidCostRow } from "./data";
+import { parsePeriod } from "@/lib/periods";
+import { todayIso } from "@/lib/periods-data";
+import { loadReportRawData, withinRange, type PaidCostRow } from "./data";
 import { vendorKeyOf, categoryKeyOf, itemKeyOf, type ExpenseRecord, type LineRecord } from "./aggregate";
 
 export type WidgetPreviewData = {
@@ -23,27 +25,22 @@ function toSortedOptions(pairs: { key: string; label: string }[]): { value: stri
 }
 
 /**
- * Raw rows for one fiscal year, plus the filter menus that go with it — what
- * the widget-builder dialog needs to let someone pick filters and see a live
- * preview before saving. Scoped to a single year up front (rather than
- * shipping a fyOf map across the wire) since a widget only ever previews one
- * year at a time.
+ * Raw rows for one period, plus the filter menus that go with it — what the
+ * widget-builder dialog needs to let someone pick filters and see a live
+ * preview before saving.
  */
-export async function fetchWidgetPreviewData(fy: number): Promise<WidgetPreviewData> {
+export async function fetchWidgetPreviewData(periodCode: string): Promise<WidgetPreviewData> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "reports", "view");
 
-  const { allExpenses, allLines, paidCosts, fyOf } = await loadReportRawData([fy]);
-  const expenses = allExpenses.filter((e) => fyOf.get(e.id) === fy);
-  const expenseIds = new Set(expenses.map((e) => e.id));
-  const lines = allLines.filter((l) => expenseIds.has(l.expenseId));
-  const scopedPaidCosts = paidCosts.filter((c) => expenseIds.has(c.expense_id));
+  const period = parsePeriod(periodCode, todayIso());
+  const { allExpenses: expenses, allLines: lines, paidCosts } = withinRange(await loadReportRawData(period), period);
 
   return {
     expenses,
     lines,
-    paidCosts: scopedPaidCosts,
+    paidCosts,
     vendorOptions: toSortedOptions(expenses.map(vendorKeyOf)),
     categoryOptions: toSortedOptions(lines.filter((l) => l.categoryId).map(categoryKeyOf)),
     itemOptions: toSortedOptions(lines.filter((l) => l.itemId).map(itemKeyOf)),

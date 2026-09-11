@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { currentFiscalYearHijri } from "@/lib/fiscal-year";
+import { parsePeriod } from "@/lib/periods";
+import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import { loadReportRawData } from "./reports/data";
-import { computeWidgetData } from "./reports/dashboard-widgets";
+import { computeWidgetData, widgetPeriodCode } from "./reports/dashboard-widgets";
 import { HomeDashboard, type SavedWidget } from "./home-dashboard";
 
 export const metadata = { title: "Home" };
@@ -32,21 +33,16 @@ export default async function DashboardPage() {
   }
 
   const admin = createAdminClient();
-  const currentFy = currentFiscalYearHijri();
+  const today = todayIso();
 
-  const [{ data: widgetRows }, { data: fyRows }] = await Promise.all([
+  const [{ data: widgetRows }, earliest] = await Promise.all([
     admin
       .from("user_dashboard_widgets")
       .select("id, kind, title, config")
       .eq("user_id", user.id)
       .order("sort_order", { ascending: true }),
-    admin.from("expense_fiscal_years").select("fiscal_year_hijri"),
+    earliestExpenseDate(admin),
   ]);
-
-  const fiscalYears = [...new Set((fyRows ?? []).map((r) => r.fiscal_year_hijri))].sort(
-    (a, b) => b - a
-  );
-  if (!fiscalYears.includes(currentFy)) fiscalYears.unshift(currentFy);
 
   const rows = (widgetRows ?? []).map((r) => ({
     id: r.id as string,
@@ -55,22 +51,25 @@ export default async function DashboardPage() {
     config: r.config as SavedWidget["config"],
   }));
 
-  // One fetch per distinct fiscal year across every saved widget, not one
-  // per widget — several widgets commonly share a year.
-  const distinctFys = [...new Set(rows.map((r) => r.config.fy))];
-  const rawByFy = new Map(
-    await Promise.all(distinctFys.map(async (fy) => [fy, await loadReportRawData([fy])] as const))
+  // One fetch per distinct period across every saved widget, not one per
+  // widget — several widgets commonly share a period.
+  const distinctCodes = [...new Set(rows.map((r) => widgetPeriodCode(r.config)))];
+  const rawByCode = new Map(
+    await Promise.all(
+      distinctCodes.map(async (code) => [code, await loadReportRawData(parsePeriod(code, today))] as const)
+    )
   );
 
   const widgets: SavedWidget[] = rows.map((r) => ({
     ...r,
-    data: computeWidgetData(r.kind, r.config, rawByFy.get(r.config.fy)!),
+    data: computeWidgetData(r.kind, r.config, rawByCode.get(widgetPeriodCode(r.config))!, today),
+    periodLabel: parsePeriod(widgetPeriodCode(r.config), today).label,
   }));
 
   return (
     <div className="flex flex-col gap-6">
       {welcome}
-      <HomeDashboard widgets={widgets} fiscalYears={fiscalYears} currentFy={currentFy} />
+      <HomeDashboard widgets={widgets} today={today} earliest={earliest} />
     </div>
   );
 }

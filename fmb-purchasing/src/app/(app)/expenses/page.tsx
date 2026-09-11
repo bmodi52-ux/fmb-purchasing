@@ -3,9 +3,10 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getColumnPreference } from "@/lib/column-prefs";
-import { currentFiscalYearHijri, formatFiscalYear, ALL_YEARS } from "@/lib/fiscal-year";
+import { ALL_TIME, parsePeriod } from "@/lib/periods";
+import { earliestExpenseDate, expenseDateFilter, todayIso } from "@/lib/periods-data";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
-import { FiscalYearSelect } from "@/components/fiscal-year-select";
+import { PeriodPicker } from "@/components/period-picker";
 import { categoryLabelsById } from "@/lib/categories";
 import { ExpensesTable, type ExpenseRow } from "./expenses-table";
 import { LinesTable, type LineRow } from "./lines-table";
@@ -26,11 +27,32 @@ const DEFAULT_VISIBLE = [
 ];
 
 /**
- * Backstop for "All years", which is the one selection with no natural
- * bound. Everything on this page — filtering, sorting, export — happens in
- * the browser, so the row count is also the size of the payload sent to it.
+ * Backstop on how many expenses one view loads — "All time" has no natural
+ * bound, and a long custom range may not either. Everything on this page —
+ * filtering, sorting, export — happens in the browser, so the row count is
+ * also the size of the payload sent to it.
  */
 const ALL_YEARS_CAP = 2000;
+
+type ExpenseQueryRow = {
+  id: string;
+  expense_number: string | null;
+  vendor_id: string | null;
+  vendor_name_raw: string | null;
+  submitted_by: string;
+  status: string;
+  invoice_number: string | null;
+  receipt_date: string | null;
+  subtotal: number;
+  gst_amount: number;
+  total: number;
+  fiscal_year_hijri: number;
+  decided_by: string | null;
+  decided_at: string | null;
+  payment_reference: string | null;
+  payment_date: string | null;
+  created_at: string;
+};
 
 const LINES_PAGE_KEY = "expense_lines";
 const LINES_DEFAULT_VISIBLE = [
@@ -59,44 +81,50 @@ const LINES_CAP = 8000;
 export default async function AllExpensesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ fy?: string; view?: string }>;
+  searchParams: Promise<{ period?: string; fy?: string; view?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "all_expenses", "view");
 
-  const { fy, view } = await searchParams;
-  const linesView = view === "lines";
-  const currentFy = currentFiscalYearHijri();
-  // Defaults to the current year rather than everything ever recorded: an
-  // accounting page is almost always asked about a period, and it means the
-  // query is bounded by an indexed column instead of growing without limit.
-  const showAllYears = fy === ALL_YEARS;
-  const selectedFy = showAllYears ? ALL_YEARS : fy ? Number(fy) : currentFy;
+  const params = await searchParams;
+  const linesView = params.view === "lines";
+  const today = todayIso();
+  // Defaults to the current Hijri year rather than everything ever recorded:
+  // an accounting page is almost always asked about a period, and it keeps the
+  // query bounded instead of growing without limit. Any period works (#22).
+  const code = params.period ?? params.fy;
+  const showAllYears = code === ALL_TIME;
+  const period = parsePeriod(showAllYears ? null : code, today);
 
   const admin = createAdminClient();
 
-  let query = admin
-    .from("expenses")
-    .select(
-      "id, expense_number, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at",
-      { count: "exact" }
-    )
-    // Withdrawn submissions were taken back before anyone decided them (0044);
-    // they stay on the submitter's own list and are not part of the ledger.
-    .neq("status", "withdrawn")
-    .order("created_at", { ascending: false });
+  const PAGE = 1000;
+  const expenses: ExpenseQueryRow[] = [];
+  let count = 0;
+  // A response stops at 1,000 rows without saying so, so the period is paged
+  // up to the cap rather than quietly cut at the first thousand.
+  for (let from = 0; from < ALL_YEARS_CAP; from += PAGE) {
+    let query = admin
+      .from("expenses")
+      .select(
+        "id, expense_number, vendor_id, vendor_name_raw, submitted_by, status, invoice_number, receipt_date, subtotal, gst_amount, total, fiscal_year_hijri, decided_by, decided_at, payment_reference, payment_date, created_at",
+        { count: "exact" }
+      )
+      // Withdrawn submissions were taken back before anyone decided them (0044);
+      // they stay on the submitter's own list and are not part of the ledger.
+      .neq("status", "withdrawn")
+      .order("created_at", { ascending: false })
+      .order("id")
+      .range(from, Math.min(from + PAGE, ALL_YEARS_CAP) - 1);
+    if (!showAllYears) query = query.or(expenseDateFilter(period.start, period.end));
+    const { data, count: total } = await query;
+    expenses.push(...((data ?? []) as ExpenseQueryRow[]));
+    count = total ?? expenses.length;
+    if ((data ?? []).length < PAGE) break;
+  }
 
-  if (showAllYears) query = query.range(0, ALL_YEARS_CAP - 1);
-  else query = query.eq("fiscal_year_hijri", selectedFy as number);
-
-  const [{ data: expenses, count }, { data: fyRows }] = await Promise.all([
-    query,
-    admin.from("expense_fiscal_years").select("fiscal_year_hijri"),
-  ]);
-
-  const fiscalYears = [...new Set((fyRows ?? []).map((r) => r.fiscal_year_hijri))].sort((a, b) => b - a);
-  if (!fiscalYears.includes(currentFy)) fiscalYears.unshift(currentFy);
+  const earliest = await earliestExpenseDate(admin);
 
   const userIds = [
     ...new Set((expenses ?? []).flatMap((e) => [e.submitted_by, e.decided_by].filter(Boolean) as string[])),
@@ -136,7 +164,7 @@ export default async function AllExpensesPage({
     created_at: e.created_at,
   }));
 
-  const truncated = showAllYears && (count ?? 0) > rows.length;
+  const truncated = count > rows.length;
 
   // Only for the ledger view, and only for the expenses already loaded — so
   // the two views always describe the same set of receipts, and switching
@@ -162,25 +190,20 @@ export default async function AllExpensesPage({
               ? "Every line item across these expenses — what was bought, at what price, under which category."
               : showAllYears
                 ? "Every expense across FMB, with status, vendor, amounts and GST breakdown."
-                : `Expenses filed under ${formatFiscalYear(selectedFy as number)}, with status, vendor, amounts and GST breakdown.`}
+                : `Expenses dated in ${period.label}, with status, vendor, amounts and GST breakdown. An expense is dated by its receipt, or by when it was submitted if the receipt had no date.`}
           </p>
           <div className="mt-3">
             <ViewToggle linesView={linesView} />
           </div>
         </div>
 
-        <FiscalYearSelect
-          fiscalYears={fiscalYears}
-          selectedFy={selectedFy}
-          currentFy={currentFy}
-          allowAllYears
-        />
+        <PeriodPicker value={showAllYears ? ALL_TIME : period.code} today={today} earliest={earliest} allowAllTime />
       </div>
 
       {truncated && (
         <p className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-ink/80">
-          Showing the {ALL_YEARS_CAP.toLocaleString()} most recent of {count?.toLocaleString()} expenses.
-          Pick a fiscal year to see a complete set.
+          Showing the {ALL_YEARS_CAP.toLocaleString()} most recent of {count.toLocaleString()} expenses.
+          Pick a shorter period to see a complete set.
         </p>
       )}
 

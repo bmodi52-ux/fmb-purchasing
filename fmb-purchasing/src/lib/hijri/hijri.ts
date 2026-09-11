@@ -102,6 +102,44 @@ export function gregorianToHijri(date: Date): HijriDate {
   return jdToHijri(gregorianToJD(date));
 }
 
+/** Days in a Hijri month on this calendar: 30 or 29, and 30 for a leap Zilhijja. */
+export function hijriMonthLength(year: number, month: number): number {
+  return monthLengthsForYear(year)[month - 1];
+}
+
+function hijriToJD({ year, month, day }: HijriDate): number {
+  const cycles = Math.floor((year - 1) / 30);
+  const position = year - cycles * 30; // 1..30 within its cycle
+  let n = cycles * 10631;
+  for (let k = 1; k < position; k++) n += 354 + (LEAP_POSITIONS.has(k) ? 1 : 0);
+  const lengths = monthLengthsForYear(year);
+  for (let m = 0; m < month - 1; m++) n += lengths[m];
+  return CIVIL_EPOCH_JD + n + day - 1;
+}
+
+function jdToGregorian(jd: number): Date {
+  // Fliegel–Van Flandern, for the proleptic Gregorian calendar.
+  const l = jd + 68569;
+  const n = Math.floor((4 * l) / 146097);
+  const l2 = l - Math.floor((146097 * n + 3) / 4);
+  const i = Math.floor((4000 * (l2 + 1)) / 1461001);
+  const l3 = l2 - Math.floor((1461 * i) / 4) + 31;
+  const j = Math.floor((80 * l3) / 2447);
+  const day = l3 - Math.floor((2447 * j) / 80);
+  const l4 = Math.floor(j / 11);
+  const month = j + 2 - 12 * l4;
+  const year = 100 * (n - 49) + i + l4;
+  return new Date(year, month - 1, day);
+}
+
+/**
+ * Convert a Misri/Hijri date to a Gregorian JS Date whose local fields hold
+ * that calendar day — the inverse of gregorianToHijri.
+ */
+export function hijriToGregorian(date: HijriDate): Date {
+  return jdToGregorian(hijriToJD(date));
+}
+
 /** Human-readable formatted string, e.g. "11 Safar al-Muzaffar 1448H". */
 export function formatHijri(
   { day, month, year }: HijriDate,

@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatFiscalYear } from "@/lib/fiscal-year";
-import { monthKey, expenseDate, formatMonthLabel, type Dimension } from "./reports/aggregate";
+import { parsePeriod, periodCode, yearContaining } from "@/lib/periods";
+import { PeriodPicker } from "@/components/period-picker";
+import { formatMonthLabel, type Dimension } from "./reports/aggregate";
 import { MultiSelectMenu } from "./reports/multi-select-menu";
 import {
   computeWidgetData,
+  widgetPeriodCode,
   WIDGET_KINDS,
   type WidgetConfig,
   type WidgetKind,
@@ -38,18 +40,20 @@ const NEEDS_STAT_METRIC: WidgetKind[] = ["stat-tile"];
 
 export function AddWidgetDialog({
   editing,
-  fiscalYears,
-  currentFy,
+  today,
+  earliest,
   onClose,
 }: {
   editing: SavedWidget | null;
-  fiscalYears: number[];
-  currentFy: number;
+  today: string;
+  earliest: string | null;
   onClose: () => void;
 }) {
   const [kind, setKind] = useState<WidgetKind>(editing?.kind ?? "spend-over-time");
   const [title, setTitle] = useState(editing?.title ?? WIDGET_KINDS[0].label);
-  const [fy, setFy] = useState(editing?.config.fy ?? currentFy);
+  // New widgets follow the current Hijri year and roll over by themselves.
+  const [periodChoice, setPeriodChoice] = useState(editing ? widgetPeriodCode(editing.config) : "h-current");
+  // A month from a widget saved before periods; cleared as soon as the period changes.
   const [month, setMonth] = useState(editing?.config.month ?? "");
   const [vendorIds, setVendorIds] = useState<string[]>(editing?.config.vendorIds ?? []);
   const [categoryIds, setCategoryIds] = useState<string[]>(editing?.config.categoryIds ?? []);
@@ -62,29 +66,34 @@ export function AddWidgetDialog({
 
   const [preview, setPreview] = useState<WidgetPreviewData | null>(null);
 
-  // Cleared the moment fy changes (during render, not in an effect — the
-  // supported way to react to a changed value without an extra render pass)
-  // so the preview below never shows one fiscal year's figures under
+  // Whole years can follow whichever year is current ("h-current"); anything
+  // else is fixed to the dates chosen.
+  const resolved = parsePeriod(periodChoice, today);
+  const rolling = /-current$/.test(periodChoice);
+  const isCurrentWholeYear =
+    resolved.calendar !== null &&
+    resolved.part.type === "year" &&
+    resolved.year === yearContaining(resolved.calendar, today);
+
+  // Cleared the moment the period changes (during render, not in an effect —
+  // the supported way to react to a changed value without an extra render
+  // pass) so the preview below never shows one period's figures under
   // another's label while the new fetch is still in flight.
-  const [seenFy, setSeenFy] = useState(fy);
-  if (fy !== seenFy) {
-    setSeenFy(fy);
+  const [seenPeriod, setSeenPeriod] = useState(periodChoice);
+  if (periodChoice !== seenPeriod) {
+    setSeenPeriod(periodChoice);
     setPreview(null);
   }
 
   useEffect(() => {
     let cancelled = false;
-    fetchWidgetPreviewData(fy).then((data) => {
+    fetchWidgetPreviewData(periodChoice).then((data) => {
       if (!cancelled) setPreview(data);
     });
     return () => {
       cancelled = true;
     };
-  }, [fy]);
-
-  const monthsInYear = preview
-    ? [...new Set(preview.expenses.map((e) => monthKey(expenseDate(e))))].sort()
-    : [];
+  }, [periodChoice]);
 
   const needsDimension = NEEDS_DIMENSION.includes(kind);
   const needsCompareBy = NEEDS_COMPARE_BY.includes(kind);
@@ -92,7 +101,7 @@ export function AddWidgetDialog({
   const needsStatMetric = NEEDS_STAT_METRIC.includes(kind);
 
   const config: WidgetConfig = {
-    fy,
+    period: periodChoice,
     month: month || null,
     vendorIds,
     categoryIds,
@@ -116,7 +125,6 @@ export function AddWidgetDialog({
         allExpenses: preview.expenses,
         allLines: preview.lines,
         paidCosts: preview.paidCosts,
-        fyOf: new Map(preview.expenses.map((e) => [e.id, fy])),
         // Built here from a live preview fetch, so it is current by
         // construction rather than read from the shared cache.
         computedAt: new Date().toISOString(),
@@ -124,7 +132,7 @@ export function AddWidgetDialog({
     : null;
 
   const previewReady = raw != null && (!needsItem || !!itemId);
-  const previewData = previewReady ? computeWidgetData(kind, config, raw!) : null;
+  const previewData = previewReady ? computeWidgetData(kind, config, raw!, today) : null;
 
   async function handleSave() {
     setSaving(true);
@@ -173,45 +181,41 @@ export function AddWidgetDialog({
             </select>
           </label>
 
-          <div className="flex flex-wrap gap-3">
-            <label className="flex flex-col gap-1 text-xs">
-              <span className="text-ink/55">Fiscal year</span>
-              <select
-                value={String(fy)}
-                onChange={(e) => {
-                  setFy(Number(e.target.value));
-                  setMonth("");
-                  setVendorIds([]);
-                  setCategoryIds([]);
-                  setItemIds([]);
-                  setItemId(undefined);
-                }}
-                className="input max-w-[11rem] text-sm"
-              >
-                {fiscalYears.map((y) => (
-                  <option key={y} value={y}>
-                    {formatFiscalYear(y)}
-                    {y === currentFy ? " (current)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1 text-xs">
-              <span className="text-ink/55">Month</span>
-              <select
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-                className="input max-w-[10rem] text-sm"
-              >
-                <option value="">Whole year</option>
-                {monthsInYear.map((m) => (
-                  <option key={m} value={m}>
-                    {formatMonthLabel(m)}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="flex flex-col gap-2">
+            <PeriodPicker
+              value={periodChoice}
+              today={today}
+              earliest={earliest}
+              onChange={(code) => {
+                setPeriodChoice(code);
+                setMonth("");
+                setVendorIds([]);
+                setCategoryIds([]);
+                setItemIds([]);
+                setItemId(undefined);
+              }}
+            />
+            {isCurrentWholeYear && resolved.calendar && (
+              <label className="flex items-center gap-2 text-xs text-ink/65">
+                <input
+                  type="checkbox"
+                  checked={rolling}
+                  onChange={(e) =>
+                    setPeriodChoice(
+                      e.target.checked
+                        ? `${resolved.calendar === "hijri" ? "h" : resolved.calendar}-current`
+                        : periodCode(resolved.calendar!, resolved.year!)
+                    )
+                  }
+                />
+                Move on to the new year automatically
+              </label>
+            )}
+            {month && (
+              <p className="text-xs text-ink/50">
+                Saved with only {formatMonthLabel(month)} — choose a period to replace it.
+              </p>
+            )}
           </div>
 
           {needsDimension && (

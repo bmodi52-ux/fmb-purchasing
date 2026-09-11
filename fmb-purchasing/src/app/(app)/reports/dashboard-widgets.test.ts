@@ -117,19 +117,14 @@ const paidCosts: PaidCostRow[] = [
   },
 ];
 
-const fyOf = new Map<string, number>([
-  ["e1", 1447],
-  ["e2", 1447],
-  ["e-old", 1446],
-]);
-
 const raw: ReportRawData = {
   allExpenses: expenses,
   allLines: lines,
   paidCosts,
-  fyOf,
   computedAt: "2026-09-06T00:00:00.000Z",
 };
+
+const TODAY = "2026-09-11";
 
 const BASE_CONFIG: WidgetConfig = {
   fy: 1447,
@@ -140,8 +135,18 @@ const BASE_CONFIG: WidgetConfig = {
 };
 
 describe("computeWidgetData", () => {
+  test("a widget saved before periods reads its fiscal year as a Hijri year, and a new one can use any period", () => {
+    const legacy = computeWidgetData("stat-tile", BASE_CONFIG, raw, TODAY);
+    const hijri = computeWidgetData("stat-tile", { ...BASE_CONFIG, fy: undefined, period: "h1447" }, raw, TODAY);
+    assert.deepEqual(legacy, hijri);
+    // The 2025-26 financial year holds only the May 2026 purchase.
+    const fy = computeWidgetData("stat-tile", { ...BASE_CONFIG, fy: undefined, period: "au2025" }, raw, TODAY);
+    if (fy.kind !== "stat-tile") return;
+    assert.equal(fy.totals.spend, 1320);
+  });
+
   test("spend-over-time buckets by month, scoped to the widget's fiscal year", () => {
-    const data = computeWidgetData("spend-over-time", BASE_CONFIG, raw);
+    const data = computeWidgetData("spend-over-time", BASE_CONFIG, raw, TODAY);
     assert.equal(data.kind, "spend-over-time");
     if (data.kind !== "spend-over-time") return;
     // Only e1 (May) and e2 (July) belong to fy 1447 — e-old (fy 1446) must
@@ -156,7 +161,8 @@ describe("computeWidgetData", () => {
     const data = computeWidgetData(
       "ranked-chart",
       { ...BASE_CONFIG, dimension: "vendor" },
-      raw
+      raw,
+      TODAY
     );
     assert.equal(data.kind, "ranked-chart");
     if (data.kind !== "ranked-chart") return;
@@ -167,7 +173,7 @@ describe("computeWidgetData", () => {
   });
 
   test("stat-tile defaults to spend and matches totals for the slice", () => {
-    const data = computeWidgetData("stat-tile", BASE_CONFIG, raw);
+    const data = computeWidgetData("stat-tile", BASE_CONFIG, raw, TODAY);
     assert.equal(data.kind, "stat-tile");
     if (data.kind !== "stat-tile") return;
     assert.equal(data.metric, "spend");
@@ -179,7 +185,8 @@ describe("computeWidgetData", () => {
     const data = computeWidgetData(
       "unit-cost-chart",
       { ...BASE_CONFIG, itemId: "i-mutton", itemLabel: "Mutton" },
-      raw
+      raw,
+      TODAY
     );
     assert.equal(data.kind, "unit-cost-chart");
     if (data.kind !== "unit-cost-chart") return;
@@ -194,7 +201,8 @@ describe("computeWidgetData", () => {
     const data = computeWidgetData(
       "unit-cost-chart",
       { ...BASE_CONFIG, itemId: "i-mutton", vendorIds: ["v-costco"] },
-      raw
+      raw,
+      TODAY
     );
     assert.equal(data.kind, "unit-cost-chart");
     if (data.kind !== "unit-cost-chart") return;
@@ -207,7 +215,8 @@ describe("computeWidgetData", () => {
     const data = computeWidgetData(
       "compare-chart",
       { ...BASE_CONFIG, compareBy: "category" },
-      raw
+      raw,
+      TODAY
     );
     assert.equal(data.kind, "compare-chart");
     if (data.kind !== "compare-chart") return;
