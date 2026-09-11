@@ -6,6 +6,8 @@ import { ApprovalsList, type ApprovalRow } from "./approvals-list";
 import { categoryLabelsById } from "@/lib/categories";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { paymentInstructions } from "@/lib/payment-instruction";
+import { getSetting } from "@/lib/app-settings";
+import { possibleDuplicates, type DuplicateMatch } from "@/lib/duplicates";
 
 export const metadata = { title: "Approvals" };
 
@@ -48,8 +50,15 @@ export default async function ApprovalsPage() {
   const expenseIds = expenses.map((e) => e.id);
   const vendorIds = [...new Set(expenses.map((e) => e.vendor_id).filter(Boolean))] as string[];
 
-  const [{ data: profiles }, { data: lineItems }, { data: categories }, { data: vendors }, instructions, withFiles] =
-    await Promise.all([
+  const [
+    { data: profiles },
+    { data: lineItems },
+    { data: categories },
+    { data: vendors },
+    instructions,
+    withFiles,
+    duplicates,
+  ] = await Promise.all([
       admin.from("profiles").select("id, full_name, email").in("id", submitterIds),
       admin
         .from("expense_line_items")
@@ -65,6 +74,11 @@ export default async function ApprovalsPage() {
       paymentInstructions(admin, expenses, { canSeeBankDetails: can(permissions, "payments", "mark_paid") }),
       // One query for the whole page rather than one per row.
       expenseIdsWithAttachments(admin, expenseIds),
+      // The warning the submitter already saw, and could ignore — shown to the
+      // person who can actually stop a double payment. Switchable (#21).
+      getSetting(admin, "duplicate_flags_for_reviewers").then((on) =>
+        on ? possibleDuplicates(admin, expenses) : new Map<string, DuplicateMatch[]>()
+      ),
     ]);
 
   // Lines whose Pricelist item was created by this receipt and nobody has
@@ -114,6 +128,7 @@ export default async function ApprovalsPage() {
         newVendor: e.vendor_id ? pendingVendorIds.has(e.vendor_id) : false,
         unconfirmedAccount: instructions.get(e.id)?.status === "pending",
         newItems: lines.filter((l) => l.pricelist_item_id && newItemOfferIds.has(l.pricelist_item_id)).length,
+        duplicateOf: duplicates.get(e.id) ?? [],
       },
       lineItems: lines.map((li) => ({
         description_raw: li.description_raw,

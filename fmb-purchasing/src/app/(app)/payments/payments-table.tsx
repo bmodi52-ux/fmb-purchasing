@@ -20,6 +20,8 @@ export type PaymentRow = {
   decided_at: string | null;
   submittedByName: string;
   hasReceipt: boolean;
+  /** "Possible duplicate of E-0123", when another expense has the same file or invoice. */
+  duplicateWarning: string | null;
   /** Where the money goes, and whether anyone has vouched for the account. */
   payment: PaymentInstruction | null;
   payeeName: string;
@@ -101,6 +103,12 @@ function BulkPayBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => voi
   );
 }
 
+function DuplicateFlag({ label }: { label: string }) {
+  return (
+    <span className="mt-1 inline-block rounded-full bg-maroon/10 px-2 py-0.5 text-xs text-maroon">{label}</span>
+  );
+}
+
 export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
   if (expenses.length === 0) {
     return <p className="text-sm text-ink/50">Nothing awaiting payment.</p>;
@@ -145,6 +153,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                       />
                       <div className="min-w-0">
                         <p className="font-medium text-ink">{e.vendor_name_raw}</p>
+                        {e.duplicateWarning && <DuplicateFlag label={e.duplicateWarning} />}
                         <p className="text-xs text-ink/55">
                           <Link href={`/expenses/${e.id}`} className="font-mono underline">
                             {e.expense_number ?? "View"}
@@ -224,7 +233,10 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                         />
                       </td>
                       <td className="p-2 font-mono text-xs"><Link href={`/expenses/${e.id}`} className="text-ink/70 underline">{e.expense_number ?? "View"}</Link></td>
-                      <td className="p-2">{e.vendor_name_raw}</td>
+                      <td className="p-2">
+                        {e.vendor_name_raw}
+                        {e.duplicateWarning && <DuplicateFlag label={e.duplicateWarning} />}
+                      </td>
                       <td className="p-2"><PayeeAccount instruction={e.payment} compact /></td>
                       <td className="p-2 text-ink/70">{e.submittedByName}</td>
                       <td className="p-2 text-ink/70">{e.invoice_number || "—"}</td>

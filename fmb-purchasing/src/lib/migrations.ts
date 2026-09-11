@@ -18,6 +18,7 @@ export const LEDGERED_MIGRATIONS = [
   "0043_withdrawn_status.sql",
   "0044_withdraw_expenses.sql",
   "0045_access_changes.sql",
+  "0046_app_settings.sql",
 ] as const;
 
 export type MigrationStatus =

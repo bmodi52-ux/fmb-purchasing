@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { formatAccount, paymentInstructions } from "@/lib/payment-instruction";
 import { PaymentsTable, type PaymentRow } from "./payments-table";
+import { getSetting } from "@/lib/app-settings";
+import { duplicateLabel, possibleDuplicates, type DuplicateMatch } from "@/lib/duplicates";
 
 export const metadata = { title: "Payments" };
 
@@ -16,7 +18,7 @@ export default async function PaymentsPage() {
   const admin = createAdminClient();
   const { data: expenses } = await admin
     .from("expenses")
-    .select("id, expense_number, vendor_name_raw, invoice_number, total, decided_at, submitted_by, payee_id")
+    .select("id, expense_number, vendor_id, vendor_name_raw, invoice_number, total, decided_at, submitted_by, payee_id")
     .eq("status", "approved")
     .order("decided_at");
 
@@ -36,6 +38,11 @@ export default async function PaymentsPage() {
   // could still be caught.
   const instructions = await paymentInstructions(admin, expenses ?? [], { canSeeBankDetails: true });
 
+  // The last point a double payment can be stopped (#21).
+  const duplicates = (await getSetting(admin, "duplicate_flags_for_reviewers"))
+    ? await possibleDuplicates(admin, expenses ?? [])
+    : new Map<string, DuplicateMatch[]>();
+
   const rows: PaymentRow[] = (expenses ?? []).map((e) => ({
     id: e.id,
     expense_number: e.expense_number,
@@ -45,6 +52,7 @@ export default async function PaymentsPage() {
     decided_at: e.decided_at,
     submittedByName: submitterNameById.get(e.submitted_by) ?? "—",
     hasReceipt: withFiles.has(e.id),
+    duplicateWarning: duplicates.get(e.id)?.length ? duplicateLabel(duplicates.get(e.id)!) : null,
     payment: instructions.get(e.id) ?? null,
     // Flattened alongside the object so a payment run exports as text: a
     // spreadsheet of transfers to make is worth as much as the screen, and it
