@@ -44,6 +44,7 @@ import { round2, sumLines, residualFor } from "@/lib/expense-money";
 import { categoriesForLineGroup, lineGroupFor } from "@/lib/categories";
 import { BLURRY_BELOW, measureSharpness } from "@/lib/image-quality";
 import { applyLineDefaults, hasDefaults } from "@/lib/supplier-defaults";
+import { isConnectionFailure, offlineQueueSupported, queueReceipt } from "@/lib/offline-queue";
 import type { StoredFile } from "@/lib/receipt-storage";
 
 const initialExtractState: ExtractState = { data: null, attachment: null, error: null };
@@ -297,6 +298,8 @@ export function SubmitForm({
   const [extractionNote, setExtractionNote] = useState<string | null>(null);
   /** A photo that looks out of focus, held until the person decides (#49). */
   const [blurry, setBlurry] = useState<{ file: File; onRejected?: () => void } | null>(null);
+  /** Set when a photo was kept on the phone for want of signal (#47). */
+  const [keptOffline, setKeptOffline] = useState(false);
   /** What the vendor's usual settings filled in, in words (#49). */
   const [defaultsNote, setDefaultsNote] = useState<string | null>(null);
   const defaultsAppliedFor = useRef<string | null>(null);
@@ -573,6 +576,7 @@ export function SubmitForm({
   async function readReceiptFile(chosen: File, onRejected?: () => void, acceptBlurry = false) {
     setSizeError(null);
     setBlurry(null);
+    setKeptOffline(false);
     setStage("preparing");
     try {
       // Checked on the original, before it is shrunk for upload: a sharp
@@ -613,10 +617,31 @@ export function SubmitForm({
       // one call they were one silent minute. If the upload half fails, the
       // read is still attempted with the file itself — the action takes either
       // — so the split can never cost somebody a receipt.
+      // No signal: keep the photo on the phone rather than lose it. It is sent
+      // on its own once the phone is back online, and waits on this page.
+      const keepForLater = async () => {
+        await queueReceipt(prepared, prepared.name || "Receipt photo.jpg");
+        setKeptOffline(true);
+        onRejected?.();
+      };
+      if (!navigator.onLine && offlineQueueSupported()) {
+        await keepForLater();
+        return;
+      }
+
       setStage("uploading");
       const payload = new FormData();
       payload.append("file", prepared);
-      const uploaded = await uploadReceiptFileAction({ attachment: null, error: null }, payload);
+      let uploaded: UploadFileState;
+      try {
+        uploaded = await uploadReceiptFileAction({ attachment: null, error: null }, payload);
+      } catch (err) {
+        if (offlineQueueSupported() && isConnectionFailure(err, navigator.onLine)) {
+          await keepForLater();
+          return;
+        }
+        throw err;
+      }
 
       const readPayload = new FormData();
       if (uploaded.attachment) {
@@ -830,6 +855,12 @@ export function SubmitForm({
                 </button>
               </div>
             </div>
+          )}
+          {keptOffline && !busy && (
+            <p role="status" className="rounded-md bg-palm/10 px-4 py-3 text-sm text-ink/80">
+              No signal, so the photo is kept on this phone. It will be sent as soon as you&apos;re back online and wait
+              on this page for you to submit. You can take more in the meantime.
+            </p>
           )}
           {sizeError && !extracting && <p className="text-sm text-red-700">{sizeError}</p>}
           {extractState.error && !extracting && (

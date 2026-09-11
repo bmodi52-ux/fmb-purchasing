@@ -67,3 +67,41 @@ describe("0054", () => {
     await db.query("insert into notifications (user_id, kind, title) values ($1, 'receipt_received', 'Ready')", [user]);
   });
 });
+
+describe("0056", () => {
+  let db: TestDb;
+  before(async () => {
+    db = await createTestDb();
+  });
+  after(async () => {
+    await db?.close();
+  });
+
+  test("a photo from the phone needs no sender; an emailed receipt still does", async () => {
+    const user = await scalar<string>(
+      db,
+      `insert into auth.users (email, raw_user_meta_data) values ('phone@test.local', '{"full_name": "Phone"}'::jsonb) returning id`
+    );
+    await db.query(
+      `insert into inbound_receipts (user_id, source, content_type, storage_path, sha256, file_name, size_bytes)
+       values ($1, 'phone', 'image/jpeg', 'sha256/bb/x.jpg', $2, 'x.jpg', 10)`,
+      [user, "b".repeat(64)]
+    );
+    await assert.rejects(
+      db.query(
+        `insert into inbound_receipts (user_id, source, storage_path, sha256, file_name, size_bytes)
+         values ($1, 'email', 'sha256/cc/x.eml', $2, 'x.eml', 10)`,
+        [user, "c".repeat(64)]
+      )
+    );
+  });
+});
+
+describe("offline photos", () => {
+  test("kept only when the failure was the connection", async () => {
+    const { isConnectionFailure } = await import("./offline-queue.ts");
+    assert.equal(isConnectionFailure(new Error("anything"), false), true);
+    assert.equal(isConnectionFailure(new TypeError("Failed to fetch"), true), true);
+    assert.equal(isConnectionFailure(new Error("Only JPG, PNG, WebP, PDF"), true), false);
+  });
+});

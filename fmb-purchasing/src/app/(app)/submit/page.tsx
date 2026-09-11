@@ -41,7 +41,7 @@ export default async function SubmitExpensePage({
   const { data: waiting } = newSubmission
     ? await admin
         .from("inbound_receipts")
-        .select("id, subject, from_email, received_at, storage_path, file_name, size_bytes, sha256, attachment_count")
+        .select("id, source, content_type, captured_at, subject, from_email, received_at, storage_path, file_name, size_bytes, sha256, attachment_count")
         .eq("user_id", user.id)
         .eq("status", "waiting")
         .order("received_at", { ascending: false })
@@ -52,7 +52,7 @@ export default async function SubmitExpensePage({
     ? {
         storagePath: chosen.storage_path as string,
         fileName: chosen.file_name as string,
-        contentType: "message/rfc822",
+        contentType: chosen.content_type as string,
         sizeBytes: Number(chosen.size_bytes),
         sha256: chosen.sha256 as string,
         alreadyStored: true,
@@ -86,15 +86,18 @@ export default async function SubmitExpensePage({
       {newSubmission && !inbound && others.length > 0 && (
         <section className="flex flex-col gap-2 rounded-lg border border-gold/40 bg-gold/5 p-4">
           <h2 className="section-title text-ink">
-            {others.length === 1 ? "A receipt you emailed in" : `${others.length} receipts you emailed in`}
+            {others.length === 1 ? "A receipt waiting for you" : `${others.length} receipts waiting for you`}
           </h2>
           <ul className="flex flex-col divide-y divide-ink/5 text-sm">
             {others.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <div className="min-w-0">
-                  <p className="break-words text-ink">{(r.subject as string | null) || "No subject"}</p>
+                  <p className="break-words text-ink">
+                    {r.source === "phone" ? "Photo taken while offline" : (r.subject as string | null) || "No subject"}
+                  </p>
                   <p className="text-xs text-ink/55">
-                    {formatDateTime(r.received_at as string)}
+                    {r.source === "phone" ? "Taken " : "Emailed "}
+                    {formatDateTime((r.captured_at as string | null) ?? (r.received_at as string))}
                     {Number(r.attachment_count) > 0 &&
                       ` · ${r.attachment_count} ${Number(r.attachment_count) === 1 ? "attachment" : "attachments"}`}
                   </p>

@@ -6,6 +6,7 @@ import { signOut } from "@/app/login/actions";
 import { AppSidebar } from "./app-sidebar";
 import { PendingProvider } from "@/components/pending";
 import { unreadCount } from "@/lib/notifications-inapp";
+import { OfflineReceiptSync } from "@/components/offline-receipt-sync";
 
 export default async function AppLayout({
   children,
@@ -45,6 +46,8 @@ export default async function AppLayout({
             card added padding of its own. */}
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-12 md:px-16">{children}</main>
       </div>
+      {/* Receipt photos taken with no signal, sent once there is (#47). */}
+      <OfflineReceiptSync />
     </PendingProvider>
   );
 }
