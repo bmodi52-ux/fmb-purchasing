@@ -6,6 +6,7 @@ import { Dialog } from "@/components/dialog";
 import { SubmitButton } from "@/components/submit-button";
 import { formatUnitCost } from "@/lib/pack-description";
 import { addVendorOffer, type AddVendorOfferState } from "../../pricelist/actions";
+import { AddItemForm } from "../../pricelist/add-item-form";
 
 export type OfferablePack = {
   id: string;
@@ -29,52 +30,97 @@ export type OfferableItem = {
 
 const initialState: AddVendorOfferState = { error: null, success: false };
 
-/** "+ Add pricing for an existing item", on a vendor's page. */
-export function AddOfferModal({
+/**
+ * "+ Add product" on a vendor's Products tab.
+ *
+ * There used to be two buttons — one to create an item, one to price an item
+ * that already existed — which asked a person to know which case they were in
+ * before looking. Guessing "new" is how duplicates are made. So this starts by
+ * searching the Pricelist, and only offers to create an item once the search
+ * has come up without it, carrying the name typed across.
+ */
+export function AddProductModal({
   vendorId,
   vendorName,
   items,
+  categories,
+  units,
 }: {
   vendorId: string;
   vendorName: string;
   items: OfferableItem[];
+  categories: { id: string; name: string }[];
+  units: { id: string; code: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
+  const [newItemName, setNewItemName] = useState<string | null>(null);
+
+  function close() {
+    setOpen(false);
+    setNewItemName(null);
+  }
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="self-start whitespace-nowrap rounded-md border border-ink/15 bg-white px-4 py-2 text-sm text-ink transition-colors hover:border-ink/30"
+        className="self-start whitespace-nowrap rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-gold-deep"
       >
-        + Add pricing for an existing item
+        + Add product
       </button>
 
       {open && (
-        <Dialog title={`Add pricing from ${vendorName}`} align="start" onClose={() => setOpen(false)}>
-          <AddOfferForm
-            vendorId={vendorId}
-            vendorName={vendorName}
-            items={items}
-            onSuccess={() => setOpen(false)}
-          />
+        <Dialog
+          title={newItemName === null ? `Add a product from ${vendorName}` : `New item from ${vendorName}`}
+          align="start"
+          onClose={close}
+        >
+          {newItemName === null ? (
+            <PriceExistingForm
+              vendorId={vendorId}
+              vendorName={vendorName}
+              items={items}
+              onSuccess={close}
+              onNewItem={(name) => setNewItemName(name)}
+            />
+          ) : (
+            <div className="flex flex-col gap-4">
+              <button
+                type="button"
+                onClick={() => setNewItemName(null)}
+                className="self-start text-sm text-ink/60 underline hover:text-ink"
+              >
+                ← Back to searching the Pricelist
+              </button>
+              <AddItemForm
+                vendors={[]}
+                categories={categories}
+                units={units}
+                fixedVendor={{ id: vendorId, name: vendorName }}
+                defaultName={newItemName}
+                onSuccess={close}
+              />
+            </div>
+          )}
         </Dialog>
       )}
     </>
   );
 }
 
-function AddOfferForm({
+function PriceExistingForm({
   vendorId,
   vendorName,
   items,
   onSuccess,
+  onNewItem,
 }: {
   vendorId: string;
   vendorName: string;
   items: OfferableItem[];
   onSuccess: () => void;
+  onNewItem: (name: string) => void;
 }) {
   const [state, formAction, pending] = useActionState(addVendorOffer, initialState);
   const [query, setQuery] = useState("");
@@ -118,11 +164,11 @@ function AddOfferForm({
       {!item ? (
         <div className="flex flex-col gap-2">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-ink/70">Find the item</span>
+            <span className="text-ink/70">What is it?</span>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Name or item number"
+              placeholder="Search the Pricelist — name or item number"
               className="input"
             />
           </label>
@@ -134,7 +180,7 @@ function AddOfferForm({
                   <button
                     type="button"
                     onClick={() => chooseItem(i)}
-                    className="flex w-full flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2 text-left text-sm hover:bg-gold/10"
+                    className="flex w-full flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2.5 text-left text-sm hover:bg-gold/10"
                   >
                     <span className="text-ink">
                       {i.name}
@@ -152,11 +198,16 @@ function AddOfferForm({
               );
             })}
             {matches.length === 0 && (
-              <li className="px-3 py-2 text-sm text-ink/50">
-                Nothing on the Pricelist matches &ldquo;{query}&rdquo;. Close this and use + New item to add it.
-              </li>
+              <li className="px-3 py-2 text-sm text-ink/50">Nothing on the Pricelist matches &ldquo;{query}&rdquo;.</li>
             )}
           </ul>
+          <button
+            type="button"
+            onClick={() => onNewItem(query.trim())}
+            className="self-start rounded-md border border-dashed border-ink/25 px-3 py-2 text-sm text-ink/75 hover:border-ink/45"
+          >
+            {query.trim() ? `Not listed? Add “${query.trim()}” as a new item` : "Not listed? Add a new item"}
+          </button>
         </div>
       ) : (
         <>
@@ -189,7 +240,7 @@ function AddOfferForm({
             </p>
           ) : (
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink/70">Pack size</span>
+              <span className="text-ink/70">Which size?</span>
               <select value={packId} onChange={(e) => setPackId(e.target.value)} required className="input">
                 <option value="">— choose —</option>
                 {item.packs.map((p) => (
@@ -211,6 +262,7 @@ function AddOfferForm({
                     <input
                       name="pack_price"
                       type="number"
+                      inputMode="decimal"
                       step="any"
                       min="0"
                       value={price}

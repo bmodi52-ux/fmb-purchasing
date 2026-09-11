@@ -20,7 +20,10 @@ export function AddItemForm({
   units,
   onSuccess,
   fixedVendor,
+  defaultName,
 }: {
+  /** A name to start from — what was searched for before choosing to add it. */
+  defaultName?: string;
   vendors: Vendor[];
   categories: Category[];
   units: Unit[];
@@ -79,7 +82,7 @@ export function AddItemForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm sm:col-span-2">
           <span className="text-ink/70">Item name</span>
-          <input name="name" required placeholder="e.g. Chicken Breast" className="input" />
+          <input name="name" required defaultValue={defaultName} placeholder="e.g. Chicken Breast" className="input" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-ink/70">Item category</span>

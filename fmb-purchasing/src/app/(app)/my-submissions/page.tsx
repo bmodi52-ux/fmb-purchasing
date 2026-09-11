@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
@@ -21,6 +22,8 @@ export const metadata = { title: "My submissions" };
  */
 const RECENT_LIMIT = 300;
 
+const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
+
 export default async function MySubmissionsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -42,12 +45,45 @@ export default async function MySubmissionsPage() {
   const withFiles = await expenseIdsWithAttachments(admin, (expenses ?? []).map((e) => e.id));
   const rows = (expenses ?? []).map((e) => ({ ...e, hasReceipt: withFiles.has(e.id) }));
 
+  // Where the money stands, before reading a single row: what is still with
+  // the approvers, and what has been agreed but not yet paid back.
+  const waiting = rows.filter((r) => r.status === "submitted");
+  const unpaid = rows.filter((r) => r.status === "approved");
+  const sum = (list: typeof rows) => list.reduce((total, r) => total + Number(r.total), 0);
+
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="page-title text-ink">My submissions</h1>
-        <p className="page-description mt-1">Track the status of expenses you&apos;ve submitted.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div>
+          <h1 className="page-title text-ink">My submissions</h1>
+          <p className="page-description mt-1">Track the status of expenses you&apos;ve submitted.</p>
+        </div>
+        <Link
+          href="/submit"
+          className="self-start whitespace-nowrap rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-gold-deep"
+        >
+          + Submit another expense
+        </Link>
       </div>
+
+      {(waiting.length > 0 || unpaid.length > 0) && (
+        <dl className="grid grid-cols-2 gap-3 sm:max-w-lg">
+          <div className="rounded-lg border border-ink/10 bg-white/60 p-3">
+            <dt className="text-xs text-ink/55">Waiting for approval</dt>
+            <dd className="mt-0.5 font-mono text-lg font-semibold text-ink">{money(sum(waiting))}</dd>
+            <dd className="text-xs text-ink/45">
+              {waiting.length} {waiting.length === 1 ? "expense" : "expenses"}
+            </dd>
+          </div>
+          <div className="rounded-lg border border-ink/10 bg-white/60 p-3">
+            <dt className="text-xs text-ink/55">Approved, not yet paid</dt>
+            <dd className="mt-0.5 font-mono text-lg font-semibold text-ink">{money(sum(unpaid))}</dd>
+            <dd className="text-xs text-ink/45">
+              {unpaid.length} {unpaid.length === 1 ? "expense" : "expenses"}
+            </dd>
+          </div>
+        </dl>
+      )}
 
       {(count ?? 0) > rows.length && (
         <p className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-ink/80">

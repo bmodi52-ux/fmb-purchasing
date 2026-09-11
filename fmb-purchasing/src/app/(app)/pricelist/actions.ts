@@ -360,6 +360,45 @@ export async function addVendorOffer(
   return { error: null, success: true };
 }
 
+/**
+ * A price set or changed from a vendor's Products tab, without opening the
+ * item. The same record as an edit on the item page: written to the offer's
+ * history, so a price corrected in passing can still be traced.
+ */
+export async function updateOfferPrice(formData: FormData) {
+  const user = await requirePricelistEdit();
+
+  const offerId = String(formData.get("offer_id") ?? "");
+  const vendorId = fieldOrNull(formData, "vendor_id");
+  const packPrice = numberOrNull(formData, "pack_price");
+  if (!offerId || (packPrice != null && packPrice < 0)) return;
+
+  const admin = createAdminClient();
+  const { data: before } = await admin
+    .from("pricelist_items")
+    .select("pack_price, item_pack_sizes ( item_id )")
+    .eq("id", offerId)
+    .maybeSingle();
+  if (!before) return;
+
+  const old = before.pack_price != null ? Number(before.pack_price) : null;
+  if (old !== packPrice) {
+    await admin
+      .from("pricelist_items")
+      .update({ pack_price: packPrice, updated_at: new Date().toISOString(), updated_by: user.id })
+      .eq("id", offerId);
+    await admin
+      .from("pricelist_item_history")
+      .insert({ item_id: offerId, changed_by: user.id, changes: { pack_price: { old, new: packPrice } } });
+  }
+
+  const itemId = (before.item_pack_sizes as unknown as { item_id: string } | null)?.item_id;
+  if (itemId) revalidatePath(`/pricelist/${itemId}`);
+  if (vendorId) revalidatePath(`/vendors/${vendorId}`);
+  revalidatePath("/pricelist");
+  revalidateReports();
+}
+
 async function reviewOffers(offerIds: string[], decision: "approved" | "rejected") {
   const user = await getCurrentUser();
   if (!user) redirect("/login");

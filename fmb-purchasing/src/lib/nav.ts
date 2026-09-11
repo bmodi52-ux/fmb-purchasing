@@ -7,6 +7,8 @@ export const NAV_ITEMS: {
   action: ActionKey;
 }[] = [
   { key: "submit_expense", label: "Submit expense", href: "/submit", action: "submit" },
+  // The quick way onto the Pricelist from a shop floor — see pricelist/add-by-photo.
+  { key: "submit_expense", label: "Add item by photo", href: "/pricelist/add-by-photo", action: "submit" },
   { key: "my_submissions", label: "My submissions", href: "/my-submissions", action: "view" },
   { key: "all_expenses", label: "All expenses", href: "/expenses", action: "view" },
   { key: "pricelist", label: "Pricelist", href: "/pricelist", action: "view" },
