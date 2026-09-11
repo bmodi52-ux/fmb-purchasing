@@ -16,7 +16,6 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { formatFiscalYear } from "@/lib/fiscal-year";
 import { formatMonthLabel } from "./reports/aggregate";
 import type { WidgetConfig, WidgetData, WidgetKind } from "./reports/dashboard-widgets";
 import { removeDashboardWidget, reorderDashboardWidgets } from "./reports/dashboard-widgets-actions";
@@ -29,10 +28,13 @@ export type SavedWidget = {
   title: string;
   config: WidgetConfig;
   data: WidgetData;
+  /** The widget's period in words, resolved on the server against today. */
+  periodLabel: string;
 };
 
-function filterSummary(config: WidgetConfig): string {
-  const parts = [formatFiscalYear(config.fy)];
+function filterSummary(widget: SavedWidget): string {
+  const { config } = widget;
+  const parts = [widget.periodLabel];
   if (config.month) parts.push(formatMonthLabel(config.month));
   const filterCount = config.vendorIds.length + config.categoryIds.length + config.itemIds.length;
   if (filterCount > 0) parts.push(`${filterCount} filter${filterCount === 1 ? "" : "s"}`);
@@ -41,12 +43,12 @@ function filterSummary(config: WidgetConfig): string {
 
 export function HomeDashboard({
   widgets,
-  fiscalYears,
-  currentFy,
+  today,
+  earliest,
 }: {
   widgets: SavedWidget[];
-  fiscalYears: number[];
-  currentFy: number;
+  today: string;
+  earliest: string | null;
 }) {
   const [order, setOrder] = useState(widgets.map((w) => w.id));
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
@@ -142,8 +144,8 @@ export function HomeDashboard({
       {dialogOpen && (
         <AddWidgetDialog
           editing={editing}
-          fiscalYears={fiscalYears}
-          currentFy={currentFy}
+          today={today}
+          earliest={earliest}
           onClose={() => setDialogOpen(false)}
         />
       )}
@@ -189,7 +191,7 @@ function SortableWidgetCard({
           </button>
           <div className="min-w-0">
             <h3 className="truncate text-sm font-medium text-ink">{widget.title}</h3>
-            <p className="text-xs text-ink/45">{filterSummary(widget.config)}</p>
+            <p className="text-xs text-ink/45">{filterSummary(widget)}</p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3 text-xs">

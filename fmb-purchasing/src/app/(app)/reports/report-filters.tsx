@@ -15,9 +15,9 @@ export const SECTIONS: { key: ReportSection; label: string }[] = [
 export type CompareDimension = "item" | "category" | "vendor";
 
 export type ReportQuery = {
-  fy: number;
+  /** A period code from lib/periods — any kind of year, a quarter, a month or a range. */
+  period: string;
   section: ReportSection;
-  month: string;
   vendors: string[];
   categories: string[];
   items: string[];
@@ -36,9 +36,8 @@ export function buildHref(query: ReportQuery, patch: Partial<ReportQuery>): stri
   const next = { ...query, ...patch };
   const params = new URLSearchParams();
 
-  params.set("fy", String(next.fy));
+  params.set("period", next.period);
   if (next.section !== "overview") params.set("section", next.section);
-  if (next.month) params.set("month", next.month);
   if (next.breakdownBy !== "category") params.set("breakdownBy", next.breakdownBy);
   if (next.compareBy !== "item") params.set("compareBy", next.compareBy);
   for (const v of next.vendors) params.append("vendor", v);
@@ -74,34 +73,27 @@ export function SectionTabs({ query, active }: { query: ReportQuery; active: Rep
 
 export function ReportFilters({
   query,
-  fiscalYears,
-  currentFy,
-  months,
+  today,
+  earliest,
   vendors,
   categories,
   items,
 }: {
   query: ReportQuery;
-  fiscalYears: number[];
-  currentFy: number;
-  months: string[];
+  today: string;
+  earliest: string | null;
   vendors: FilterOption[];
   categories: FilterOption[];
   items: FilterOption[];
 }) {
-  const isFiltered =
-    !!query.month ||
-    query.vendors.length > 0 ||
-    query.categories.length > 0 ||
-    query.items.length > 0;
+  const isFiltered = query.vendors.length > 0 || query.categories.length > 0 || query.items.length > 0;
 
   return (
     <div className="flex flex-wrap items-end gap-x-3 gap-y-3 rounded-xl border border-ink/10 bg-white/60 p-3">
       <FilterControls
         query={query}
-        fiscalYears={fiscalYears}
-        currentFy={currentFy}
-        months={months}
+        today={today}
+        earliest={earliest}
         vendors={vendors}
         categories={categories}
         items={items}
@@ -109,7 +101,7 @@ export function ReportFilters({
 
       {isFiltered && (
         <Link
-          href={buildHref(query, { month: "", vendors: [], categories: [], items: [] })}
+          href={buildHref(query, { vendors: [], categories: [], items: [] })}
           className="pb-2.5 text-xs text-ink/50 underline hover:text-ink"
         >
           Clear filters
