@@ -2,6 +2,8 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { CurrentUser } from "@/lib/auth/session";
+import { activeDutiesFor, grantsForDuty } from "@/lib/stand-ins";
+import { todayIso } from "@/lib/periods-data";
 
 export type PageKey =
   | "submit_expense"
@@ -29,19 +31,29 @@ export type ActionKey =
   | "manage_teams"
   | "export";
 
-/** All (page, action) grants across every team the user belongs to. */
+/**
+ * All (page, action) grants the user holds: everything their teams grant, and
+ * whatever duty they are standing in for today (#35).
+ *
+ * Cached per request. The user object comes from getCurrentUser, which is
+ * itself cached, so every call in a request passes the same object.
+ */
 export const getUserPermissions = cache(async (
-  teamIds: string[]
+  user: Pick<CurrentUser, "id" | "teamIds">
 ): Promise<Set<`${string}:${string}`>> => {
-  if (teamIds.length === 0) return new Set();
-
   const admin = createAdminClient();
-  const { data } = await admin
-    .from("team_permissions")
-    .select("page_key, action_key")
-    .in("team_id", teamIds);
 
-  return new Set((data ?? []).map((row) => `${row.page_key}:${row.action_key}` as const));
+  const [{ data }, duties] = await Promise.all([
+    user.teamIds.length
+      ? admin.from("team_permissions").select("page_key, action_key").in("team_id", user.teamIds)
+      : Promise.resolve({ data: [] as { page_key: string; action_key: string }[] }),
+    activeDutiesFor(admin, user.id, todayIso()),
+  ]);
+
+  return new Set([
+    ...(data ?? []).map((row) => `${row.page_key}:${row.action_key}` as const),
+    ...duties.flatMap(grantsForDuty),
+  ]);
 });
 
 export function can(
@@ -58,7 +70,7 @@ export async function userCan(
   page: PageKey,
   action: ActionKey
 ): Promise<boolean> {
-  const permissions = await getUserPermissions(user.teamIds);
+  const permissions = await getUserPermissions(user);
   return can(permissions, page, action);
 }
 

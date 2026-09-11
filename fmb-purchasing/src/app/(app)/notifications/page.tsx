@@ -23,11 +23,17 @@ export default async function NotificationsPage() {
         <div>
           <h1 className="page-title text-ink">Notifications</h1>
           <p className="page-description mt-1 max-w-xl">
-            Submissions, decisions and payments that involve you. These replaced the emails that used to be sent for
-            every one of these events.
+            Submissions, decisions, payments, reminders and announcements that involve you. Choose which of them also
+            reach you by push or email in Settings.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/notifications/settings"
+            className="whitespace-nowrap rounded-md border border-ink/15 px-3 py-1.5 text-sm hover:border-ink/30"
+          >
+            Settings
+          </Link>
           {unread.length > 0 && (
             <form action={markAllNotificationsRead}>
               <SubmitButton

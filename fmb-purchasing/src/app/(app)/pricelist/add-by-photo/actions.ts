@@ -167,7 +167,7 @@ export async function saveProductsAction(input: {
   const products = input.products.filter((p) => p.itemId || p.name.trim());
   if (products.length === 0) return { error: "There is nothing to save.", saved: [], vendorId: null };
 
-  const permissions = await getUserPermissions(user.teamIds);
+  const permissions = await getUserPermissions(user);
   const trusted = can(permissions, "pricelist", "edit_master_data");
   const now = new Date().toISOString();
   const status = trusted ? "approved" : "pending";

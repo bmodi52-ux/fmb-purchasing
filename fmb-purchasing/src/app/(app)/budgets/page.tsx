@@ -45,7 +45,7 @@ export default async function BudgetsPage({
   if (!user) redirect("/login");
   await requirePermission(user, "budgets", "view");
 
-  const permissions = await getUserPermissions(user.teamIds);
+  const permissions = await getUserPermissions(user);
   const canEdit = can(permissions, "budgets", "edit_master_data");
 
   const params = await searchParams;

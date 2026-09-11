@@ -16,7 +16,7 @@ export default async function VendorsPage() {
   if (!user) redirect("/login");
   await requirePermission(user, "vendors", "view");
 
-  const permissions = await getUserPermissions(user.teamIds);
+  const permissions = await getUserPermissions(user);
   const canEdit = can(permissions, "vendors", "edit_master_data");
   const canApprove = can(permissions, "vendors", "approve_master_data");
 

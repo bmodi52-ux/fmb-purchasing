@@ -15,7 +15,19 @@ export const SETTING_DEFAULTS = {
    * suggested as a capital purchase (0048, #50).
    */
   capital_purchase_threshold: 1000 as number,
+  /** Daily reminders and escalation (#27). Days are whole days waiting. */
+  reminders: {
+    enabled: true,
+    approvals: { firstAfterDays: 2, escalateAfterDays: 5, escalateTeamId: null as string | null },
+    payments: { firstAfterDays: 3, escalateAfterDays: 7, escalateTeamId: null as string | null },
+    bankAccounts: { firstAfterDays: 1, escalateAfterDays: 3, escalateTeamId: null as string | null },
+    declinedAfterDays: 3,
+    /** 0 is Sunday; 1 is Monday. */
+    masterDataWeekday: 1,
+  },
 };
+
+export type ReminderSettings = (typeof SETTING_DEFAULTS)["reminders"];
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
 export type SettingValue<K extends SettingKey> = (typeof SETTING_DEFAULTS)[K];

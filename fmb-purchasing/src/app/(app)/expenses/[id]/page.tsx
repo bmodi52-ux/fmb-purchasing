@@ -103,7 +103,7 @@ export default async function ExpenseDetailPage({
   // useful, not be told the expense doesn't exist.
   if (!(await canViewExpense(user, expense.submitted_by))) redirect("/");
 
-  const permissions = await getUserPermissions(user.teamIds);
+  const permissions = await getUserPermissions(user);
 
   // The account numbers themselves stay behind 0027's trust boundary; the
   // payee's name and whether the account is confirmed do not, because a

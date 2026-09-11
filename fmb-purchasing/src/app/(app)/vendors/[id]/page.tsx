@@ -88,7 +88,7 @@ export default async function VendorDetailPage({
   if (!user) redirect("/login");
   await requirePermission(user, "vendors", "view");
 
-  const permissions = await getUserPermissions(user.teamIds);
+  const permissions = await getUserPermissions(user);
   const showProducts = tab === "products";
 
   const admin = createAdminClient();
