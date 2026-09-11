@@ -138,7 +138,8 @@ export function AlertRuleForm({
 }) {
   const [state, action, pending] = useActionState<AlertRuleState, FormData>(saveAlertRule, { status: "idle" });
   const [event, setEvent] = useState<AlertEvent>("expense_submitted");
-  const expenseEvent = event === "expense_submitted" || event === "expense_approved" || event === "expense_paid";
+  const expenseEvent =
+    event === "expense_submitted" || event === "expense_approved" || event === "expense_paid" || event === "unusual_spend";
 
   return (
     <form action={action} className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">

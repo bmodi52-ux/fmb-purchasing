@@ -15,6 +15,8 @@ import { parsePeriod, periodCode, yearContaining } from "@/lib/periods";
 import { todayIso } from "@/lib/periods-data";
 import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
 import { loadReportRawData, withinRange } from "../reports/data";
+import { loadPriceFlags, loadSpendFlags } from "@/lib/price-alerts-data";
+import { describePriceFlag, describeUnusualSpend, isSeriousPriceFlag } from "@/lib/price-alerts";
 
 type VendorFlagRow = {
   id: string;
@@ -73,6 +75,7 @@ export default async function ApprovalsPage() {
     instructions,
     withFiles,
     duplicates,
+    [priceFlags, spendFlags],
   ] = await Promise.all([
       admin.from("profiles").select("id, full_name, email").in("id", submitterIds),
       admin
@@ -93,6 +96,11 @@ export default async function ApprovalsPage() {
       // person who can actually stop a double payment. Switchable (#21).
       getSetting(admin, "duplicate_flags_for_reviewers").then((on) =>
         on ? possibleDuplicates(admin, expenses) : new Map<string, DuplicateMatch[]>()
+      ),
+      // Prices that moved past their limit, and spend well above the vendor's
+      // usual (#29, #42) — both empty when price alerts are switched off.
+      getSetting(admin, "price_alerts").then((settings) =>
+        Promise.all([loadPriceFlags(admin, expenseIds, settings), loadSpendFlags(admin, expenses, settings)])
       ),
     ]);
 
@@ -184,6 +192,8 @@ export default async function ApprovalsPage() {
         unconfirmedAccount: instructions.get(e.id)?.status === "pending",
         newItems: lines.filter((l) => l.pricelist_item_id && newItemOfferIds.has(l.pricelist_item_id)).length,
         duplicateOf: duplicates.get(e.id) ?? [],
+        prices: (priceFlags.get(e.id) ?? []).map((f) => ({ label: describePriceFlag(f), serious: isSeriousPriceFlag(f) })),
+        unusualSpend: spendFlags.has(e.id) ? describeUnusualSpend(spendFlags.get(e.id)!) : null,
         gstConcerns: [
           ...gstConcerns(e.vendor_id ? (vendorById.get(e.vendor_id) ?? null) : null, Number(e.gst_amount)).map(
             (c) => GST_CONCERN_LABEL[c]

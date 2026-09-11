@@ -13,7 +13,14 @@ export type OfferRow = {
   itemNumber: string | null;
   name: string;
   status: string;
+  vendorId: string | null;
   vendorLabel: string;
+  /** The item's preferred vendor, whichever offer this row is (#29). */
+  preferredVendorLabel: string | null;
+  /** Whether this offer is from the item's preferred vendor. */
+  isPreferredVendor: boolean;
+  /** The lowest price per unit actually paid for the item lately, and who charged it. */
+  cheapestRecent: { price: string; vendorLabel: string | null; date: string } | null;
   categoryLabel: string;
   brand: string | null;
   vendorSku: string | null;
@@ -94,7 +101,23 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
       ),
       exportValue: (r) => r.name,
     },
-    { key: "vendor", label: "Vendor", render: (r) => r.vendorLabel, exportValue: (r) => r.vendorLabel },
+    {
+      key: "vendor",
+      label: "Vendor",
+      render: (r) => (
+        <>
+          {r.vendorLabel}
+          {r.isPreferredVendor && <PreferredBadge />}
+        </>
+      ),
+      exportValue: (r) => r.vendorLabel,
+    },
+    {
+      key: "preferred_vendor",
+      label: "Preferred vendor",
+      render: (r) => r.preferredVendorLabel ?? <span className="text-ink/40">—</span>,
+      exportValue: (r) => r.preferredVendorLabel ?? "",
+    },
     { key: "category", label: "Category", render: (r) => r.categoryLabel, exportValue: (r) => r.categoryLabel },
     {
       key: "pack_size",
@@ -143,6 +166,21 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
         r.costPerBaseUnit != null
           ? `${formatUnitCost(r.costPerBaseUnit, r.baseUnitCode, { currency: false })}${r.contentsConfirmed ? "" : " (provisional)"}`
           : "",
+    },
+    {
+      key: "cheapest_recent",
+      label: "Cheapest recently",
+      render: (r) =>
+        r.cheapestRecent ? (
+          <span title={`Paid on ${r.cheapestRecent.date}`}>
+            <span className="font-mono text-ink/70">{r.cheapestRecent.price}</span>
+            {r.cheapestRecent.vendorLabel && <span className="block text-xs text-ink/50">{r.cheapestRecent.vendorLabel}</span>}
+          </span>
+        ) : (
+          <span className="text-ink/40">—</span>
+        ),
+      exportValue: (r) =>
+        r.cheapestRecent ? `${r.cheapestRecent.price}${r.cheapestRecent.vendorLabel ? ` (${r.cheapestRecent.vendorLabel})` : ""}` : "",
     },
     { key: "comments", label: "Comments", render: (r) => r.comments || "—", exportValue: (r) => r.comments ?? "" },
     { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} />, exportValue: (r) => r.status },
@@ -243,10 +281,17 @@ export function ItemsTable({
               {index === 0 && o.costPerBaseUnit != null && itemOffers.length > 1 && (
                 <span className="rounded-full bg-palm/15 px-2 py-0.5 text-xs text-palm">cheapest</span>
               )}
+              {o.isPreferredVendor && <PreferredBadge />}
               <StatusBadge status={o.status} />
             </li>
           ))}
         </ul>
+        {row.cheapestRecent && (
+          <p className="text-xs text-ink/55">
+            Cheapest actually paid lately: {row.cheapestRecent.price}
+            {row.cheapestRecent.vendorLabel ? ` from ${row.cheapestRecent.vendorLabel}` : ""}
+          </p>
+        )}
         <Link href={`/pricelist/${row.itemId}`} className="text-xs text-ink/60 underline">
           Open full item page →
         </Link>
@@ -267,6 +312,10 @@ export function ItemsTable({
       deriveRows={collapseByItem ? collapseToItems : undefined}
     />
   );
+}
+
+function PreferredBadge() {
+  return <span className="ml-1.5 rounded-full bg-gold/20 px-2 py-0.5 text-xs text-gold-deep">preferred</span>;
 }
 
 function StatusBadge({ status }: { status: string }) {

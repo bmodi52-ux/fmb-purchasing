@@ -10,6 +10,11 @@ import { ItemsTable, type OfferRow } from "./items-table";
 import { dismissDuplicatePair } from "./actions";
 import { withoutRejectedOffers } from "./collapse-offers";
 import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
+import { allRows } from "@/lib/supabase/all-rows";
+import { getSetting } from "@/lib/app-settings";
+import { loadCheapestRecent } from "@/lib/price-alerts-data";
+import { todayIso } from "@/lib/periods-data";
+import { formatUnitCost } from "@/lib/pack-description";
 
 export const metadata = { title: "Pricelist" };
 
@@ -26,6 +31,7 @@ const DEFAULT_VISIBLE = [
   "pack_size",
   "pack_price",
   "cost_per_unit",
+  "cheapest_recent",
   "status",
   "actions",
 ];
@@ -55,6 +61,7 @@ type OfferQueryRow = {
       name: string;
       category_id: string | null;
       status: string;
+      preferred_vendor_id: string | null;
     } | null;
   } | null;
 };
@@ -77,22 +84,32 @@ export default async function PricelistPage() {
   const canApprove = can(permissions, "pricelist", "approve_master_data");
 
   const admin = createAdminClient();
-  const [{ data: offers }, { data: offerCosts }, { data: vendors }, { data: categories }, { data: units }, visibleColumns] =
+  const priceSettings = await getSetting(admin, "price_alerts");
+  const [offers, offerCosts, { data: vendors }, { data: categories }, { data: units }, visibleColumns, cheapest] =
     await Promise.all([
-      admin
-        .from("pricelist_items")
-        .select(
-          "id, status, vendor_id, brand, vendor_sku, comments, pack_size_id, item_pack_sizes ( id, inner_quantity, inner_unit_id, pack_count, total_quantity, label, sold_loose, packaging, contents_confirmed, item_id, items ( id, item_number, name, category_id, status ) )"
-        )
-        .returns<OfferQueryRow[]>(),
-      admin
-        .from("offer_unit_costs")
-        .select("offer_id, pack_price, cost_per_base_unit, base_unit_code")
-        .returns<OfferCostRow[]>(),
+      // Paged: past a thousand offers a plain query quietly stops.
+      allRows<OfferQueryRow>((from, to) =>
+        admin
+          .from("pricelist_items")
+          .select(
+            "id, status, vendor_id, brand, vendor_sku, comments, pack_size_id, item_pack_sizes ( id, inner_quantity, inner_unit_id, pack_count, total_quantity, label, sold_loose, packaging, contents_confirmed, item_id, items ( id, item_number, name, category_id, status, preferred_vendor_id ) )"
+          )
+          .order("id")
+          .range(from, to)
+      ),
+      allRows<OfferCostRow>((from, to) =>
+        admin
+          .from("offer_unit_costs")
+          .select("offer_id, pack_price, cost_per_base_unit, base_unit_code")
+          .order("offer_id")
+          .range(from, to)
+      ),
       admin.from("vendors").select("id, name, vendor_number").order("name"),
       admin.from("categories").select("id, name, parent_category_id, code").order("sort_order"),
       admin.from("units").select("id, code, label").order("sort_order"),
       getColumnPreference(user.id, PAGE_KEY, DEFAULT_VISIBLE),
+      // The cheapest each item has actually been bought for lately (#29).
+      loadCheapestRecent(admin, priceSettings.cheapestRecentDays, todayIso()),
     ]);
 
   // Receipt-created items arrive uncategorised whenever extraction could not
@@ -128,7 +145,7 @@ export default async function PricelistPage() {
     name: categoryNameById.get(c.id) ?? c.name,
   }));
 
-  const rows: OfferRow[] = (offers ?? [])
+  const rows: OfferRow[] = offers
     .filter((o) => o.item_pack_sizes?.items)
     .map((o) => {
       const packSize = o.item_pack_sizes!;
@@ -140,7 +157,19 @@ export default async function PricelistPage() {
         itemNumber: item.item_number,
         name: item.name,
         status: o.status,
+        vendorId: o.vendor_id,
         vendorLabel: o.vendor_id ? (vendorById.get(o.vendor_id)?.name ?? "—") : "— no vendor —",
+        preferredVendorLabel: item.preferred_vendor_id ? (vendorById.get(item.preferred_vendor_id)?.name ?? null) : null,
+        isPreferredVendor: !!o.vendor_id && o.vendor_id === item.preferred_vendor_id,
+        cheapestRecent: (() => {
+          const found = cheapest.get(item.id);
+          if (!found) return null;
+          return {
+            price: formatUnitCost(found.costPerUnit, found.unit, { decimals: 2 }),
+            vendorLabel: found.vendorId ? (vendorById.get(found.vendorId)?.name ?? null) : null,
+            date: found.date,
+          };
+        })(),
         categoryLabel: item.category_id ? (categoryNameById.get(item.category_id) ?? "—") : "—",
         brand: o.brand,
         vendorSku: o.vendor_sku,
@@ -195,6 +224,18 @@ export default async function PricelistPage() {
                 className="rounded-md border border-ink/15 bg-white/60 px-3 py-1.5 text-sm text-ink/80 transition-colors hover:border-ink/30 hover:text-ink"
               >
                 Manage units
+              </Link>
+              <Link
+                href="/pricelist/price-alerts"
+                className="rounded-md border border-ink/15 bg-white/60 px-3 py-1.5 text-sm text-ink/80 transition-colors hover:border-ink/30 hover:text-ink"
+              >
+                Price alerts
+              </Link>
+              <Link
+                href="/pricelist/add-by-photo"
+                className="rounded-md border border-ink/15 bg-white/60 px-3 py-1.5 text-sm text-ink/80 transition-colors hover:border-ink/30 hover:text-ink"
+              >
+                Import a price list
               </Link>
             </div>
           )}

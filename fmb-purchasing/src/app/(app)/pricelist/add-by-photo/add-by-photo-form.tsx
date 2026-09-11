@@ -13,6 +13,7 @@ import {
   type SavedProduct,
 } from "./actions";
 import type { ProductUnit } from "@/lib/product-extraction";
+import { isPriceListFile } from "@/lib/price-list-file";
 
 type Photo = { file: File; url: string };
 
@@ -306,7 +307,11 @@ export function AddByPhotoForm({
 
           {phase === "reading" ? (
             <div className="flex flex-col gap-2" role="status" aria-live="polite">
-              <p className="text-sm text-ink/70">Reading the photo{photos.length === 1 ? "" : "s"}…</p>
+              <p className="text-sm text-ink/70">
+                {photos.some((p) => isPriceListFile(p.file))
+                  ? "Reading the price list — a long one can take a couple of minutes…"
+                  : `Reading the photo${photos.length === 1 ? "" : "s"}…`}
+              </p>
               <span className="inline-progress" aria-hidden="true" />
             </div>
           ) : (
@@ -326,12 +331,12 @@ export function AddByPhotoForm({
                   <label className="cursor-pointer rounded-md border border-ink/15 bg-white px-4 py-3 text-sm text-ink/70">
                     <input
                       type="file"
-                      accept="image/*,application/pdf"
+                      accept="image/*,application/pdf,.csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                       multiple
                       className="hidden"
                       onChange={addPhotos}
                     />
-                    Choose from files
+                    Choose files or a price list
                   </label>
                 )}
                 {photos.length > 0 && (
@@ -340,7 +345,9 @@ export function AddByPhotoForm({
                     onClick={read}
                     className="rounded-md bg-ink px-5 py-3 font-medium text-cream hover:bg-ink/90"
                   >
-                    Read {photos.length === 1 ? "photo" : `${photos.length} photos`}
+                    {photos.some((p) => isPriceListFile(p.file))
+                      ? "Read price list"
+                      : `Read ${photos.length === 1 ? "photo" : `${photos.length} photos`}`}
                   </button>
                 )}
               </div>

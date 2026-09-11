@@ -32,6 +32,12 @@ import {
 import { summarisePackPrices } from "@/lib/pack-prices";
 import { MergePanel, type DuplicateCandidate } from "./merge-panel";
 import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
+import { BuyingForm } from "./buying-form";
+import { getSetting } from "@/lib/app-settings";
+import { limitsFor } from "@/lib/price-alerts";
+import { loadCheapestRecent } from "@/lib/price-alerts-data";
+import { todayIso } from "@/lib/periods-data";
+import { formatPlainDate } from "@/lib/format";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
   name: "Name",
@@ -46,6 +52,11 @@ const ITEM_FIELD_LABELS: Record<string, string> = {
   pack_count: "Smaller packs inside",
   sold_loose: "Bought loose",
   contents_confirmed: "Pack contents confirmed",
+  preferred_vendor_id: "Preferred vendor",
+  price_rise_percent: "Alert on a rise over (%)",
+  price_fall_percent: "Alert on a fall over (%)",
+  expected_min_per_unit: "Expected price from",
+  expected_max_per_unit: "Expected price up to",
 };
 
 const OFFER_FIELD_LABELS: Record<string, string> = {
@@ -88,7 +99,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
       admin.from("items").select("*").eq("id", id).maybeSingle(),
       admin.from("vendors").select("id, name, vendor_number").order("name"),
       admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
-      admin.from("units").select("id, code, label").order("sort_order"),
+      admin.from("units").select("id, code, label, base_unit_code").order("sort_order"),
       admin.from("item_pack_sizes").select("*").eq("item_id", id).order("total_quantity"),
       admin.from("item_history").select("id, changed_at, changed_by, changes").eq("item_id", id).order("changed_at", { ascending: false }),
     ]);
@@ -115,6 +126,18 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
       .eq("item_id", id)
       .maybeSingle(),
   ]);
+
+  // Buying (#29): the limits this item inherits, and the cheapest it has been
+  // bought for lately.
+  const priceSettings = await getSetting(admin, "price_alerts");
+  const [{ data: itemCategory }, cheapest] = await Promise.all([
+    item.category_id
+      ? admin.from("categories").select("price_rise_percent, price_fall_percent").eq("id", item.category_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    loadCheapestRecent(admin, priceSettings.cheapestRecentDays, todayIso(), id),
+  ]);
+  const inheritedLimits = limitsFor(priceSettings, itemCategory, null);
+  const cheapestRecent = cheapest.get(id) ?? null;
 
   const costByOfferId = new Map(
     (offerCosts ?? []).map((c) => [c.offer_id as string, c as { cost_per_base_unit: number | null; base_unit_code: string }])
@@ -223,6 +246,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   function itemDisplayValue(field: string, value: unknown): string {
     if (value == null || value === "") return "—";
     if (field === "category_id") return categoryNameById.get(String(value)) ?? "—";
+    if (field === "preferred_vendor_id") return vendorNameById.get(String(value)) ?? "a removed vendor";
     if (typeof value === "boolean") return value ? "Yes" : "No";
     if (field === "canonical_unit_id" || field === "inner_unit_id") {
       const label = unitLabelById.get(String(value));
@@ -343,6 +367,39 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             </SubmitButton>
           )}
         </form>
+      </section>
+
+      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <h2 className="mb-1 section-title text-ink">Buying</h2>
+        <p className="mb-4 text-sm text-ink/50">
+          {cheapestRecent
+            ? `Cheapest in the last ${priceSettings.cheapestRecentDays} days: ${formatUnitCost(cheapestRecent.costPerUnit, cheapestRecent.unit, { decimals: 2 })}${
+                cheapestRecent.vendorId ? ` from ${vendorNameById.get(cheapestRecent.vendorId) ?? "a vendor"}` : ""
+              } on ${formatPlainDate(cheapestRecent.date)}.`
+            : `Not bought in the last ${priceSettings.cheapestRecentDays} days with its pack contents confirmed.`}
+        </p>
+        <BuyingForm
+          itemId={item.id}
+          canEdit={canEdit}
+          vendors={(vendors ?? []).map((v) => ({ id: v.id as string, name: v.name as string }))}
+          values={{
+            preferredVendorId: (item.preferred_vendor_id as string | null) ?? null,
+            risePercent: item.price_rise_percent == null ? "" : String(Number(item.price_rise_percent)),
+            fallPercent: item.price_fall_percent == null ? "" : String(Number(item.price_fall_percent)),
+            expectedMin: item.expected_min_per_unit == null ? "" : String(Number(item.expected_min_per_unit)),
+            expectedMax: item.expected_max_per_unit == null ? "" : String(Number(item.expected_max_per_unit)),
+          }}
+          inherited={{
+            rise: inheritedLimits.rise,
+            fall: inheritedLimits.fall,
+            from: inheritedLimits.riseFrom === inheritedLimits.fallFrom ? (inheritedLimits.riseFrom === "category" ? "category" : "pricelist") : "mixed",
+          }}
+          unitName={unitName(
+            itemCost?.base_unit_code ??
+              ((units ?? []).find((u) => u.id === item.canonical_unit_id)?.base_unit_code as string | undefined) ??
+              "each"
+          )}
+        />
       </section>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">

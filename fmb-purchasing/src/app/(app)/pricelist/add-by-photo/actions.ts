@@ -11,7 +11,8 @@ import { reportError } from "@/lib/errors";
 import { checkExtractionThrottle } from "@/lib/extraction-throttle";
 import { matchOrCreateVendor, recordVendorItemDescription } from "@/lib/expense-matching";
 import { formatPackPrice, isPackaging } from "@/lib/pack-description";
-import { extractProducts, type ExtractedProduct, type ProductUnit } from "@/lib/product-extraction";
+import { extractProducts, type ExtractedProduct, type ProductUnit, type ProductPhotoReading } from "@/lib/product-extraction";
+import { isPriceListFile, priceListChunks, readPriceListRows } from "@/lib/price-list-file";
 import { matchReceiptLinesAction, type LineMatchResult } from "../../submit/actions";
 
 export type PhotoProductDraft = ExtractedProduct & { match: LineMatchResult | null };
@@ -26,6 +27,40 @@ export type ReadPhotosResult = {
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const MAX_PHOTOS = 4;
 const MAX_PHOTO_BYTES = 3.5 * 1024 * 1024;
+/** Rows of a price list file read at once, and the most read from one file (#29). */
+const PRICE_LIST_CHUNK_ROWS = 60;
+const MAX_PRICE_LIST_ROWS = 500;
+const PRICE_LIST_PARALLEL = 5;
+
+/**
+ * A price list file read a piece at a time, a few pieces at once, the
+ * products put back in the file's order.
+ */
+async function readPriceListFile(file: File, categoryNames: string[]): Promise<ProductPhotoReading> {
+  const rows = await readPriceListRows({ name: file.name, bytes: await file.arrayBuffer() });
+  if (rows.length < 2) throw new Error("That file has no rows under its headings.");
+  if (rows.length - 1 > MAX_PRICE_LIST_ROWS) {
+    throw new Error(`That list has ${rows.length - 1} rows. Split it into files of up to ${MAX_PRICE_LIST_ROWS} and import each.`);
+  }
+  const chunks = priceListChunks(rows, PRICE_LIST_CHUNK_ROWS);
+  const readings: ProductPhotoReading[] = new Array(chunks.length);
+  for (let i = 0; i < chunks.length; i += PRICE_LIST_PARALLEL) {
+    await Promise.all(
+      chunks.slice(i, i + PRICE_LIST_PARALLEL).map(async (chunk, j) => {
+        readings[i + j] = await extractProducts(
+          [{ text: chunk.text, label: `${file.name}, rows ${chunk.from}–${chunk.to}` }],
+          categoryNames
+        );
+      })
+    );
+  }
+  const notes = [...new Set(readings.map((r) => r.note).filter(Boolean))];
+  return {
+    store: readings.find((r) => r.store)?.store ?? null,
+    products: readings.flatMap((r) => r.products),
+    note: notes.length ? notes.join(" ") : null,
+  };
+}
 
 /**
  * The words a product is matched against the Pricelist by: its name, then its
@@ -53,8 +88,12 @@ export async function readProductPhotosAction(formData: FormData): Promise<ReadP
   const photos = formData.getAll("photos").filter((f): f is File => f instanceof File && f.size > 0);
   if (photos.length === 0) return { error: "Take or choose a photo first.", ...empty };
   if (photos.length > MAX_PHOTOS) return { error: `Up to ${MAX_PHOTOS} photos at a time.`, ...empty };
-  if (photos.some((f) => !PHOTO_TYPES.has(f.type))) {
-    return { error: "Only photos (JPG, PNG, WebP) or a PDF can be read.", ...empty };
+  const priceLists = photos.filter(isPriceListFile);
+  if (priceLists.length > 0 && photos.length > 1) {
+    return { error: "Import a price list file on its own, without photos or other files.", ...empty };
+  }
+  if (priceLists.length === 0 && photos.some((f) => !PHOTO_TYPES.has(f.type))) {
+    return { error: "Only photos (JPG, PNG, WebP), a PDF, or a CSV or Excel price list can be read.", ...empty };
   }
   if (photos.some((f) => f.size > MAX_PHOTO_BYTES)) {
     return { error: "One of those files is too large. Try a photo rather than a scan.", ...empty };
@@ -76,10 +115,14 @@ export async function readProductPhotosAction(formData: FormData): Promise<ReadP
 
   let reading;
   try {
-    const files = await Promise.all(
-      photos.map(async (f) => ({ base64: Buffer.from(await f.arrayBuffer()).toString("base64"), mediaType: f.type }))
-    );
-    reading = await extractProducts(files, categoryNames);
+    if (priceLists.length > 0) {
+      reading = await readPriceListFile(priceLists[0], categoryNames);
+    } else {
+      const files = await Promise.all(
+        photos.map(async (f) => ({ base64: Buffer.from(await f.arrayBuffer()).toString("base64"), mediaType: f.type }))
+      );
+      reading = await extractProducts(files, categoryNames);
+    }
   } catch (err) {
     await reportError({
       source: "product-photo-extraction",
@@ -87,7 +130,13 @@ export async function readProductPhotosAction(formData: FormData): Promise<ReadP
       detail: photos.map((f) => `${f.type} ${f.size}b`).join(", "),
       userId: user.id,
     });
-    return { error: `Couldn't read that photo (${(err as Error).message}). Try again, closer and in focus.`, ...empty };
+    return {
+      error:
+        priceLists.length > 0
+          ? `Couldn't read that price list (${(err as Error).message}).`
+          : `Couldn't read that photo (${(err as Error).message}). Try again, closer and in focus.`,
+      ...empty,
+    };
   }
 
   if (reading.products.length === 0) {

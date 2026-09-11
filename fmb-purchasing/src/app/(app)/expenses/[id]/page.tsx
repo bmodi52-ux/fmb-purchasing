@@ -13,6 +13,9 @@ import { reopenExpense, reviewExpense } from "../../approvals/actions";
 import { ReviewDecision } from "@/components/review-decision";
 import { reversePayment } from "../../payments/actions";
 import { GST_CONCERN_LABEL, gstConcerns } from "@/lib/vendor-registration";
+import { loadPriceFlags, loadSpendFlags } from "@/lib/price-alerts-data";
+import { describePriceFlag, describeUnusualSpend, isSeriousPriceFlag } from "@/lib/price-alerts";
+import { getSetting } from "@/lib/app-settings";
 import { storedGstDisagreement } from "@/lib/expense-money";
 import { mayLackTaxInvoice } from "@/lib/gst-summary";
 import { setLineCapital } from "./actions";
@@ -162,6 +165,20 @@ export default async function ExpenseDetailPage({
       : []),
   ];
 
+  // Prices past their alert limit and spend well above the vendor's usual
+  // (#29, #42), for anything still counted as spend.
+  const priceNotes: { label: string; serious: boolean }[] = [];
+  if (expense.status !== "declined" && expense.status !== "withdrawn") {
+    const priceSettings = await getSetting(admin, "price_alerts");
+    const [priceFlags, spendFlags] = await Promise.all([
+      loadPriceFlags(admin, [expense.id], priceSettings),
+      loadSpendFlags(admin, [expense], priceSettings),
+    ]);
+    const spend = spendFlags.get(expense.id);
+    if (spend) priceNotes.push({ label: `This is ${describeUnusualSpend(spend)}`, serious: true });
+    for (const f of priceFlags.get(expense.id) ?? []) priceNotes.push({ label: describePriceFlag(f), serious: isSeriousPriceFlag(f) });
+  }
+
   // One round trip each for the names and labels the page needs, rather than
   // a join per row.
   const personIds = [
@@ -255,11 +272,19 @@ export default async function ExpenseDetailPage({
           {expense.receipt_date ? ` · ${formatDate(expense.receipt_date)}` : ""}
         </p>
 
-        {concerns.length > 0 && (
+        {concerns.length + priceNotes.length > 0 && (
           <ul className="mt-2 flex flex-wrap gap-1.5">
             {concerns.map((c) => (
               <li key={c} className="rounded-full bg-maroon/10 px-2 py-0.5 text-xs text-maroon">
                 {c}
+              </li>
+            ))}
+            {priceNotes.map((n) => (
+              <li
+                key={n.label}
+                className={`rounded-full px-2 py-0.5 text-xs ${n.serious ? "bg-maroon/10 text-maroon" : "bg-gold/15 text-gold-deep"}`}
+              >
+                {n.label}
               </li>
             ))}
           </ul>
