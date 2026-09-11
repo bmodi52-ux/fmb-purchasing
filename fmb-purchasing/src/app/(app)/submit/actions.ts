@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { refreshVendorRegistration, registrationIsStale } from "@/lib/vendor-registration";
 import { revalidatePath } from "next/cache";
 import { revalidateReports } from "../reports/data";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -990,6 +992,7 @@ export async function createExpense(
     abn: input.abn,
     userId: user.id,
   });
+  keepVendorRegistrationCurrent(admin, vendor.id);
 
   const lines = await buildLineRows(admin, input, vendor.id, user.id);
   const payeeId = await resolvePayee(admin, input.payee, user, {
@@ -1041,6 +1044,20 @@ export async function createExpense(
   revalidatePath("/expenses");
   revalidateReports();
   return { expenseId: created.id };
+}
+
+/**
+ * Re-asks the ABR about a vendor's GST registration once its last answer is
+ * over 30 days old (#30), after the response has gone — a submission never
+ * waits on the ABR, and an unreachable ABR never fails one.
+ */
+function keepVendorRegistrationCurrent(admin: ReturnType<typeof createAdminClient>, vendorId: string) {
+  after(async () => {
+    const { data } = await admin.from("vendors").select("abn, abr_checked_at").eq("id", vendorId).maybeSingle();
+    if (data?.abn && registrationIsStale(data.abr_checked_at)) {
+      await refreshVendorRegistration(admin, vendorId, data.abn);
+    }
+  });
 }
 
 function toAttachmentRows(attachments: AttachmentInput[]) {
@@ -1201,6 +1218,7 @@ export async function updateExpense(
     abn: input.abn,
     userId: user.id,
   });
+  keepVendorRegistrationCurrent(admin, vendor.id);
 
   const lines = await buildLineRows(admin, input, vendor.id, user.id);
   const payeeId = await resolvePayee(admin, input.payee, user, {

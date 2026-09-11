@@ -12,6 +12,7 @@ import { ReversePanel } from "./reverse-panel";
 import { reopenExpense, reviewExpense } from "../../approvals/actions";
 import { ReviewDecision } from "@/components/review-decision";
 import { reversePayment } from "../../payments/actions";
+import { GST_CONCERN_LABEL, gstConcerns } from "@/lib/vendor-registration";
 
 /**
  * The tab carries the entry number, not the word "Expense".
@@ -129,11 +130,14 @@ export default async function ExpenseDetailPage({
     expense.vendor_id
       ? admin
           .from("vendors")
-          .select("id, name, vendor_number")
+          .select("id, name, vendor_number, gst_registered, abn_active")
           .eq("id", expense.vendor_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
+
+  // What the ABR says is wrong with GST from this vendor (#30).
+  const concerns = gstConcerns(vendor, Number(expense.gst_amount)).map((c) => GST_CONCERN_LABEL[c]);
 
   // One round trip each for the names and labels the page needs, rather than
   // a join per row.
@@ -224,6 +228,16 @@ export default async function ExpenseDetailPage({
           {vendor?.name ?? expense.vendor_name_raw ?? "Vendor not recorded"}
           {expense.receipt_date ? ` · ${formatDate(expense.receipt_date)}` : ""}
         </p>
+
+        {concerns.length > 0 && (
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {concerns.map((c) => (
+              <li key={c} className="rounded-full bg-maroon/10 px-2 py-0.5 text-xs text-maroon">
+                {c}
+              </li>
+            ))}
+          </ul>
+        )}
 
         {/* The decision, on the page that shows the whole expense. The
             Approvals queue lists what it can fit; everything else — the

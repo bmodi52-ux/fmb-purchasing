@@ -8,6 +8,9 @@ import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { paymentInstructions } from "@/lib/payment-instruction";
 import { getSetting } from "@/lib/app-settings";
 import { possibleDuplicates, type DuplicateMatch } from "@/lib/duplicates";
+import { GST_CONCERN_LABEL, gstConcerns } from "@/lib/vendor-registration";
+
+type VendorFlagRow = { id: string; status: string; gst_registered: boolean | null; abn_active: boolean | null };
 
 export const metadata = { title: "Approvals" };
 
@@ -67,8 +70,8 @@ export default async function ApprovalsPage() {
         .order("sort_order"),
       admin.from("categories").select("id, name, parent_category_id"),
       vendorIds.length
-        ? admin.from("vendors").select("id, status").in("id", vendorIds)
-        : Promise.resolve({ data: [] as { id: string; status: string }[] }),
+        ? admin.from("vendors").select("id, status, gst_registered, abn_active").in("id", vendorIds)
+        : Promise.resolve({ data: [] as VendorFlagRow[] }),
       // Whether each payee's account has been confirmed — the same check the
       // Payments run makes, asked here so it can be noticed before approving.
       paymentInstructions(admin, expenses, { canSeeBankDetails: can(permissions, "payments", "mark_paid") }),
@@ -98,9 +101,9 @@ export default async function ApprovalsPage() {
 
   const submitterNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
   const categoryNameById = categoryLabelsById(categories ?? []);
-  const pendingVendorIds = new Set(
-    ((vendors ?? []) as { id: string; status: string }[]).filter((v) => v.status === "pending").map((v) => v.id)
-  );
+  const vendorRows = (vendors ?? []) as VendorFlagRow[];
+  const pendingVendorIds = new Set(vendorRows.filter((v) => v.status === "pending").map((v) => v.id));
+  const vendorById = new Map(vendorRows.map((v) => [v.id, v]));
 
   const itemsByExpense = new Map<string, NonNullable<typeof lineItems>>();
   for (const li of lineItems ?? []) {
@@ -129,6 +132,10 @@ export default async function ApprovalsPage() {
         unconfirmedAccount: instructions.get(e.id)?.status === "pending",
         newItems: lines.filter((l) => l.pricelist_item_id && newItemOfferIds.has(l.pricelist_item_id)).length,
         duplicateOf: duplicates.get(e.id) ?? [],
+        gstConcerns: gstConcerns(
+          e.vendor_id ? (vendorById.get(e.vendor_id) ?? null) : null,
+          Number(e.gst_amount)
+        ).map((c) => GST_CONCERN_LABEL[c]),
       },
       lineItems: lines.map((li) => ({
         description_raw: li.description_raw,

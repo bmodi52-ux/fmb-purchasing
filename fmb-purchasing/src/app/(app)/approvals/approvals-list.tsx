@@ -29,6 +29,8 @@ export type ApprovalFlags = {
   newItems: number;
   /** Other expenses with the same file, or the same vendor and invoice number. */
   duplicateOf: DuplicateMatch[];
+  /** What the ABR says is wrong with GST from this vendor, in words. */
+  gstConcerns: string[];
 };
 
 export type ApprovalRow = {
@@ -200,6 +202,7 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
 
   const flags: { label: string; serious?: boolean }[] = [];
   if (e.flags.duplicateOf.length > 0) flags.push({ label: duplicateLabel(e.flags.duplicateOf), serious: true });
+  for (const concern of e.flags.gstConcerns) flags.push({ label: concern, serious: true });
   if (e.flags.unconfirmedAccount) flags.push({ label: "Bank account not confirmed", serious: true });
   if (e.flags.newVendor) flags.push({ label: "New vendor" });
   if (e.flags.newItems > 0) {

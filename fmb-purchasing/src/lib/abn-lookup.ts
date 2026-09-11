@@ -6,9 +6,43 @@
  */
 import { reportError } from "@/lib/errors";
 
+export type AbrRegistration = {
+  /** Null when the ABR response did not say either way. */
+  gstRegistered: boolean | null;
+  /** ISO date the GST registration took effect. */
+  gstRegisteredFrom: string | null;
+  /** False when the ABN has been cancelled. */
+  abnActive: boolean | null;
+};
+
 export type AbnLookupResult =
-  | { name: string; state: string | null; postcode: string | null }
+  | ({ name: string; state: string | null; postcode: string | null } & AbrRegistration)
   | { error: string };
+
+/**
+ * GST registration and ABN status from an AbnDetails response.
+ *
+ * The ABR gives `Gst` as the date registration took effect — empty or null
+ * when the business is not registered — and `AbnStatus` as "Active" or
+ * "Cancelled". A response missing a field altogether reads as "don't know",
+ * never as "not registered": a flag on a real supplier's invoice because a
+ * field went missing would be worse than no flag.
+ */
+export function readAbrRegistration(data: Record<string, unknown>): AbrRegistration {
+  let gstRegistered: boolean | null = null;
+  let gstRegisteredFrom: string | null = null;
+  if ("Gst" in data) {
+    const raw = typeof data.Gst === "string" ? data.Gst.trim() : "";
+    const date = /^\d{4}-\d{2}-\d{2}/.exec(raw)?.[0] ?? null;
+    gstRegistered = date !== null;
+    gstRegisteredFrom = date;
+  }
+
+  const status = typeof data.AbnStatus === "string" ? data.AbnStatus.trim().toLowerCase() : "";
+  const abnActive = status === "active" ? true : status === "cancelled" ? false : null;
+
+  return { gstRegistered, gstRegisteredFrom, abnActive };
+}
 
 export type AbnNameMatch = {
   name: string;
@@ -74,6 +108,7 @@ export async function lookupAbn(abn: string): Promise<AbnLookupResult> {
     name,
     state: (data.AddressState as string) || null,
     postcode: (data.AddressPostcode as string) || null,
+    ...readAbrRegistration(data),
   };
 }
 
