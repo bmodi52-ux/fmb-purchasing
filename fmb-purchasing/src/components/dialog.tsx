@@ -107,7 +107,7 @@ export function Dialog({
             type="button"
             onClick={onClose}
             aria-label={`Close ${title}`}
-            className="shrink-0 text-ink/50 hover:text-ink"
+            className="-m-2 shrink-0 p-2 text-ink/50 hover:text-ink"
           >
             ✕
           </button>

@@ -123,6 +123,9 @@ export function ApprovalsList({ expenses }: { expenses: ApprovalRow[] }) {
                   </div>
                 )}
 
+                {/* Scrolls on its own: five columns don't fit a phone, and the
+                    app shell clips anything that runs past the screen. */}
+                <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-ink/50">
@@ -145,8 +148,9 @@ export function ApprovalsList({ expenses }: { expenses: ApprovalRow[] }) {
                     ))}
                   </tbody>
                 </table>
+                </div>
 
-                <div className="flex justify-end gap-6 border-t border-ink/10 pt-2 font-mono text-sm text-ink/70">
+                <div className="flex flex-wrap justify-end gap-x-6 gap-y-1 border-t border-ink/10 pt-2 font-mono text-sm text-ink/70">
                   <span>Subtotal: ${e.subtotal.toFixed(2)}</span>
                   <span>GST: ${e.gst_amount.toFixed(2)}</span>
                   <span className="font-semibold text-ink">Total: ${e.total.toFixed(2)}</span>

@@ -22,10 +22,12 @@ export function AppSidebar({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="relative md:contents">
+    // Pinned on a phone: the menu is the only way around the app there, and on
+    // a long form it was a scroll all the way back up to reach it.
+    <div className="sticky top-0 z-40 md:contents">
 
       {/* Mobile-only top bar: unaffected by md: below, invisible on desktop */}
-      <div className="flex items-center justify-between border-b border-gold/20 bg-cream px-4 py-3 md:hidden">
+      <div className="relative z-40 flex items-center justify-between border-b border-gold/20 bg-cream px-4 py-3 md:hidden">
         <Link href="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
           <Image src="/fmb-logo.png" alt="FMB" width={34} height={34} className="rounded" />
           {/* Sized above body text so the header anchors the page rather than
@@ -58,7 +60,7 @@ export function AppSidebar({
       )}
 
       <aside
-        className={`${open ? "absolute flex" : "hidden"} inset-x-0 top-full z-40 max-h-[calc(100vh-4rem)] overflow-y-auto shadow-lg w-full shrink-0 flex-col gap-6 border-b border-gold/20 bg-cream px-6 py-8 md:static md:flex md:z-auto md:max-h-none md:w-64 md:overflow-visible md:border-b-0 md:border-r md:bg-gradient-to-b md:from-gold/10 md:via-cream md:to-cream md:shadow-none`}
+        className={`${open ? "absolute flex" : "hidden"} inset-x-0 top-full z-40 max-h-[calc(100dvh-4rem)] overflow-y-auto shadow-lg w-full shrink-0 flex-col gap-6 border-b border-gold/20 bg-cream px-6 py-8 md:static md:flex md:z-auto md:max-h-none md:w-64 md:overflow-visible md:border-b-0 md:border-r md:bg-gradient-to-b md:from-gold/10 md:via-cream md:to-cream md:shadow-none`}
       >
         <Link href="/" className="hidden items-center gap-3 md:flex">
           <Image src="/fmb-logo.png" alt="FMB" width={40} height={40} className="rounded" />

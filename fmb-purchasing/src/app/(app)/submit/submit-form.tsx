@@ -666,6 +666,23 @@ export function SubmitForm({
               JPG, PNG, WebP, PDF, or a saved email (.eml).
             </p>
           </label>
+          {/* Phones only. Most receipts start as a photo, and the file picker is
+              a detour on the way to the camera; capture opens it directly. */}
+          <label
+            className={`self-center rounded-md bg-gold px-5 py-2.5 text-sm font-medium text-ink md:hidden ${
+              busy ? "cursor-progress opacity-60" : "cursor-pointer hover:bg-gold-deep"
+            }`}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              disabled={busy}
+              className="hidden"
+              onChange={handleReceiptChosen}
+            />
+            Take a photo of the receipt
+          </label>
           {/* Reading a receipt is the longest wait in the app — ten to twenty
               seconds against the model — and it used to show one line of static
               text, which after a few seconds is indistinguishable from a page
@@ -1233,7 +1250,139 @@ function ReviewForm(props: {
         />
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Phones: one card per line. The table below is ten columns wide, which
+          on a phone meant scrolling sideways past the description to reach the
+          amount — on the screen people use most from a phone. */}
+      <ul className="flex flex-col gap-3 md:hidden">
+        {props.items.map((item) => (
+          <li
+            key={item.key}
+            className={`flex flex-col gap-2.5 rounded-lg border border-ink/10 p-3 ${
+              item.autoAdded ? "bg-gold/10" : "bg-white/70"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <select
+                value={item.kind}
+                onChange={(e) => changeKind(item.key, e.target.value as StoredLineKind)}
+                className="rounded border border-ink/10 bg-white px-2 py-1"
+                aria-label="Line type"
+              >
+                {Object.entries(LINE_KIND_LABELS).map(([k, label]) => (
+                  <option key={k} value={k}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => props.setItems(props.items.filter((it) => it.key !== item.key))}
+                className="-mr-1 px-2 py-1 text-xl leading-none text-ink/40 hover:text-maroon"
+                aria-label={`Remove ${item.description || "line"}`}
+              >
+                ×
+              </button>
+            </div>
+
+            {item.kind === "goods" ? (
+              <ItemLookupCells
+                layout="stack"
+                itemNumber={item.itemNumber}
+                setItemNumber={(v) => updateItem(item.key, { itemNumber: v })}
+                description={item.description}
+                setDescription={(v) => updateItem(item.key, { description: v })}
+                onSelect={(s) => selectItemSuggestion(item.key, s)}
+                onDescriptionBlur={() => rematchIfUnlinked(item.key)}
+              />
+            ) : (
+              <input
+                value={item.description}
+                onChange={(e) => updateItem(item.key, { description: e.target.value })}
+                placeholder={item.kind === "service" ? "What was done" : "Description"}
+                aria-label="Description"
+                className="w-full rounded border border-ink/10 bg-white px-2 py-1"
+              />
+            )}
+
+            {item.kind === "goods" && (
+              <LineMatchRow
+                layout="stack"
+                description={item.description}
+                match={item.match}
+                onConfirm={() => confirmMatch(item.key)}
+                onReject={() => rejectMatch(item.key)}
+                onChoosePack={(packSizeId) => choosePack(item.key, packSizeId)}
+                onChooseItem={(itemId) => chooseItem(item.key, itemId)}
+              />
+            )}
+
+            <CategorySelect
+              categories={props.categories}
+              kind={item.kind}
+              value={item.categoryName}
+              onChange={(name) => updateItem(item.key, { categoryName: name })}
+            />
+
+            <div className="grid grid-cols-3 gap-2">
+              <label className="flex flex-col gap-0.5 text-xs text-ink/55">
+                Qty
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={item.quantity ?? ""}
+                  disabled={item.kind !== "goods"}
+                  onChange={(e) =>
+                    updateItem(item.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })
+                  }
+                  className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink disabled:bg-ink/5"
+                />
+              </label>
+              <label className="flex flex-col gap-0.5 text-xs text-ink/55">
+                Unit price
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={item.unitPrice ?? ""}
+                  disabled={item.kind !== "goods"}
+                  onChange={(e) =>
+                    updateItem(item.key, { unitPrice: e.target.value === "" ? null : Number(e.target.value) })
+                  }
+                  className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink disabled:bg-ink/5"
+                />
+              </label>
+              <label className="flex flex-col gap-0.5 text-xs text-ink/55">
+                Line total
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  value={item.lineTotal}
+                  onChange={(e) => updateItem(item.key, { lineTotal: Number(e.target.value) })}
+                  className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink"
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink/60">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={item.gstApplicable}
+                  onChange={(e) => updateItem(item.key, { gstApplicable: e.target.checked })}
+                />
+                GST applies
+              </label>
+              {item.normalizedQuantity != null && (
+                <span className="font-mono">
+                  {item.normalizedQuantity} {item.normalizedUnit ?? ""}
+                </span>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden overflow-x-auto md:block">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-ink/50">
@@ -1367,7 +1516,7 @@ function ReviewForm(props: {
                   <button
                     type="button"
                     onClick={() => props.setItems(props.items.filter((it) => it.key !== item.key))}
-                    className="text-ink/40 hover:text-maroon"
+                    className="px-2 py-1 text-lg leading-none text-ink/40 hover:text-maroon"
                     aria-label={`Remove ${item.description || "line"}`}
                   >
                     ×
@@ -1441,24 +1590,29 @@ function ReviewForm(props: {
         />
       </label>
 
-      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
-
-      <div className="mt-6 flex gap-3">
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="rounded-md bg-gold px-5 py-2.5 font-medium text-ink transition-colors hover:bg-gold-deep disabled:opacity-60"
-        >
-          {submitting ? "Saving…" : props.editExpenseId ? "Save changes" : "Submit expense"}
-        </button>
-        <button
-          type="button"
-          onClick={props.onDiscard}
-          className="rounded-md border border-ink/15 px-5 py-2.5 text-ink/70 hover:border-ink/30"
-        >
-          Discard
-        </button>
+      {/* Pinned to the bottom of the screen on a phone, where the form runs to
+          several screens and Submit was always a long scroll away. The error
+          travels with it, so a refused submission says why right where the
+          finger is. */}
+      <div className="sticky bottom-0 z-30 -mx-6 mt-6 flex flex-col gap-2 border-t border-ink/10 bg-cream/95 px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+        {error && <p className="text-sm text-red-700">{error}</p>}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="flex-1 rounded-md bg-gold px-5 py-2.5 font-medium text-ink transition-colors hover:bg-gold-deep disabled:opacity-60 md:flex-none"
+          >
+            {submitting ? "Saving…" : props.editExpenseId ? "Save changes" : "Submit expense"}
+          </button>
+          <button
+            type="button"
+            onClick={props.onDiscard}
+            className="rounded-md border border-ink/15 px-5 py-2.5 text-ink/70 hover:border-ink/30"
+          >
+            Discard
+          </button>
+        </div>
       </div>
     </div>
   );

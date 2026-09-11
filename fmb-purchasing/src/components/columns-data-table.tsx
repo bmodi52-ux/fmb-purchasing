@@ -286,6 +286,41 @@ export function ColumnsDataTable<T extends { id: string }>({
               Reset
             </button>
           )}
+          {/* Phones show cards, which have no headings to tap — so sorting
+              gets a control of its own there. */}
+          <div className="flex items-center gap-2 md:hidden">
+            <select
+              value={sort?.key ?? ""}
+              onChange={(e) =>
+                setSort(e.target.value ? { key: e.target.value, direction: sort?.direction ?? "asc" } : null)
+              }
+              aria-label="Sort by"
+              className="input py-1 text-sm"
+            >
+              <option value="">Sort by…</option>
+              {visibleColumns
+                .filter((c) => c.label)
+                .map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
+            </select>
+            {sort && (
+              <button
+                type="button"
+                onClick={() => setSort({ ...sort, direction: sort.direction === "asc" ? "desc" : "asc" })}
+                className="rounded-md border border-ink/15 px-2 py-1.5 text-xs text-ink/70"
+              >
+                {sort.direction === "asc" ? "▲ asc" : "▼ desc"}
+              </button>
+            )}
+            {bulkActions && bulkActions.length > 0 && (
+              <button type="button" onClick={toggleSelectAll} className="px-1 py-1.5 text-xs text-ink/60">
+                {allVisibleSelected ? "Select none" : "Select all"}
+              </button>
+            )}
+          </div>
           <ExportToolbar
             filenameBase={pageKey}
             title={title}
@@ -341,7 +376,62 @@ export function ColumnsDataTable<T extends { id: string }>({
       {filteredRows.length === 0 ? (
         <p className="text-sm text-ink/50">{rows.length === 0 ? emptyLabel : "No rows match this filter."}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* Phones: a card per row, the first visible column as its title and
+            the rest as labelled values. The table scrolled sideways past most
+            of a row to reach the column that mattered. */}
+        <ul className="flex flex-col gap-2 md:hidden">
+          {filteredRows.map((row) => {
+            const [titleColumn, ...detailColumns] = visibleColumns;
+            return (
+              <li key={row.id} className="rounded-lg border border-ink/10 bg-white/60 p-3 text-sm">
+                <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(row.id)}
+                    onChange={() => toggleRow(row.id)}
+                    aria-label="Select row"
+                    className="mt-1"
+                  />
+                  <div className="min-w-0 flex-1">
+                    {titleColumn && <div className="font-medium break-words text-ink">{titleColumn.render(row)}</div>}
+                    {detailColumns.length > 0 && (
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
+                        {detailColumns.map((c) =>
+                          c.label ? (
+                            <div key={c.key} className="min-w-0">
+                              <dt className="text-xs text-ink/45">{c.label}</dt>
+                              <dd className="break-words text-ink/80">{c.render(row)}</dd>
+                            </div>
+                          ) : (
+                            <dd key={c.key} className="col-span-2">
+                              {c.render(row)}
+                            </dd>
+                          )
+                        )}
+                      </dl>
+                    )}
+                  </div>
+                  {renderExpanded && (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(row.id)}
+                      aria-label={expanded.has(row.id) ? "Collapse" : "Expand"}
+                      className="-m-1 p-2 text-ink/40 hover:text-ink"
+                    >
+                      {expanded.has(row.id) ? "▾" : "▸"}
+                    </button>
+                  )}
+                </div>
+                {renderExpanded && expanded.has(row.id) && (
+                  <div className="mt-3 border-t border-ink/10 pt-3">{renderExpanded(row)}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="text-left text-ink/60">
@@ -420,6 +510,7 @@ export function ColumnsDataTable<T extends { id: string }>({
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

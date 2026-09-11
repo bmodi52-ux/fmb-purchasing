@@ -268,7 +268,9 @@ export function ColumnChart({
                   height={plotH}
                   fill="transparent"
                   onPointerEnter={() => setHover(i)}
-                  onPointerLeave={() => setHover(null)}
+                  // A tap fires leave the moment the finger lifts, which showed
+                  // the value for a frame. On touch it stays until the next tap.
+                  onPointerLeave={(e) => e.pointerType !== "touch" && setHover(null)}
                 />
               </g>
             );
@@ -416,7 +418,9 @@ export function StackedColumnChart({
                   height={plotH}
                   fill="transparent"
                   onPointerEnter={() => setHover(i)}
-                  onPointerLeave={() => setHover(null)}
+                  // A tap fires leave the moment the finger lifts, which showed
+                  // the value for a frame. On touch it stays until the next tap.
+                  onPointerLeave={(e) => e.pointerType !== "touch" && setHover(null)}
                 />
               </g>
             );
@@ -516,7 +520,7 @@ export function SmallMultiple({
       <div
         className="flex items-end gap-[3px] border-b border-ink/10"
         style={{ height }}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={(e) => e.pointerType !== "touch" && setHover(null)}
       >
         {months.map((m, i) => {
           const v = values[i] ?? 0;
@@ -582,6 +586,9 @@ export function BarChart({
   valueFormat?: (n: number) => string;
   emptyLabel?: string;
 }) {
+  // The row whose full name is showing: set by a tap, since a touch screen has
+  // no hover to reveal it.
+  const [active, setActive] = useState<string | null>(null);
   const sorted = [...data].sort((a, b) => b.value - a.value);
   const shown = sorted.length > maxBars ? sorted.slice(0, maxBars - 1) : sorted;
   const rest = sorted.length > maxBars ? sorted.slice(maxBars - 1) : [];
@@ -597,7 +604,12 @@ export function BarChart({
   return (
     <div className="flex flex-col gap-2">
       {rows.map((r) => (
-        <div key={r.label} className="group relative flex items-center gap-3">
+        <div
+          key={r.label}
+          className="group relative flex items-center gap-3"
+          onClick={() => setActive((current) => (current === r.label ? null : r.label))}
+          onPointerLeave={(e) => e.pointerType !== "touch" && setActive(null)}
+        >
           {/* Names are long — "Meat & Poultry › Mutton", "BANKSTOWN LEBANESE
               FRUIT & MIXED BUSINES" — so the label truncates and the whole
               row carries a hover with the full text. The value stays visible
@@ -615,7 +627,9 @@ export function BarChart({
 
           <span
             role="tooltip"
-            className="pointer-events-none absolute -top-1 left-0 z-10 hidden -translate-y-full rounded-md border border-ink/10 bg-white px-2.5 py-1.5 text-xs whitespace-nowrap shadow-md group-hover:block"
+            className={`pointer-events-none absolute -top-1 left-0 z-10 -translate-y-full rounded-md border border-ink/10 bg-white px-2.5 py-1.5 text-xs whitespace-nowrap shadow-md ${
+              active === r.label ? "block" : "hidden group-hover:block"
+            }`}
           >
             <span className="font-medium text-ink">{r.label}</span>
             <span className="text-ink/55">
@@ -775,7 +789,10 @@ export function LineChart({
             height={plotH}
             fill="transparent"
             onPointerMove={handleMove}
-            onPointerLeave={() => setHoverIdx(null)}
+            // A tap is a pointerdown with no move; on touch the reading stays
+            // until the next tap rather than vanishing as the finger lifts.
+            onPointerDown={handleMove}
+            onPointerLeave={(e) => e.pointerType !== "touch" && setHoverIdx(null)}
           />
         </g>
       </svg>

@@ -11,6 +11,7 @@ export function ItemLookupCells({
   setDescription,
   onSelect,
   onDescriptionBlur,
+  layout = "cells",
 }: {
   itemNumber: string;
   setItemNumber: (v: string) => void;
@@ -19,6 +20,8 @@ export function ItemLookupCells({
   onSelect: (s: ItemLookupSuggestion) => void;
   /** Leaving the description, so an unlinked line can be looked for again. */
   onDescriptionBlur?: () => void;
+  /** "cells" for the table's two <td>s; "stack" for the card a phone shows. */
+  layout?: "cells" | "stack";
 }) {
   const [query, setQuery] = useState<{ field: "number" | "description"; text: string } | null>(null);
   const [suggestions, setSuggestions] = useState<ItemLookupSuggestion[]>([]);
@@ -26,6 +29,7 @@ export function ItemLookupCells({
   const [searching, startSearch] = useTransition();
   const numberRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLInputElement>(null);
+  const stacked = layout === "stack";
 
   useEffect(() => {
     if (!query || query.text.trim().length < 2) return;
@@ -44,55 +48,75 @@ export function ItemLookupCells({
     onSelect(s);
   }
 
+  const numberField = (
+    <>
+      <input
+        ref={numberRef}
+        value={itemNumber}
+        onChange={(e) => {
+          const value = e.target.value;
+          setItemNumber(value);
+          setQuery({ field: "number", text: value });
+          setOpen("number");
+          if (value.trim().length < 2) setSuggestions([]);
+        }}
+        onFocus={() => setOpen("number")}
+        onBlur={() => setTimeout(() => setOpen(null), 150)}
+        autoComplete="off"
+        placeholder="Item #"
+        aria-label="Item number"
+        className={`${stacked ? "w-full" : "w-20"} rounded border border-ink/10 bg-white px-2 py-1 font-mono`}
+      />
+      <AnchoredPopover anchorRef={numberRef} open={open === "number" && (searching || suggestions.length > 0)}>
+        <SuggestionList suggestions={suggestions} searching={searching} onSelect={select} />
+      </AnchoredPopover>
+    </>
+  );
+
+  const descriptionField = (
+    <>
+      <input
+        ref={descriptionRef}
+        value={description}
+        onChange={(e) => {
+          const value = e.target.value;
+          setDescription(value);
+          setQuery({ field: "description", text: value });
+          setOpen("description");
+          if (value.trim().length < 2) setSuggestions([]);
+        }}
+        onFocus={() => setOpen("description")}
+        onBlur={() => {
+          setTimeout(() => setOpen(null), 150);
+          onDescriptionBlur?.();
+        }}
+        autoComplete="off"
+        placeholder={stacked ? "Description" : undefined}
+        aria-label="Description"
+        className={`${stacked ? "w-full" : "w-48"} rounded border border-ink/10 bg-white px-2 py-1`}
+      />
+      <AnchoredPopover
+        anchorRef={descriptionRef}
+        open={open === "description" && (searching || suggestions.length > 0)}
+      >
+        <SuggestionList suggestions={suggestions} searching={searching} onSelect={select} />
+      </AnchoredPopover>
+    </>
+  );
+
+  if (stacked) {
+    return (
+      <div className="flex gap-2">
+        <div className="w-24 shrink-0">{numberField}</div>
+        <div className="min-w-0 flex-1">{descriptionField}</div>
+      </div>
+    );
+  }
+
   return (
     <>
-      <td className="p-1">
-        <input
-          ref={numberRef}
-          value={itemNumber}
-          onChange={(e) => {
-            const value = e.target.value;
-            setItemNumber(value);
-            setQuery({ field: "number", text: value });
-            setOpen("number");
-            if (value.trim().length < 2) setSuggestions([]);
-          }}
-          onFocus={() => setOpen("number")}
-          onBlur={() => setTimeout(() => setOpen(null), 150)}
-          autoComplete="off"
-          placeholder="Item #"
-          className="w-20 rounded border border-ink/10 bg-white px-2 py-1 font-mono"
-        />
-        <AnchoredPopover anchorRef={numberRef} open={open === "number" && (searching || suggestions.length > 0)}>
-          <SuggestionList suggestions={suggestions} searching={searching} onSelect={select} />
-        </AnchoredPopover>
-      </td>
-      <td className="p-1">
-        <input
-          ref={descriptionRef}
-          value={description}
-          onChange={(e) => {
-            const value = e.target.value;
-            setDescription(value);
-            setQuery({ field: "description", text: value });
-            setOpen("description");
-            if (value.trim().length < 2) setSuggestions([]);
-          }}
-          onFocus={() => setOpen("description")}
-          onBlur={() => {
-            setTimeout(() => setOpen(null), 150);
-            onDescriptionBlur?.();
-          }}
-          autoComplete="off"
-          className="w-48 rounded border border-ink/10 bg-white px-2 py-1"
-        />
-        <AnchoredPopover
-          anchorRef={descriptionRef}
-          open={open === "description" && (searching || suggestions.length > 0)}
-        >
-          <SuggestionList suggestions={suggestions} searching={searching} onSelect={select} />
-        </AnchoredPopover>
-      </td>
+      <td className="p-1">{numberField}</td>
+      <td className="p-1">{descriptionField}</td>
     </>
   );
 }

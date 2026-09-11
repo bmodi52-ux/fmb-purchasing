@@ -297,7 +297,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-4 section-title text-ink">Details</h2>
-        <form action={updateItem} className="grid gap-4 sm:grid-cols-2">
+        <form action={updateItem} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <input type="hidden" name="item_id" value={item.id} />
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
             <span className="text-ink/70">Item name</span>
