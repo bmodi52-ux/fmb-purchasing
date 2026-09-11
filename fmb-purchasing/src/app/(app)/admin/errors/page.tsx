@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateTime } from "@/lib/format";
+import { migrationStatus } from "@/lib/migrations";
 import { SubmitButton } from "@/components/submit-button";
 import { resolveError, resolveAllErrors, refreshReportData } from "./actions";
 
@@ -30,7 +31,7 @@ export default async function ErrorsPage() {
   await requirePermission(user, "admin_users", "manage_users");
 
   const admin = createAdminClient();
-  const [{ data: open }, { data: resolved }] = await Promise.all([
+  const [{ data: open }, { data: resolved }, migrations] = await Promise.all([
     admin
       .from("error_events")
       .select("*")
@@ -42,6 +43,7 @@ export default async function ErrorsPage() {
       .not("resolved_at", "is", null)
       .order("resolved_at", { ascending: false })
       .limit(RESOLVED_SHOWN),
+    migrationStatus(admin),
   ]);
 
   const openRows = (open ?? []) as ErrorRow[];
@@ -67,6 +69,19 @@ export default async function ErrorsPage() {
           the same fault are counted on one line rather than listed separately.
         </p>
       </div>
+
+      {migrations.state !== "current" && (
+        <section className="rounded-lg border border-maroon/30 bg-maroon/5 px-4 py-3">
+          <h2 className="text-sm font-medium text-maroon">The database is missing migrations</h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink/70">
+            {migrations.state === "no_ledger" &&
+              "It has no migration record, so 0041 has not been run. Pages that depend on newer migrations may fail."}
+            {migrations.state === "behind" &&
+              `This version of the app expects ${migrations.missing.join(", ")}. Run ${migrations.missing.length === 1 ? "it" : "them, in order,"} in the Supabase SQL editor.`}
+            {migrations.state === "unknown" && `The migration record could not be read: ${migrations.error}`}
+          </p>
+        </section>
+      )}
 
       {/* Not an error, but it belongs on the page an admin reaches when
           something looks wrong — and it is deliberately not somewhere a reader

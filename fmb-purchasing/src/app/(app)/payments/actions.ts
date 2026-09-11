@@ -7,11 +7,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { notifyExpensePaid } from "@/lib/expense-notifications";
+import { reportError } from "@/lib/errors";
 
-type PayableExpense = {
+type PaidExpense = {
+  run_id: string | null;
   id: string;
   expense_number: string | null;
-  status: string;
   vendor_name_raw: string | null;
   total: number;
   submitted_by: string;
@@ -22,25 +23,25 @@ function revalidateAll() {
   revalidatePath("/payments");
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
+  revalidatePath("/expenses/[id]", "page");
   revalidateReports();
 }
 
 /**
  * Records one bank transfer against every expense it settles.
  *
- * Set-based rather than a loop, for the reason in approvals/actions.ts: this
- * was four sequential statements per expense, and a real payment now covers
- * several of them. One email arriving today headed "Please pay Burhanuddin
- * Modi directly $1,819.21" carries six receipts and one transfer; after
- * cutover that is six expenses the Treasurer settles together.
+ * One email arriving today headed "Please pay Burhanuddin Modi directly
+ * $1,819.21" carries six receipts and one transfer; after cutover that is six
+ * expenses the Treasurer settles together. When they share a payee, a
+ * payment_runs row (0029) records the transfer itself, and each expense keeps
+ * its own date and reference stamped from it.
  *
- * When they all share a payee, a payment_runs row (0029) records the transfer
- * itself, and each expense keeps its own date and reference stamped from it —
- * so an expense can still answer "when were you paid" without a join, while
- * the run answers "what did that $1,819.21 cover".
+ * One database function (0042): the run, the six status changes and the six
+ * history rows are written together or not at all. As separate writes, a
+ * failure part-way left an empty run in the ledger, or expenses marked paid
+ * with no record of who paid them — and the page said it had worked.
  */
 async function pay(
-  admin: ReturnType<typeof createAdminClient>,
   userId: string,
   expenseIds: string[],
   paymentDate: string,
@@ -49,63 +50,27 @@ async function pay(
 ): Promise<{ runId: string | null; paidCount: number }> {
   if (expenseIds.length === 0 || !paymentDate) return { runId: null, paidCount: 0 };
 
-  const { data: expenses } = await admin
-    .from("expenses")
-    .select("id, expense_number, status, vendor_name_raw, total, submitted_by, payee_id")
-    .in("id", expenseIds)
-    .eq("status", "approved");
+  const { data, error } = await createAdminClient().rpc("pay_expenses", {
+    p_expense_ids: expenseIds,
+    p_actor: userId,
+    p_payment_date: paymentDate,
+    p_payment_reference: paymentReference,
+    p_note: note,
+  });
 
-  const payable = (expenses ?? []) as PayableExpense[];
-  if (payable.length === 0) return { runId: null, paidCount: 0 };
-
-  const ids = payable.map((e) => e.id);
-
-  // A run needs one payee. A mixed selection is still paid — the Treasurer
-  // may genuinely be clearing several people at once — it simply is not one
-  // transfer, so it gets no run.
-  const payees = [...new Set(payable.map((e) => e.payee_id).filter(Boolean))];
-  let runId: string | null = null;
-  if (payees.length === 1 && payees[0]) {
-    const { data: run } = await admin
-      .from("payment_runs")
-      .insert({
-        payee_id: payees[0],
-        payment_date: paymentDate,
-        payment_reference: paymentReference,
-        note,
-        paid_by: userId,
-      })
-      .select("id")
-      .single();
-    runId = (run?.id as string) ?? null;
+  if (error) {
+    await reportError({
+      source: "expense-payment",
+      error: error.message,
+      detail: `${expenseIds.length} expense(s) on ${paymentDate}: ${expenseIds.join(", ")}`,
+      userId,
+    });
+    throw new Error("The payment could not be recorded, and nothing was changed. Try again.");
   }
 
-  // status = 'approved' restated so this is a compare-and-set: an expense
-  // already paid by someone else is left alone rather than double-stamped.
-  await admin
-    .from("expenses")
-    .update({
-      status: "paid",
-      payment_reference: paymentReference,
-      payment_date: paymentDate,
-      paid_by: userId,
-      payment_run_id: runId,
-    })
-    .in("id", ids)
-    .eq("status", "approved");
-
-  await admin.from("expense_status_history").insert(
-    ids.map((id) => ({
-      expense_id: id,
-      from_status: "approved",
-      to_status: "paid",
-      actor_id: userId,
-      comment: paymentReference ? `Payment reference: ${paymentReference}` : null,
-    }))
-  );
-
-  await Promise.all(payable.map((e) => notifyExpensePaid(e, paymentReference)));
-  return { runId, paidCount: payable.length };
+  const paid = (data ?? []) as PaidExpense[];
+  await Promise.all(paid.map((e) => notifyExpensePaid(e, paymentReference)));
+  return { runId: paid[0]?.run_id ?? null, paidCount: paid.length };
 }
 
 export async function markExpensePaid(formData: FormData) {
@@ -118,7 +83,7 @@ export async function markExpensePaid(formData: FormData) {
   const paymentDate = String(formData.get("payment_date") ?? "").trim() || null;
   if (!expenseId || !paymentDate) return;
 
-  await pay(createAdminClient(), user.id, [expenseId], paymentDate, paymentReference, null);
+  await pay(user.id, [expenseId], paymentDate, paymentReference, null);
   revalidateAll();
 }
 
@@ -134,20 +99,16 @@ export async function bulkMarkPaid(
   await requirePermission(user, "payments", "mark_paid");
   if (expenseIds.length === 0 || !paymentDate) return;
 
-  await pay(createAdminClient(), user.id, expenseIds, paymentDate, paymentReference, note ?? null);
+  await pay(user.id, expenseIds, paymentDate, paymentReference, note ?? null);
   revalidateAll();
 }
 
 /**
- * Unwinds a payment recorded in error — see migration 0029.
+ * Unwinds a payment recorded in error — see migrations 0029 and 0042.
  *
- * "Paid" was terminal, so a mistyped reference or a transfer that never left
- * the bank could only be corrected in the database itself. This returns the
- * expense to approved, where it can be paid again properly, and says so on the
- * record.
- *
- * The reason is mandatory: this is the transition someone will need explained
- * when they audit the year.
+ * Returns the expense to approved, where it can be paid again properly, and
+ * says so on the record. The reason is mandatory: this is the transition
+ * someone will need explained when they audit the year.
  */
 export async function reversePayment(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
@@ -158,46 +119,15 @@ export async function reversePayment(formData: FormData): Promise<void> {
   const reason = String(formData.get("reason") ?? "").trim();
   if (!expenseId || !reason) return;
 
-  const admin = createAdminClient();
-  const { data: expense } = await admin
-    .from("expenses")
-    .select("id, status, payment_run_id")
-    .eq("id", expenseId)
-    .maybeSingle();
-  if (!expense || expense.status !== "paid") return;
-
-  await admin
-    .from("expenses")
-    .update({
-      status: "approved",
-      payment_reference: null,
-      payment_date: null,
-      paid_by: null,
-      payment_run_id: null,
-    })
-    .eq("id", expenseId)
-    .eq("status", "paid");
-
-  await admin.from("expense_status_history").insert({
-    expense_id: expenseId,
-    from_status: "paid",
-    to_status: "approved",
-    actor_id: user.id,
-    comment: reason,
-    is_reversal: true,
+  const { error } = await createAdminClient().rpc("reverse_payment", {
+    p_expense_id: expenseId,
+    p_actor: user.id,
+    p_reason: reason,
   });
 
-  // A run that no longer settles anything is noise in the ledger. One that
-  // still covers other expenses stays, with its total now smaller — which is
-  // the truth of what happened.
-  if (expense.payment_run_id) {
-    const { count } = await admin
-      .from("expenses")
-      .select("id", { count: "exact", head: true })
-      .eq("payment_run_id", expense.payment_run_id);
-    if ((count ?? 0) === 0) {
-      await admin.from("payment_runs").delete().eq("id", expense.payment_run_id);
-    }
+  if (error) {
+    await reportError({ source: "payment-reversal", error: error.message, userId: user.id, expenseId });
+    throw new Error("The payment could not be reversed, and nothing was changed. Try again.");
   }
 
   revalidateAll();

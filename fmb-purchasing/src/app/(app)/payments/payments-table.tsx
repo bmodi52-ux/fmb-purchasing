@@ -55,12 +55,17 @@ function BulkPayBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => voi
   const [date, setDate] = useState(today);
   const [reference, setReference] = useState("");
   const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function submit() {
     setPending(true);
+    setFailed(false);
     try {
       await bulkMarkPaid(ids, date, reference.trim() || null);
       onDone();
+    } catch {
+      // Recorded all together or not at all (0042), so nothing is half-paid.
+      setFailed(true);
     } finally {
       setPending(false);
     }
@@ -87,6 +92,11 @@ function BulkPayBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => voi
       <button type="button" onClick={onClear} className="text-xs text-ink/50 hover:text-ink">
         Clear
       </button>
+      {failed && (
+        <p role="alert" className="basis-full text-xs text-maroon">
+          The payment wasn&apos;t recorded, and nothing was marked paid. Try again.
+        </p>
+      )}
     </div>
   );
 }

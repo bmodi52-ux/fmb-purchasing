@@ -247,11 +247,18 @@ export function ColumnsDataTable<T extends { id: string }>({
     }
   }
 
+  // A bulk action runs outside a form, so a failure never reaches the error
+  // page — without catching it here the click simply appeared to do nothing.
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
   async function runBulkAction(action: BulkAction<T>) {
     setBusyAction(action.label);
+    setBulkError(null);
     try {
       await action.onClick(selectedRows);
       setSelected(new Set());
+    } catch {
+      setBulkError(`"${action.label}" didn't go through. The selection is kept — try again.`);
     } finally {
       setBusyAction(null);
     }
@@ -371,6 +378,12 @@ export function ColumnsDataTable<T extends { id: string }>({
             Clear
           </button>
         </div>
+      )}
+
+      {bulkError && (
+        <p role="alert" className="rounded-md border border-maroon/30 bg-maroon/5 px-3 py-2 text-sm text-maroon">
+          {bulkError}
+        </p>
       )}
 
       {filteredRows.length === 0 ? (
