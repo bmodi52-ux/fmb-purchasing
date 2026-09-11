@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordVendorChange } from "@/lib/vendor-history";
 
 /**
  * Who the money goes to.
@@ -243,6 +244,12 @@ async function payeeForVendor(
     );
     if (Object.keys(fills).length > 0) {
       await admin.from("payees").update(fills).eq("id", row.id);
+      await recordVendorChange(admin, {
+        vendorId: input.vendorId,
+        userId: input.actorId,
+        kind: "bank_details_changed",
+        changes: { label: "missing details filled in from an invoice" },
+      });
     }
     return row.id as string;
   }
@@ -257,6 +264,14 @@ async function payeeForVendor(
     })
     .select("id")
     .single();
+  if (!error && (bank.bank_bsb || bank.bank_account_number)) {
+    await recordVendorChange(admin, {
+      vendorId: input.vendorId,
+      userId: input.actorId,
+      kind: "bank_account_added",
+      changes: { label: "from an invoice" },
+    });
+  }
 
   // Two submissions naming the same new vendor race here; the unique index
   // picks a winner and the loser reads back what it wanted.
@@ -334,6 +349,7 @@ async function proposeVendorAccount(
     .select("id")
     .single();
   if (error) throw new Error(error.message);
+  await recordVendorChange(admin, { vendorId: input.vendorId, userId: input.actorId, kind: "bank_account_proposed" });
   return data.id as string;
 }
 

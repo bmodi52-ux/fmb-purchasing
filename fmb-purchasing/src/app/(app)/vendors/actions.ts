@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { revalidateReports } from "../reports/data";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { recordVendorChange } from "@/lib/vendor-history";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { lookupAbn, searchAbnByName, type AbnLookupResult } from "@/lib/abn-lookup";
@@ -76,6 +77,7 @@ export async function createVendor(
     .select("id")
     .single();
   if (error || !vendor) return { error: error?.message ?? "Could not create vendor.", success: false };
+  await recordVendorChange(admin, { vendorId: vendor.id, userId: user.id, kind: "created" });
 
   // GST registration from the ABR, once the response has gone (#30).
   if (abn) after(() => refreshVendorRegistration(admin, vendor.id, abn));
@@ -120,6 +122,9 @@ async function reviewVendors(vendorIds: string[], decision: "approved" | "reject
     .from("vendors")
     .update({ status: decision, reviewed_by: user.id, reviewed_at: new Date().toISOString() })
     .in("id", vendorIds);
+  for (const vendorId of vendorIds) {
+    await recordVendorChange(admin, { vendorId, userId: user.id, kind: "reviewed", changes: { label: decision } });
+  }
   revalidatePath("/vendors");
   // The decision can now be made from the vendor's own page, which has to stop
   // showing the status it was made against.

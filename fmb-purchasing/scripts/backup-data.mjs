@@ -57,7 +57,12 @@ const admin = createClient(url, key, {
  * Every table in `public`, in dependency order so that a hand-restore can
  * simply replay the files top to bottom.
  */
-const TABLES = [
+/**
+ * Used only when the database can't list its own tables (a project without
+ * migration 0055). Otherwise every table in public is saved, so a table added
+ * by a later migration is never quietly left out.
+ */
+const FALLBACK_TABLES = [
   "app_pages",
   "app_actions",
   "teams",
@@ -146,8 +151,13 @@ mkdirSync(dir, { recursive: true });
 console.log(`Backing up ${new URL(url).host}`);
 console.log(`  -> ${dir}\n`);
 
+const startedAt = new Date().toISOString();
 const summary = [];
 let failed = 0;
+
+const { data: listed, error: listError } = await admin.rpc("public_table_names");
+const TABLES = !listError && Array.isArray(listed) && listed.length ? listed.map(String) : FALLBACK_TABLES;
+if (listError) console.log(`  (listing tables failed: ${listError.message}; using the built-in list)\n`);
 
 for (const table of TABLES) {
   const result = await dumpTable(table);
@@ -191,6 +201,16 @@ writeFileSync(
 
 const totalRows = summary.reduce((n, s) => n + (s.rows ?? 0), 0);
 console.log(`\n${totalRows.toLocaleString()} rows written to ${dir}`);
+
+// Recorded on Backups & records (#45), whether or not every table read.
+const { error: recordError } = await admin.from("backup_runs").insert({
+  kind: "database",
+  started_at: startedAt,
+  item_count: totalRows,
+  problems: failed,
+  destination: dir,
+});
+if (recordError) console.log(`(could not record this run in the app: ${recordError.message})`);
 if (failed > 0) {
   console.log(`${failed} table(s) could not be read — see MANIFEST.json`);
   process.exit(1);

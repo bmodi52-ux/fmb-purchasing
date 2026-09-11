@@ -17,6 +17,8 @@ import {
   updateVendorDefaults,
 } from "./actions";
 import { DEFAULT_PAYEE_LABELS, GST_TREATMENT_LABELS } from "@/lib/supplier-defaults";
+import { VENDOR_FIELD_LABELS, vendorChangeTitle, vendorValueText } from "@/lib/vendor-history";
+import { formatDateTime } from "@/lib/format";
 import { reviewVendor } from "../actions";
 import { formatDate, formatPlainDate } from "@/lib/format";
 import { ReviewDecision, StatusPill } from "@/components/review-decision";
@@ -210,7 +212,7 @@ async function DetailsTab({
   canSeeBankDetails: boolean;
 }) {
   const admin = createAdminClient();
-  const [{ data: addresses }, { data: contacts }, paymentRow, { data: categoryRows }] = await Promise.all([
+  const [{ data: addresses }, { data: contacts }, paymentRow, { data: categoryRows }, { data: changeRows }] = await Promise.all([
     admin.from("vendor_collection_addresses").select("*").eq("vendor_id", vendor.id).order("created_at"),
     admin.from("vendor_contacts").select("*").eq("vendor_id", vendor.id).order("created_at"),
     // Every account this vendor has ever had, newest first: the one in use,
@@ -222,7 +224,19 @@ async function DetailsTab({
       .eq("vendor_id", vendor.id)
       .order("created_at", { ascending: false }),
     admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
+    // The vendor's change history (#45), newest first.
+    admin
+      .from("vendor_changes")
+      .select("id, changed_at, changed_by, kind, changes")
+      .eq("vendor_id", vendor.id)
+      .order("changed_at", { ascending: false })
+      .limit(100),
   ]);
+  const changerIds = [...new Set((changeRows ?? []).map((r) => r.changed_by as string | null).filter(Boolean) as string[])];
+  const { data: changers } = changerIds.length
+    ? await admin.from("profiles").select("id, full_name, email").in("id", changerIds)
+    : { data: [] };
+  const changerName = new Map((changers ?? []).map((p) => [p.id as string, (p.full_name || p.email) as string]));
   const categoryLabels = categoryLabelsById(categoryRows ?? []);
   const defaultCategoryOptions = leafCategories(sortCategories(categoryRows ?? []));
 
@@ -566,6 +580,41 @@ async function DetailsTab({
               + Add contact
             </SubmitButton>
           </form>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <h2 className="mb-4 section-title text-ink">Change history</h2>
+        {(changeRows ?? []).length === 0 ? (
+          <p className="text-sm text-ink/50">No changes recorded yet. Changes are recorded from September 2026.</p>
+        ) : (
+          <ul className="flex flex-col gap-2 text-sm">
+            {(changeRows ?? []).map((row) => {
+              const fields = Object.entries((row.changes ?? {}) as Record<string, { old: unknown; new: unknown }>).filter(
+                ([key, diff]) => key !== "label" && diff && typeof diff === "object" && "new" in diff
+              );
+              const lookups = { categoryName: (id: string) => categoryLabels.get(id) ?? null };
+              return (
+                <li key={row.id as string} className="rounded-md border border-ink/10 bg-white p-3">
+                  <p className="text-xs text-ink/50">
+                    {formatDateTime(row.changed_at as string)} ·{" "}
+                    {row.changed_by ? (changerName.get(row.changed_by as string) ?? "someone no longer here") : "automatically"}
+                  </p>
+                  <p className="text-ink/85">{vendorChangeTitle(row.kind as string, row.changes)}</p>
+                  {fields.length > 0 && (
+                    <ul className="mt-1 flex flex-col gap-0.5 text-ink/70">
+                      {fields.map(([field, diff]) => (
+                        <li key={field}>
+                          <span className="text-ink/45">{VENDOR_FIELD_LABELS[field] ?? field}:</span>{" "}
+                          {vendorValueText(field, diff.old, lookups)} → {vendorValueText(field, diff.new, lookups)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
     </div>

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordVendorChange } from "@/lib/vendor-history";
 import { canonicalUnitCode } from "@/lib/units";
 import { packShapeFromDescription, type PackShape } from "@/lib/pack-shape";
 import { packagingFromText } from "@/lib/pack-description";
@@ -98,6 +99,12 @@ export async function matchOrCreateVendor(
     }
     throw error;
   }
+  await recordVendorChange(admin, {
+    vendorId: created.id,
+    userId,
+    kind: "created",
+    changes: { label: "from a submitted receipt" },
+  });
   return { id: created.id, status: "created" };
 }
 
