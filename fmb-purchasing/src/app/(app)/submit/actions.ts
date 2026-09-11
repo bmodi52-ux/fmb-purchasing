@@ -1064,18 +1064,73 @@ export async function getExpenseForEdit(expenseId: string): Promise<ExpenseForEd
   const { data: expense } = await admin.from("expenses").select("*").eq("id", expenseId).maybeSingle();
   if (!expense || expense.submitted_by !== user.id || expense.status !== "submitted") return null;
 
+  return { id: expense.id, ...(await expenseAsInput(admin, expense)) };
+}
+
+export type ResubmitSource = {
+  /** The declined expense being corrected. */
+  sourceId: string;
+  sourceNumber: string | null;
+  input: CreateExpenseInput;
+};
+
+/**
+ * A declined expense, as the starting point for a corrected new one.
+ *
+ * A decline was a dead end: My submissions said to contact the Procurement
+ * Head, and the only way forward was typing the whole receipt in again. This
+ * loads it into the submit form as a new submission — the same lines, the same
+ * receipt file, and a note saying what it replaces — so fixing the one thing
+ * that was wrong is the whole job. The declined expense stays on the record.
+ *
+ * Only the submitter's own, and only while it is declined.
+ */
+export async function getExpenseForResubmit(expenseId: string): Promise<ResubmitSource | null> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "submit_expense", "submit");
+
+  const admin = createAdminClient();
+  const { data: expense } = await admin.from("expenses").select("*").eq("id", expenseId).maybeSingle();
+  if (!expense || expense.submitted_by !== user.id || expense.status !== "declined") return null;
+
+  const input = await expenseAsInput(admin, expense);
+  const note = `Corrected resubmission of ${expense.expense_number ?? "a declined expense"}.`;
+  return {
+    sourceId: expense.id,
+    sourceNumber: expense.expense_number,
+    input: {
+      ...input,
+      submitterComment: input.submitterComment ? `${note}\n\n${input.submitterComment}` : note,
+    },
+  };
+}
+
+/** An expense's details, lines and files, in the shape the submit form takes. */
+async function expenseAsInput(
+  admin: ReturnType<typeof createAdminClient>,
+  expense: {
+    id: string;
+    vendor_name_raw: string | null;
+    invoice_number: string | null;
+    receipt_date: string | null;
+    total: number;
+    submitter_comment: string | null;
+    payee_id: string | null;
+  }
+): Promise<CreateExpenseInput> {
   const [{ data: lineItems }, { data: attachments }] = await Promise.all([
     admin
       .from("expense_line_items")
       .select(
         "description_raw, pricelist_item_id, kind, quantity, unit_price, line_total, category_id, gst_applicable, normalized_quantity, normalized_unit"
       )
-      .eq("expense_id", expenseId)
+      .eq("expense_id", expense.id)
       .order("sort_order"),
     admin
       .from("expense_attachments")
       .select("storage_path, file_name, content_type, size_bytes, sha256")
-      .eq("expense_id", expenseId)
+      .eq("expense_id", expense.id)
       .order("sort_order"),
   ]);
 
@@ -1086,7 +1141,6 @@ export async function getExpenseForEdit(expenseId: string): Promise<ExpenseForEd
   const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
 
   return {
-    id: expense.id,
     vendorName: expense.vendor_name_raw ?? "",
     abn: null,
     invoiceNumber: expense.invoice_number,

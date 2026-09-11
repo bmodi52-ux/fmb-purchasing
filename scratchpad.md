@@ -51,6 +51,52 @@ Decided (2026-09-10):
 
 ## Done
 
+### 17. Approvals and My submissions: optimise and streamline
+
+All twelve options, decided 2026-09-11.
+
+Approvals: a summary line ("10 expenses · $4,382.10 · oldest waiting 5 days");
+each row carries amount, receipt date, line count, receipt, the submitter only
+when there is more than one, flags (bank account not confirmed, new vendor, new
+Pricelist items) and the submitter's note, with Approve and Decline on the row —
+Decline asks for a reason. "Review one by one" shows the receipt beside the
+lines and opens the next expense after each decision; Details also shows the
+receipt inline. Select all on both pages.
+
+My submissions: "+ Submit another expense" and two summary tiles (waiting for
+approval, approved but not paid); tabs with counts, opening on Declined when
+there is one; compact rows that open for details; a Submitted → Approved → Paid
+line with dates; declined expenses first, with the reason and "Fix and
+resubmit", which opens a corrected copy in the submit form while the declined
+one stays on record.
+
+### 16. Add items by taking a photo
+
+"Add item by photo" in the menu, and "Add by photo" on a vendor's Products tab.
+Up to four photos — price tag, label, or a supplier's price list as a photo or
+PDF — are read into products, each looked up on the Pricelist. The details are
+checked in plain words (what it is, how it's sold, how much is in it, how many
+in the box, the price) and the item, pack size and this store's price are set up
+behind the scenes. Someone who can't edit the Pricelist adds records for review
+and never overwrites a price on file. A price list reads into several products
+at once, which also covers #15's price sheets from a photo or PDF; pasted lines
+and spreadsheets were not built.
+
+### 15. Vendor Products tab: a better display, and seamless adding
+
+Built 2026-09-11: grouped by category and then item, with pack sizes under
+each; search; All / Needs a price / Waiting for review chips; last paid beside
+the price on file, flagged when they differ by 1% or more; Add or Edit price in
+place, recorded in history; Approve / Reject on pending offers; one "+ Add
+product" flow that searches the Pricelist first and offers "Add '…' as a new
+item" when nothing matches; and a layout that stacks on a phone.
+
+### 14. Vendor page: split into subpages
+
+Tabs at the top of each vendor page: Details (the vendor record, payment
+details, collection addresses, contacts) and Products (N). Each tab has its own
+address, and only loads what it shows.
+
 ### 13. Submit on a phone: keep Submit pinned in reach
 
 Submit and Discard sit in a bar pinned to the bottom of the screen on phones,

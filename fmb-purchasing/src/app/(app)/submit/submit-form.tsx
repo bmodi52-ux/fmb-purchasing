@@ -20,6 +20,7 @@ import {
   type LineItemInput,
   type ItemLookupSuggestion,
   type ExpenseForEdit,
+  type ResubmitSource,
   type DuplicateWarning,
   type ResolvedVendor,
   type LineMatchResult,
@@ -242,26 +243,32 @@ export function SubmitForm({
   vendorNames,
   myName,
   editExpense,
+  resubmitFrom,
 }: {
   /** Leaf categories, sorted, each tagged with the line kinds it suits. */
   categories: PickableCategory[];
   vendorNames: string[];
   myName: string;
   editExpense?: ExpenseForEdit | null;
+  /** A declined expense to start a corrected, new submission from. */
+  resubmitFrom?: ResubmitSource | null;
 }) {
+  // What the form opens filled with: the expense being edited, or the declined
+  // one being corrected. Only an edit saves over an existing expense.
+  const seed = editExpense ?? resubmitFrom?.input ?? null;
   const router = useRouter();
   const [extractState, extractAction, extracting] = useActionState(
     extractReceiptAction,
     initialExtractState
   );
-  const [mode, setMode] = useState<"start" | "review">(editExpense ? "review" : "start");
+  const [mode, setMode] = useState<"start" | "review">(seed ? "review" : "start");
   const [stage, setStage] = useState<UploadStage>(null);
   // The two client-side stages, kept under one name because everything that
   // asks is really asking "is a receipt on its way in?".
   const preparing = stage === "preparing" || stage === "uploading";
   const [sizeError, setSizeError] = useState<string | null>(null);
   const [draggingOver, setDraggingOver] = useState(false);
-  const [attachments, setAttachments] = useState<AttachmentInput[]>(editExpense?.attachments ?? []);
+  const [attachments, setAttachments] = useState<AttachmentInput[]>(seed?.attachments ?? []);
 
   // Reading a receipt is by far the longest wait here, and it was the one
   // thing in the app that never reached the shared hairline — only navigations,
@@ -269,22 +276,22 @@ export function SubmitForm({
   // appears for it as for everything else.
   useReportPending(preparing || extracting);
 
-  const [vendorName, setVendorName] = useState(editExpense?.vendorName ?? "");
+  const [vendorName, setVendorName] = useState(seed?.vendorName ?? "");
   const [vendorNumber, setVendorNumber] = useState("");
-  const [abn, setAbn] = useState(editExpense?.abn ?? "");
-  const [invoiceNumber, setInvoiceNumber] = useState(editExpense?.invoiceNumber ?? "");
-  const [receiptDate, setReceiptDate] = useState(editExpense?.receiptDate ?? "");
-  const [total, setTotal] = useState(editExpense?.total ?? 0);
+  const [abn, setAbn] = useState(seed?.abn ?? "");
+  const [invoiceNumber, setInvoiceNumber] = useState(seed?.invoiceNumber ?? "");
+  const [receiptDate, setReceiptDate] = useState(seed?.receiptDate ?? "");
+  const [total, setTotal] = useState(seed?.total ?? 0);
   const [printedGst, setPrintedGst] = useState<number | null>(null);
-  const [submitterComment, setSubmitterComment] = useState(editExpense?.submitterComment ?? "");
+  const [submitterComment, setSubmitterComment] = useState(seed?.submitterComment ?? "");
   const [payee, setPayee] = useState<PayeeChoice | null>(
-    editExpense?.payee ?? (editExpense ? null : { kind: "me" })
+    seed?.payee ?? (seed ? null : { kind: "me" })
   );
   const [extractedPayeeName, setExtractedPayeeName] = useState<string | null>(null);
   const [extractionNote, setExtractionNote] = useState<string | null>(null);
   const [items, setItems] = useState<ReviewItem[]>(() =>
-    editExpense
-      ? editExpense.lineItems.map((it, i) => ({ ...it, key: `edit-${i}`, itemNumber: "" }))
+    seed
+      ? seed.lineItems.map((it, i) => ({ ...it, key: `edit-${i}`, itemNumber: "" }))
       : []
   );
   const [restoredDraft, setRestoredDraft] = useState(false);
@@ -356,7 +363,7 @@ export function SubmitForm({
    * "Look up vendor" button is still there to try again and to say why.
    */
   useEffect(() => {
-    if (editExpense) return;
+    if (seed) return;
     const digits = abn.replace(/\D/g, "");
     if (digits.length !== 11) return;
     if (abrCheckedAbn.current === digits) return;
@@ -383,7 +390,7 @@ export function SubmitForm({
     return () => {
       cancelled = true;
     };
-  }, [abn, editExpense, resolvedVendor, resolvingVendor]);
+  }, [abn, seed, resolvedVendor, resolvingVendor]);
 
   // Fill the Vendor # the submitter did not have to know, once matching has
   // found it. Only when blank, so it never fights a number they typed.
@@ -776,6 +783,7 @@ export function SubmitForm({
       onDiscard={discard}
       onSubmitted={clearDraft}
       editExpenseId={editExpense?.id ?? null}
+      duplicateExcludeId={editExpense?.id ?? resubmitFrom?.sourceId ?? null}
     />
   );
 }
@@ -814,6 +822,11 @@ function ReviewForm(props: {
   onDiscard: () => void;
   onSubmitted: () => void;
   editExpenseId: string | null;
+  /**
+   * The expense this one is not a duplicate of: itself when editing, and the
+   * declined original when resubmitting — which shares its receipt file.
+   */
+  duplicateExcludeId: string | null;
 }) {
   const router = useRouter();
   const [submitting, startSubmit] = useTransition();
@@ -853,7 +866,7 @@ function ReviewForm(props: {
         sha256List: shaList,
         vendorName: props.vendorName,
         invoiceNumber: props.invoiceNumber,
-        excludeExpenseId: props.editExpenseId,
+        excludeExpenseId: props.duplicateExcludeId,
       })
         .then((found) => {
           setDuplicates(found);
@@ -862,7 +875,7 @@ function ReviewForm(props: {
         .catch(() => setDuplicates([]));
     }, 600);
     return () => clearTimeout(timer);
-  }, [props.attachments, props.invoiceNumber, props.vendorName, props.editExpenseId]);
+  }, [props.attachments, props.invoiceNumber, props.vendorName, props.duplicateExcludeId]);
 
   // Look every goods line up on the Pricelist as soon as it arrives — from a
   // receipt, a restored draft or an expense being edited — so the form can say

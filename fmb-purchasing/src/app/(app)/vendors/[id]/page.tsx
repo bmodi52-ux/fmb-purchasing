@@ -19,8 +19,7 @@ import { ReviewDecision, StatusPill } from "@/components/review-decision";
 import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
 import { formatPackPrice, formatUnitCost, packTitle, priceFieldLabel } from "@/lib/pack-description";
 import { allRows } from "@/lib/supabase/all-rows";
-import { AddItemModal } from "../../pricelist/add-item-modal";
-import { AddOfferModal, type OfferableItem } from "./add-offer-modal";
+import { AddProductModal, type OfferableItem } from "./add-product-modal";
 import { VendorProducts, type VendorProductRow } from "./vendor-products";
 
 type VendorOfferRow = {
@@ -29,7 +28,9 @@ type VendorOfferRow = {
   brand: string | null;
   vendor_sku: string | null;
   pack_price: number | null;
-  item_pack_sizes: (PackRow & { items: { id: string; name: string; item_number: string | null } | null }) | null;
+  item_pack_sizes:
+    | (PackRow & { items: { id: string; name: string; item_number: string | null; category_id: string | null } | null })
+    | null;
 };
 
 type PackRow = {
@@ -42,6 +43,15 @@ type PackRow = {
   packaging: string | null;
 };
 
+type Vendor = {
+  id: string;
+  name: string;
+  abn: string | null;
+  vendor_number: string | null;
+  status: string;
+  billing_address: Record<string, string | null> | null;
+};
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { data } = await createAdminClient()
@@ -52,173 +62,134 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: (data?.name as string | null) ?? "Vendor" };
 }
 
-export default async function VendorDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+/**
+ * One vendor, in two tabs: its own record, and what it supplies.
+ *
+ * Both lived on one long page — bank details and contact phone numbers above a
+ * product list that keeps growing — so whoever came for one scrolled past the
+ * other. A tab is its own address (?tab=products), so a link can open straight
+ * onto a vendor's products, and each tab only loads what it shows.
+ */
+export default async function VendorDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const [{ id }, { tab }] = await Promise.all([params, searchParams]);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "vendors", "view");
 
   const permissions = await getUserPermissions(user.teamIds);
-  const canEdit = can(permissions, "vendors", "edit_master_data");
-  const canApprove = can(permissions, "vendors", "approve_master_data");
-  // The trust boundary 0027 drew: bank details belong to whoever transfers the
-  // money, not to everyone who can read a vendor record.
-  const canSeeBankDetails = can(permissions, "payments", "mark_paid");
-  // What a vendor supplies is Pricelist data, so adding to it follows the
-  // Pricelist's permissions rather than the vendor record's.
-  const canViewPricelist = can(permissions, "pricelist", "view");
-  const canEditPricelist = can(permissions, "pricelist", "edit_master_data");
-  const canApprovePricelist = can(permissions, "pricelist", "approve_master_data");
+  const showProducts = tab === "products";
 
   const admin = createAdminClient();
-  const [
-    { data: vendor },
-    { data: addresses },
-    { data: contacts },
-    paymentRow,
-    { data: offerRows },
-    { data: offerCosts },
-    { data: units },
-  ] = await Promise.all([
-    admin.from("vendors").select("*").eq("id", id).maybeSingle(),
-    admin.from("vendor_collection_addresses").select("*").eq("vendor_id", id).order("created_at"),
-    admin.from("vendor_contacts").select("*").eq("vendor_id", id).order("created_at"),
+  const [{ data: vendor }, { count: productCount }] = await Promise.all([
+    admin.from("vendors").select("id, name, abn, vendor_number, status, billing_address").eq("id", id).maybeSingle<Vendor>(),
+    admin
+      .from("pricelist_items")
+      .select("id", { count: "exact", head: true })
+      .eq("vendor_id", id)
+      .neq("status", "rejected"),
+  ]);
+
+  if (!vendor) notFound();
+
+  const canApproveVendor = can(permissions, "vendors", "approve_master_data");
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <Link href="/vendors" className="text-sm text-ink/50 hover:text-ink">
+          ← Vendors
+        </Link>
+        {/* Wraps so a long vendor name doesn't squeeze the reference code
+            against the edge on a narrow screen. */}
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="page-title text-ink">{vendor.name}</h1>
+          <span className="font-mono text-sm text-ink/50">{vendor.vendor_number}</span>
+          <StatusPill status={vendor.status} />
+        </div>
+
+        {canApproveVendor && vendor.status === "pending" && (
+          <ReviewDecision
+            action={reviewVendor}
+            idField="vendor_id"
+            id={vendor.id}
+            approveLabel="Approve vendor"
+            note="Approving lets receipts be filed against this vendor without a second look."
+          />
+        )}
+
+        <nav aria-label="Vendor sections" className="mt-5 flex gap-1 border-b border-ink/10">
+          <TabLink href={`/vendors/${vendor.id}`} active={!showProducts}>
+            Details
+          </TabLink>
+          <TabLink href={`/vendors/${vendor.id}?tab=products`} active={showProducts}>
+            Products <span className="ml-1 text-xs text-ink/45">{productCount ?? 0}</span>
+          </TabLink>
+        </nav>
+      </div>
+
+      {showProducts ? (
+        <ProductsTab
+          vendor={vendor}
+          canViewPricelist={can(permissions, "pricelist", "view")}
+          canEditPricelist={can(permissions, "pricelist", "edit_master_data")}
+          canApprovePricelist={can(permissions, "pricelist", "approve_master_data")}
+          canSubmit={can(permissions, "submit_expense", "submit")}
+        />
+      ) : (
+        <DetailsTab
+          vendor={vendor}
+          canEdit={can(permissions, "vendors", "edit_master_data")}
+          // The trust boundary 0027 drew: bank details belong to whoever
+          // transfers the money, not to everyone who can read a vendor record.
+          canSeeBankDetails={can(permissions, "payments", "mark_paid")}
+        />
+      )}
+    </div>
+  );
+}
+
+function TabLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={`-mb-px border-b-2 px-4 py-2.5 text-sm transition-colors ${
+        active ? "border-gold-deep font-medium text-ink" : "border-transparent text-ink/60 hover:text-ink"
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
+
+async function DetailsTab({
+  vendor,
+  canEdit,
+  canSeeBankDetails,
+}: {
+  vendor: Vendor;
+  canEdit: boolean;
+  canSeeBankDetails: boolean;
+}) {
+  const admin = createAdminClient();
+  const [{ data: addresses }, { data: contacts }, paymentRow] = await Promise.all([
+    admin.from("vendor_collection_addresses").select("*").eq("vendor_id", vendor.id).order("created_at"),
+    admin.from("vendor_contacts").select("*").eq("vendor_id", vendor.id).order("created_at"),
     // Every account this vendor has ever had, newest first: the one in use,
     // anything a submitter has proposed off an invoice, and the ones they
     // replaced. See migration 0037.
     admin
       .from("payees")
       .select("id, bank_account_name, bank_bsb, bank_account_number, notes, status, created_at, superseded_at")
-      .eq("vendor_id", id)
+      .eq("vendor_id", vendor.id)
       .order("created_at", { ascending: false }),
-    admin
-      .from("pricelist_items")
-      .select(
-        "id, status, brand, vendor_sku, pack_price, item_pack_sizes ( id, label, inner_quantity, inner_unit_id, pack_count, sold_loose, packaging, items ( id, name, item_number ) )"
-      )
-      .eq("vendor_id", id)
-      .returns<VendorOfferRow[]>(),
-    admin.from("offer_unit_costs").select("offer_id, cost_per_base_unit, base_unit_code").eq("vendor_id", id),
-    admin.from("units").select("id, code, label").order("sort_order"),
   ]);
-
-  if (!vendor) notFound();
-
-  const unitLabelById = new Map((units ?? []).map((u) => [u.id as string, u.label as string]));
-  const shapeOf = (p: PackRow) => ({
-    innerQuantity: p.inner_quantity,
-    unitLabel: unitLabelById.get(p.inner_unit_id),
-    packCount: p.pack_count,
-    soldLoose: p.sold_loose,
-    packaging: p.packaging,
-  });
-
-  const vendorOffers = (offerRows ?? []).filter((o) => o.item_pack_sizes?.items);
-  const offerIds = vendorOffers.map((o) => o.id);
-
-  // How often each offer has actually been bought, and when last — declined
-  // expenses are not purchases.
-  const { data: usageRows } = offerIds.length
-    ? await admin
-        .from("expense_line_items")
-        .select("pricelist_item_id, expenses!inner ( receipt_date, status )")
-        .in("pricelist_item_id", offerIds)
-        .neq("expenses.status", "declined")
-    : { data: [] };
-  const usage = new Map<string, { count: number; last: string | null }>();
-  for (const row of (usageRows ?? []) as unknown as {
-    pricelist_item_id: string;
-    expenses: { receipt_date: string | null } | null;
-  }[]) {
-    const entry = usage.get(row.pricelist_item_id) ?? { count: 0, last: null };
-    entry.count += 1;
-    const date = row.expenses?.receipt_date ?? null;
-    if (date && (!entry.last || date > entry.last)) entry.last = date;
-    usage.set(row.pricelist_item_id, entry);
-  }
-
-  const costByOffer = new Map(
-    (offerCosts ?? []).map((c) => [c.offer_id as string, c as { cost_per_base_unit: number | null; base_unit_code: string }])
-  );
-  const productRows: VendorProductRow[] = vendorOffers
-    .map((o) => {
-      const pack = o.item_pack_sizes!;
-      const item = pack.items!;
-      const cost = costByOffer.get(o.id);
-      const used = usage.get(o.id);
-      return {
-        offerId: o.id,
-        status: o.status,
-        itemId: item.id,
-        itemName: item.name,
-        itemNumber: item.item_number,
-        packTitle: packTitle(pack.label, shapeOf(pack)),
-        price: o.pack_price != null ? formatPackPrice(Number(o.pack_price), shapeOf(pack)) : null,
-        perUnit:
-          cost?.cost_per_base_unit != null ? formatUnitCost(Number(cost.cost_per_base_unit), cost.base_unit_code) : null,
-        brand: o.brand,
-        vendorSku: o.vendor_sku,
-        purchaseCount: used?.count ?? 0,
-        lastBought: used?.last ? formatPlainDate(used.last) : null,
-      };
-    })
-    .sort((a, b) => a.itemName.localeCompare(b.itemName) || a.packTitle.localeCompare(b.packTitle));
-
-  // Everything that could be priced for this vendor, for whoever may add
-  // pricing. The whole Pricelist, paged, because a vendor can be offered any
-  // item on it.
-  let offerableItems: OfferableItem[] = [];
-  let assignableCategories: { id: string; name: string }[] = [];
-  if (canEditPricelist) {
-    const pricedPackIds = new Set(
-      vendorOffers.filter((o) => o.status !== "rejected").map((o) => o.item_pack_sizes!.id)
-    );
-    const [itemRows, packRows, { data: categories }] = await Promise.all([
-      allRows<{ id: string; name: string; item_number: string | null; category_id: string | null }>((from, to) =>
-        admin
-          .from("items")
-          .select("id, name, item_number, category_id")
-          .neq("status", "rejected")
-          .order("name")
-          .order("id")
-          .range(from, to)
-      ),
-      allRows<PackRow & { item_id: string }>((from, to) =>
-        admin
-          .from("item_pack_sizes")
-          .select("id, item_id, label, inner_quantity, inner_unit_id, pack_count, sold_loose, packaging")
-          .order("id")
-          .range(from, to)
-      ),
-      admin.from("categories").select("id, name, parent_category_id, code").order("sort_order"),
-    ]);
-
-    const categoryNameById = categoryLabelsById(categories ?? []);
-    assignableCategories = leafCategories(sortCategories(categories ?? [])).map((c) => ({
-      id: c.id,
-      name: categoryNameById.get(c.id) ?? c.name,
-    }));
-
-    const packsByItem = new Map<string, (PackRow & { item_id: string })[]>();
-    for (const p of packRows) packsByItem.set(p.item_id, [...(packsByItem.get(p.item_id) ?? []), p]);
-
-    offerableItems = itemRows.map((i) => ({
-      id: i.id,
-      name: i.name,
-      itemNumber: i.item_number,
-      categoryName: i.category_id ? (categoryNameById.get(i.category_id) ?? null) : null,
-      packs: (packsByItem.get(i.id) ?? [])
-        .map((p) => ({
-          id: p.id,
-          title: packTitle(p.label, shapeOf(p)),
-          priceLabel: priceFieldLabel(shapeOf(p)),
-          totalQuantity: Number(p.inner_quantity) * Number(p.pack_count),
-          unitLabel: unitLabelById.get(p.inner_unit_id) ?? null,
-          alreadyPriced: pricedPackIds.has(p.id),
-        }))
-        .sort((a, b) => a.title.localeCompare(b.title)),
-    }));
-  }
 
   const accounts = paymentRow.data ?? [];
   const stored = accounts.find((a) => a.status === "approved");
@@ -235,33 +206,10 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
       }
     : null;
 
-  const billing = (vendor.billing_address ?? {}) as Record<string, string | null>;
+  const billing = vendor.billing_address ?? {};
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <Link href="/vendors" className="text-sm text-ink/50 hover:text-ink">
-          ← Vendors
-        </Link>
-        {/* Wraps so a long vendor name doesn't squeeze the reference code
-            against the edge on a narrow screen. */}
-        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="page-title text-ink">{vendor.name}</h1>
-          <span className="font-mono text-sm text-ink/50">{vendor.vendor_number}</span>
-          <StatusPill status={vendor.status as string} />
-        </div>
-
-        {canApprove && vendor.status === "pending" && (
-          <ReviewDecision
-            action={reviewVendor}
-            idField="vendor_id"
-            id={vendor.id}
-            approveLabel="Approve vendor"
-            note="Approving lets receipts be filed against this vendor without a second look."
-          />
-        )}
-      </div>
-
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-4 section-title text-ink">Details</h2>
         <form action={updateVendorDetails} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -292,27 +240,6 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
           )}
         </form>
       </section>
-
-      <VendorProducts
-        vendorName={vendor.name as string}
-        rows={productRows}
-        canViewPricelist={canViewPricelist}
-        canApprove={canApprovePricelist}
-        actions={
-          canEditPricelist ? (
-            <>
-              <AddItemModal
-                label="+ New item"
-                vendors={[]}
-                fixedVendor={{ id: vendor.id as string, name: vendor.name as string }}
-                categories={assignableCategories}
-                units={units ?? []}
-              />
-              <AddOfferModal vendorId={vendor.id as string} vendorName={vendor.name as string} items={offerableItems} />
-            </>
-          ) : null
-        }
-      />
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-1 section-title text-ink">Payment details</h2>
@@ -532,6 +459,205 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
         )}
       </section>
     </div>
+  );
+}
+
+async function ProductsTab({
+  vendor,
+  canViewPricelist,
+  canEditPricelist,
+  canApprovePricelist,
+  canSubmit,
+}: {
+  vendor: Vendor;
+  canViewPricelist: boolean;
+  canEditPricelist: boolean;
+  canApprovePricelist: boolean;
+  canSubmit: boolean;
+}) {
+  const admin = createAdminClient();
+  const [{ data: offerRows }, { data: offerCosts }, { data: units }, { data: categories }] = await Promise.all([
+    admin
+      .from("pricelist_items")
+      .select(
+        "id, status, brand, vendor_sku, pack_price, item_pack_sizes ( id, label, inner_quantity, inner_unit_id, pack_count, sold_loose, packaging, items ( id, name, item_number, category_id ) )"
+      )
+      .eq("vendor_id", vendor.id)
+      .returns<VendorOfferRow[]>(),
+    admin.from("offer_unit_costs").select("offer_id, cost_per_base_unit, base_unit_code").eq("vendor_id", vendor.id),
+    admin.from("units").select("id, code, label").order("sort_order"),
+    admin.from("categories").select("id, name, parent_category_id, code").order("sort_order"),
+  ]);
+
+  const unitLabelById = new Map((units ?? []).map((u) => [u.id as string, u.label as string]));
+  const categoryNameById = categoryLabelsById(categories ?? []);
+  const shapeOf = (p: PackRow) => ({
+    innerQuantity: p.inner_quantity,
+    unitLabel: unitLabelById.get(p.inner_unit_id),
+    packCount: p.pack_count,
+    soldLoose: p.sold_loose,
+    packaging: p.packaging,
+  });
+
+  const vendorOffers = (offerRows ?? []).filter((o) => o.item_pack_sizes?.items);
+  const offerIds = vendorOffers.map((o) => o.id);
+
+  // How often each offer has actually been bought, when last, and what one
+  // pack cost that time — declined expenses are not purchases.
+  const { data: usageRows } = offerIds.length
+    ? await admin
+        .from("expense_line_items")
+        .select("pricelist_item_id, line_total, quantity, expenses!inner ( receipt_date, status, created_at )")
+        .in("pricelist_item_id", offerIds)
+        .neq("expenses.status", "declined")
+    : { data: [] };
+
+  type Purchase = { lineTotal: number; quantity: number | null; date: string | null; submitted: string };
+  const purchasesByOffer = new Map<string, Purchase[]>();
+  for (const row of (usageRows ?? []) as unknown as {
+    pricelist_item_id: string;
+    line_total: number;
+    quantity: number | null;
+    expenses: { receipt_date: string | null; created_at: string } | null;
+  }[]) {
+    const list = purchasesByOffer.get(row.pricelist_item_id) ?? [];
+    list.push({
+      lineTotal: Number(row.line_total),
+      quantity: row.quantity != null ? Number(row.quantity) : null,
+      date: row.expenses?.receipt_date ?? null,
+      submitted: row.expenses?.created_at ?? "",
+    });
+    purchasesByOffer.set(row.pricelist_item_id, list);
+  }
+
+  const costByOffer = new Map(
+    (offerCosts ?? []).map((c) => [c.offer_id as string, c as { cost_per_base_unit: number | null; base_unit_code: string }])
+  );
+
+  const productRows: VendorProductRow[] = vendorOffers.map((o) => {
+    const pack = o.item_pack_sizes!;
+    const item = pack.items!;
+    const shape = shapeOf(pack);
+    const cost = costByOffer.get(o.id);
+    const purchases = [...(purchasesByOffer.get(o.id) ?? [])].sort(
+      (a, b) => (b.date ?? "").localeCompare(a.date ?? "") || b.submitted.localeCompare(a.submitted)
+    );
+    const latest = purchases.find((p) => p.quantity && p.quantity > 0 && p.lineTotal > 0);
+    const lastPaidPrice = latest ? Math.round((latest.lineTotal / latest.quantity!) * 100) / 100 : null;
+    return {
+      offerId: o.id,
+      status: o.status,
+      itemId: item.id,
+      itemName: item.name,
+      itemNumber: item.item_number,
+      categoryName: item.category_id ? (categoryNameById.get(item.category_id) ?? null) : null,
+      packTitle: packTitle(pack.label, shape),
+      price: o.pack_price != null ? formatPackPrice(Number(o.pack_price), shape) : null,
+      packPrice: o.pack_price != null ? Number(o.pack_price) : null,
+      priceLabel: priceFieldLabel(shape),
+      perUnit:
+        cost?.cost_per_base_unit != null ? formatUnitCost(Number(cost.cost_per_base_unit), cost.base_unit_code) : null,
+      brand: o.brand,
+      vendorSku: o.vendor_sku,
+      purchaseCount: purchases.length,
+      lastBought: purchases[0]?.date ? formatPlainDate(purchases[0].date) : null,
+      lastPaid:
+        lastPaidPrice != null
+          ? {
+              price: lastPaidPrice,
+              text: `${formatPackPrice(lastPaidPrice, shape)}${latest?.date ? ` on ${formatPlainDate(latest.date)}` : ""}`,
+            }
+          : null,
+    };
+  });
+
+  // Everything that could be priced for this vendor, for whoever may add
+  // pricing. The whole Pricelist, paged, because a vendor can be offered any
+  // item on it.
+  let offerableItems: OfferableItem[] = [];
+  let assignableCategories: { id: string; name: string }[] = [];
+  if (canEditPricelist) {
+    const pricedPackIds = new Set(
+      vendorOffers.filter((o) => o.status !== "rejected").map((o) => o.item_pack_sizes!.id)
+    );
+    const [itemRows, packRows] = await Promise.all([
+      allRows<{ id: string; name: string; item_number: string | null; category_id: string | null }>((from, to) =>
+        admin
+          .from("items")
+          .select("id, name, item_number, category_id")
+          .neq("status", "rejected")
+          .order("name")
+          .order("id")
+          .range(from, to)
+      ),
+      allRows<PackRow & { item_id: string }>((from, to) =>
+        admin
+          .from("item_pack_sizes")
+          .select("id, item_id, label, inner_quantity, inner_unit_id, pack_count, sold_loose, packaging")
+          .order("id")
+          .range(from, to)
+      ),
+    ]);
+
+    assignableCategories = leafCategories(sortCategories(categories ?? [])).map((c) => ({
+      id: c.id,
+      name: categoryNameById.get(c.id) ?? c.name,
+    }));
+
+    const packsByItem = new Map<string, (PackRow & { item_id: string })[]>();
+    for (const p of packRows) packsByItem.set(p.item_id, [...(packsByItem.get(p.item_id) ?? []), p]);
+
+    offerableItems = itemRows.map((i) => ({
+      id: i.id,
+      name: i.name,
+      itemNumber: i.item_number,
+      categoryName: i.category_id ? (categoryNameById.get(i.category_id) ?? null) : null,
+      packs: (packsByItem.get(i.id) ?? [])
+        .map((p) => ({
+          id: p.id,
+          title: packTitle(p.label, shapeOf(p)),
+          priceLabel: priceFieldLabel(shapeOf(p)),
+          totalQuantity: Number(p.inner_quantity) * Number(p.pack_count),
+          unitLabel: unitLabelById.get(p.inner_unit_id) ?? null,
+          alreadyPriced: pricedPackIds.has(p.id),
+        }))
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    }));
+  }
+
+  const actions =
+    canEditPricelist || canSubmit ? (
+      <>
+        {canEditPricelist && (
+          <AddProductModal
+            vendorId={vendor.id}
+            vendorName={vendor.name}
+            items={offerableItems}
+            categories={assignableCategories}
+            units={units ?? []}
+          />
+        )}
+        {canSubmit && (
+          <Link
+            href={`/pricelist/add-by-photo?vendor=${vendor.id}`}
+            className="self-start whitespace-nowrap rounded-md border border-ink/15 bg-white px-4 py-2 text-sm text-ink transition-colors hover:border-ink/30"
+          >
+            Add by photo
+          </Link>
+        )}
+      </>
+    ) : null;
+
+  return (
+    <VendorProducts
+      vendorId={vendor.id}
+      vendorName={vendor.name}
+      rows={productRows}
+      canViewPricelist={canViewPricelist}
+      canApprove={canApprovePricelist}
+      canEdit={canEditPricelist}
+      actions={actions}
+    />
   );
 }
 

@@ -107,6 +107,19 @@ export function FilterableSection<T extends Record<string, unknown>>({
     selectedCount: selected.size,
   };
 
+  // Everything in view, so a run of routine expenses is one tap rather than a
+  // tap per row. Honours the filter: it selects what is showing, not what is
+  // hidden behind it.
+  const allFilteredSelected = filtered.length > 0 && filtered.every((r) => selected.has(rowId(r)));
+  function toggleAllFiltered() {
+    const next = new Set(selected);
+    for (const r of filtered) {
+      if (allFilteredSelected) next.delete(rowId(r));
+      else next.add(rowId(r));
+    }
+    setSelected(next);
+  }
+
   async function runBulkAction(action: BulkAction<T>) {
     setBusyAction(action.label);
     try {
@@ -153,6 +166,15 @@ export function FilterableSection<T extends Record<string, unknown>>({
                 </button>
               )}
             </>
+          )}
+          {bulkActions && bulkActions.length > 0 && filtered.length > 0 && (
+            <button
+              type="button"
+              onClick={toggleAllFiltered}
+              className="rounded-md border border-ink/15 px-2.5 py-1.5 text-xs text-ink/70 hover:border-ink/30"
+            >
+              {allFilteredSelected ? "Select none" : `Select all (${filtered.length})`}
+            </button>
           )}
         </div>
         <ExportToolbar filenameBase={filenameBase} title={title} columns={columns} rows={exportSourceRows} />
