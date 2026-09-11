@@ -25,16 +25,6 @@ import { ORG_TIME_ZONE } from "@/lib/format";
 const SHAWWAL = 10;
 
 /**
- * The value used in the URL when a fiscal-year filter is switched off.
- *
- * Lives here rather than beside the select component: that file is
- * "use client", and a server component importing a plain value from a client
- * module gets a client-reference proxy instead of the string, so comparing
- * against it silently never matches.
- */
-export const ALL_YEARS = "all";
-
-/**
  * Today's calendar date in Sydney, as a Date whose *local* fields hold it.
  *
  * The conversion below reads `getDate()`, `getMonth()` and `getFullYear()`,

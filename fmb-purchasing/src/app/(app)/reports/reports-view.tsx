@@ -123,9 +123,8 @@ function perUnitVendorSeries(rows: PerUnitRow[]): LineSeriesData[] {
 
 export function ReportsView({
   query,
-  fiscalYears,
-  currentFy,
-  months,
+  today,
+  earliest,
   vendors,
   categories,
   items,
@@ -138,9 +137,8 @@ export function ReportsView({
   hasCategoryOrItemFilter,
 }: {
   query: ReportQuery;
-  fiscalYears: number[];
-  currentFy: number;
-  months: string[];
+  today: string;
+  earliest: string | null;
   vendors: FilterOption[];
   categories: FilterOption[];
   items: FilterOption[];
@@ -166,11 +164,7 @@ export function ReportsView({
   const countDelta = before ? percentChange(now.expenseCount, before.expenseCount) : null;
 
   const empty = now.expenseCount === 0;
-  const isFiltered =
-    !!query.month ||
-    query.vendors.length > 0 ||
-    query.categories.length > 0 ||
-    query.items.length > 0;
+  const isFiltered = query.vendors.length > 0 || query.categories.length > 0 || query.items.length > 0;
 
   const sectionLabel = SECTIONS.find((s) => s.key === query.section)?.label ?? query.section;
   const filterSummary = buildFilterSummary(query, periodLabel, vendors, categories, items);
@@ -181,7 +175,8 @@ export function ReportsView({
         <div>
           <h1 className="page-title text-ink">Reports</h1>
           <p className="page-description mt-1">
-            Fiscal year runs Shawwal → the following Ramadan on the Fatimi/Misri Hijri calendar.
+            Any period: the Hijri year (Shawwal → Ramadan, Fatimi/Misri calendar), the Australian financial year,
+            a calendar year, a quarter, a month or your own dates.
           </p>
         </div>
 
@@ -191,7 +186,7 @@ export function ReportsView({
             <PrintButton
               title={`Reports — ${sectionLabel}`}
               subtitle={filterSummary}
-              filenameBase={`reports-${query.section}-fy${query.fy}`}
+              filenameBase={`reports-${query.section}-${query.period}`}
             />
           )}
         </div>
@@ -200,9 +195,8 @@ export function ReportsView({
             the numbers describe the same slice. */}
         <ReportFilters
           query={query}
-          fiscalYears={fiscalYears}
-          currentFy={currentFy}
-          months={months}
+          today={today}
+          earliest={earliest}
           vendors={vendors}
           categories={categories}
           items={items}

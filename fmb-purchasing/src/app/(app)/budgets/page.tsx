@@ -3,25 +3,35 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getUserPermissions, can, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
-import { currentFiscalYearHijri, formatFiscalYear } from "@/lib/fiscal-year";
-import { FiscalYearSelect } from "@/components/fiscal-year-select";
+import { formatDateTime } from "@/lib/format";
+import { parsePeriod, previousPeriod } from "@/lib/periods";
+import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
+import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
+import { PeriodPicker } from "@/components/period-picker";
 import { SubmitButton } from "@/components/submit-button";
-import { loadReportRawData } from "../reports/data";
-import { setCategoryBudget, copyBudgetsFromPreviousYear } from "./actions";
+import { loadReportRawData, withinRange } from "../reports/data";
+import { copyBudgetsFromPrevious } from "./actions";
 import { BudgetInput } from "./budget-input";
 
 export const metadata = { title: "Budgets" };
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
+const CHANGE_WORDS: Record<string, string> = {
+  set: "Set",
+  changed: "Changed",
+  cleared: "Cleared",
+  moved_by_override: "Moved by an override of",
+};
+
 /**
- * Budget against actual, per category, for one Hijri fiscal year.
+ * Budget against actual, per category, for any period (#22).
  *
- * The spec has asked for this since the beginning (§10) and nothing in the
- * schema had touched it. Deliberately the smallest thing that answers the
- * question people actually ask — "are we over on meat this year?" — rather
- * than a planning module: one amount per leaf category per year, no monthly
- * phasing, no approval lifecycle.
+ * A budget can be set for a Hijri year, a financial year, a calendar year, a
+ * quarter, a month or any range, and every period shows what the budgets
+ * already set put inside it — so a financial year shows the share of each
+ * Hijri year's budget that falls within it. How overlapping budgets share
+ * their days is in lib/budget-allocation.ts.
  *
  * Actuals come from the same cached ledger the Reports page reads, so a figure
  * here and a figure there can never disagree.
@@ -29,7 +39,7 @@ const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", curr
 export default async function BudgetsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ fy?: string }>;
+  searchParams: Promise<{ period?: string; fy?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -38,41 +48,46 @@ export default async function BudgetsPage({
   const permissions = await getUserPermissions(user.teamIds);
   const canEdit = can(permissions, "budgets", "edit_master_data");
 
-  const { fy } = await searchParams;
-  const currentFy = currentFiscalYearHijri();
-  const selectedFy = fy ? Number(fy) : currentFy;
+  const params = await searchParams;
+  const today = todayIso();
+  const period = parsePeriod(params.period ?? params.fy, today);
+  const previous = previousPeriod(period, today);
 
   const admin = createAdminClient();
-  const [{ data: categoryRows }, { data: budgetRows }, { data: fyRows }, report] = await Promise.all([
+  const [{ data: categoryRows }, budgets, report, earliest, { data: changeRows }] = await Promise.all([
     admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
-    admin.from("category_budgets").select("category_id, amount").eq("fiscal_year_hijri", selectedFy),
-    admin.from("expense_fiscal_years").select("fiscal_year_hijri"),
-    loadReportRawData([selectedFy]),
+    loadBudgets(admin),
+    loadReportRawData(period).then((raw) => withinRange(raw, period)),
+    earliestExpenseDate(admin),
+    admin
+      .from("category_budget_changes")
+      .select("id, category_id, label, kind, from_amount, to_amount, caused_by_label, changed_by, changed_at")
+      .order("changed_at", { ascending: false })
+      .limit(30),
   ]);
 
   const categories = leafCategories(sortCategories(categoryRows ?? []));
   const labels = categoryLabelsById(categoryRows ?? []);
-  const budgetByCategory = new Map((budgetRows ?? []).map((b) => [b.category_id as string, Number(b.amount)]));
+  const perCategory = budgetsForPeriod(budgets, period.start, period.end);
 
   // Actual spend, from the same line-level ledger Reports aggregates. Declined
-  // expenses are already excluded upstream.
-  const idsThisYear = new Set(
-    report.allExpenses.filter((e) => report.fyOf.get(e.id) === selectedFy).map((e) => e.id)
-  );
+  // and withdrawn expenses are already excluded upstream.
   const spentByCategory = new Map<string, number>();
   for (const line of report.allLines) {
-    if (!line.categoryId || !idsThisYear.has(line.expenseId)) continue;
+    if (!line.categoryId) continue;
     spentByCategory.set(line.categoryId, (spentByCategory.get(line.categoryId) ?? 0) + line.lineTotal);
   }
 
   const rows = categories
     .map((c) => {
-      const budget = budgetByCategory.get(c.id) ?? null;
+      const share = perCategory.get(c.id);
+      const budget = share && share.uncoveredDays < share.days ? share.amount : null;
       const spent = spentByCategory.get(c.id) ?? 0;
       return {
         id: c.id,
         label: labels.get(c.id) ?? c.name,
         budget,
+        share,
         spent,
         // Null when nothing is budgeted: a category with no budget is not
         // "100% over", it is undecided, and reporting it as a breach would
@@ -84,6 +99,8 @@ export default async function BudgetsPage({
 
   const totalBudget = rows.reduce((s, r) => s + (r.budget ?? 0), 0);
   const totalSpent = rows.reduce((s, r) => s + r.spent, 0);
+  const anyExactForPeriod = rows.some((r) => r.share?.exact);
+  const canCopy = canEdit && !anyExactForPeriod && budgets.some((b) => b.start === previous.start && b.end === previous.end);
 
   /**
    * Spend that belongs to no category, and so appears in no budget.
@@ -98,24 +115,28 @@ export default async function BudgetsPage({
   const uncategorisedSpend =
     Math.round(
       report.allLines
-        .filter((l) => idsThisYear.has(l.expenseId) && (!l.categoryId || !categorisedIds.has(l.categoryId)))
+        .filter((l) => !l.categoryId || !categorisedIds.has(l.categoryId))
         .reduce((s, l) => s + l.lineTotal, 0) * 100
     ) / 100;
 
-  const fiscalYears = [...new Set((fyRows ?? []).map((r) => r.fiscal_year_hijri))].sort((a, b) => b - a);
-  if (!fiscalYears.includes(currentFy)) fiscalYears.unshift(currentFy);
+  const changers = [...new Set((changeRows ?? []).map((r) => r.changed_by).filter(Boolean) as string[])];
+  const { data: people } = changers.length
+    ? await admin.from("profiles").select("id, full_name, email").in("id", changers)
+    : { data: [] };
+  const nameById = new Map((people ?? []).map((p) => [p.id as string, (p.full_name || p.email) as string]));
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-4">
         <div>
           <h1 className="page-title text-ink">Budgets</h1>
-          <p className="page-description mt-1 max-w-xl">
-            What was set aside for {formatFiscalYear(selectedFy)}, against what has been spent.
-            Amounts are GST-inclusive, the same as the totals on every receipt.
+          <p className="page-description mt-1 max-w-2xl">
+            What was set aside for {period.label}, against what has been spent. Set a budget for any period — it
+            carries into every other: a financial year shows the part of each Hijri year&rsquo;s budget that
+            falls inside it. Amounts include GST, the same as the totals on every receipt.
           </p>
         </div>
-        <FiscalYearSelect fiscalYears={fiscalYears} selectedFy={selectedFy} currentFy={currentFy} />
+        <PeriodPicker value={period.code} today={today} earliest={earliest} />
       </div>
 
       <div className="flex flex-wrap items-center gap-x-8 gap-y-2 rounded-xl border border-ink/10 bg-white/60 px-5 py-4">
@@ -138,7 +159,7 @@ export default async function BudgetsPage({
 
       {uncategorisedSpend !== 0 && (
         <p className="-mt-3 max-w-2xl text-xs leading-relaxed text-ink/55">
-          {money(uncategorisedSpend)} of this year&rsquo;s spend sits in no category — surcharges,
+          {money(uncategorisedSpend)} of this period&rsquo;s spend sits in no category — surcharges,
           delivery and rounding carry none by design, and neither does a line nobody has
           classified yet. It is real money and counts in Reports; it simply cannot be budgeted
           against. Anything classifiable is listed on{" "}
@@ -146,20 +167,18 @@ export default async function BudgetsPage({
         </p>
       )}
 
-      {canEdit && totalBudget === 0 && (
-        <form action={copyBudgetsFromPreviousYear}>
-          <input type="hidden" name="fiscal_year" value={selectedFy} />
+      {canCopy && (
+        <form action={copyBudgetsFromPrevious}>
+          <input type="hidden" name="period" value={period.code} />
           <SubmitButton className="rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30">
-            Start from {formatFiscalYear(selectedFy - 1)}&rsquo;s budgets
+            Start from {previous.label}&rsquo;s budgets
           </SubmitButton>
         </form>
       )}
 
       <div className="overflow-x-auto rounded-lg border border-ink/10">
         <table className="min-w-full text-sm">
-          <caption className="sr-only">
-            Budget against actual spend by category for {formatFiscalYear(selectedFy)}
-          </caption>
+          <caption className="sr-only">Budget against actual spend by category for {period.label}</caption>
           <thead className="border-b border-ink/10 bg-ink/[0.03] text-left text-xs text-ink/55">
             <tr>
               <th scope="col" className="px-4 py-2.5 font-medium">Category</th>
@@ -172,38 +191,30 @@ export default async function BudgetsPage({
           <tbody>
             {rows.map((row) => {
               const over = row.usedPct !== null && row.usedPct > 1;
+              const share = row.share;
+              const derived = row.budget !== null && !share?.exact;
               return (
-                <tr key={row.id} className="border-b border-ink/5 last:border-b-0">
+                <tr key={row.id} className="border-b border-ink/5 align-top last:border-b-0">
                   <th scope="row" className="px-4 py-2.5 text-left font-normal text-ink">
                     {row.label}
                   </th>
                   <td className="px-4 py-2.5 text-right">
                     {canEdit ? (
-                      <form action={setCategoryBudget} className="flex justify-end">
-                        <input type="hidden" name="category_id" value={row.id} />
-                        <input type="hidden" name="fiscal_year" value={selectedFy} />
-                        <BudgetInput
-                          defaultValue={row.budget}
-                          ariaLabel={`Budget for ${row.label}`}
-                        />
-                        {/* Kept so the form has a real submit target and the
-                            action has an accessible name. The field saves on
-                            blur; this is not the route anyone takes. */}
-                        <SubmitButton className="sr-only">Save {row.label} budget</SubmitButton>
-                      </form>
+                      <BudgetInput
+                        categoryId={row.id}
+                        categoryLabel={row.label}
+                        period={period.code}
+                        defaultValue={share?.exact ? share.exact.amount : null}
+                        placeholder={derived ? money(row.budget!) : "—"}
+                      />
                     ) : (
-                      <span className="font-mono text-ink/70">
-                        {row.budget === null ? "—" : money(row.budget)}
-                      </span>
+                      <span className="font-mono text-ink/70">{row.budget === null ? "—" : money(row.budget)}</span>
                     )}
+                    <BudgetNote share={share} exact={!!share?.exact} />
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-figures text-ink/80">
-                    {money(row.spent)}
-                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-figures text-ink/80">{money(row.spent)}</td>
                   <td
-                    className={`px-4 py-2.5 text-right font-mono tabular-figures ${
-                      over ? "text-maroon" : "text-ink/80"
-                    }`}
+                    className={`px-4 py-2.5 text-right font-mono tabular-figures ${over ? "text-maroon" : "text-ink/80"}`}
                   >
                     {row.budget === null ? "—" : money(row.budget - row.spent)}
                   </td>
@@ -216,8 +227,54 @@ export default async function BudgetsPage({
           </tbody>
         </table>
       </div>
+
+      {(changeRows ?? []).length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="section-title text-ink">Recent budget changes</h2>
+          <ol className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60 text-sm">
+            {(changeRows ?? []).map((c) => (
+              <li key={c.id} className="flex flex-col gap-0.5 px-4 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                <span className="text-ink">
+                  {labels.get(c.category_id as string) ?? "A removed category"} · {c.label}:{" "}
+                  {CHANGE_WORDS[c.kind as string] ?? c.kind}
+                  {c.kind === "moved_by_override" && c.caused_by_label ? ` ${c.caused_by_label}` : ""}
+                  {c.kind === "set" && c.caused_by_label ? ` (${c.caused_by_label})` : ""}
+                  {" — "}
+                  <span className="font-mono">
+                    {c.from_amount != null ? money(Number(c.from_amount)) : "none"} →{" "}
+                    {c.to_amount != null ? money(Number(c.to_amount)) : "none"}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs text-ink/50">
+                  {c.changed_by ? (nameById.get(c.changed_by as string) ?? "A removed account") : "—"} ·{" "}
+                  {formatDateTime(c.changed_at as string)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
     </div>
   );
+}
+
+/** Where a period's budget comes from, when it is not simply the budget set for it. */
+function BudgetNote({
+  share,
+  exact,
+}: {
+  share: { days: number; uncoveredDays: number; sources: { label: string }[] } | undefined;
+  exact: boolean;
+}) {
+  if (!share || share.uncoveredDays === share.days) return null;
+  const parts: string[] = [];
+  const others = share.sources.filter((s, i) => !exact || i > 0);
+  if (!exact && others.length > 0) parts.push(`from ${others.map((s) => s.label).join(" and ")}`);
+  if (share.uncoveredDays > 0) {
+    parts.push(`${share.uncoveredDays} of ${share.days} days have no budget set`);
+  }
+  if (parts.length === 0) return null;
+  return <p className={`mt-1 text-xs ${share.uncoveredDays > 0 ? "text-maroon/80" : "text-ink/45"}`}>{parts.join(" · ")}</p>;
 }
 
 function Figure({
@@ -254,14 +311,9 @@ function UsageBar({ pct }: { pct: number | null }) {
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-24 overflow-hidden rounded-full bg-ink/10" aria-hidden="true">
-        <div
-          className={`h-full rounded-full ${over ? "bg-maroon" : "bg-gold-deep"}`}
-          style={{ width: `${width}%` }}
-        />
+        <div className={`h-full rounded-full ${over ? "bg-maroon" : "bg-gold-deep"}`} style={{ width: `${width}%` }} />
       </div>
-      <span className={`font-mono text-xs ${over ? "text-maroon" : "text-ink/55"}`}>
-        {Math.round(pct * 100)}%
-      </span>
+      <span className={`font-mono text-xs ${over ? "text-maroon" : "text-ink/55"}`}>{Math.round(pct * 100)}%</span>
     </div>
   );
 }

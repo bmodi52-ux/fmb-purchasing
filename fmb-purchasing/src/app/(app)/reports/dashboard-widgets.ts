@@ -5,8 +5,10 @@
  * can never disagree with what Reports would show for the same filters.
  */
 
+import { inPeriod, parsePeriod } from "@/lib/periods";
 import {
   applyFilters,
+  expenseDate,
   byCategory,
   byVendor,
   byItem,
@@ -54,7 +56,14 @@ export const WIDGET_KINDS: { value: WidgetKind; label: string; needsDimension: b
 export type StatMetric = "spend" | "expenseCount" | "averageExpense" | "gst";
 
 export type WidgetConfig = {
-  fy: number;
+  /**
+   * A period code from lib/periods (#22). "h-current" and its kin roll over
+   * to the new year by themselves.
+   */
+  period?: string;
+  /** The fiscal year widgets saved before #22 carry instead of a period. */
+  fy?: number;
+  /** A month (YYYY-MM) inside the period — only on widgets saved before #22. */
   month: string | null;
   vendorIds: string[];
   categoryIds: string[];
@@ -81,10 +90,16 @@ export type WidgetData =
   | { kind: "unit-cost-chart" | "unit-cost-table"; rows: PerUnitRow[]; itemLabel: string }
   | { kind: "stat-tile"; totals: Totals; metric: StatMetric };
 
-/** The same slice Reports would build for these filters, scoped to one fiscal year. */
-export function sliceFor(config: WidgetConfig, raw: ReportRawData): Slice {
+/** The period a widget is set to, reading a pre-#22 widget's fiscal year as a Hijri year. */
+export function widgetPeriodCode(config: Pick<WidgetConfig, "period" | "fy">): string {
+  return config.period ?? (config.fy != null ? `h${config.fy}` : "h-current");
+}
+
+/** The same slice Reports would build for these filters, scoped to the widget's period. */
+export function sliceFor(config: WidgetConfig, raw: ReportRawData, today: string): Slice {
+  const period = parsePeriod(widgetPeriodCode(config), today);
   const currentIds = new Set(
-    raw.allExpenses.filter((e) => raw.fyOf.get(e.id) === config.fy).map((e) => e.id)
+    raw.allExpenses.filter((e) => inPeriod(period, expenseDate(e))).map((e) => e.id)
   );
   const currentExpenses = raw.allExpenses.filter((e) => currentIds.has(e.id));
   const currentLines = raw.allLines.filter((l) => currentIds.has(l.expenseId));
@@ -97,8 +112,13 @@ export function sliceFor(config: WidgetConfig, raw: ReportRawData): Slice {
   });
 }
 
-export function computeWidgetData(kind: WidgetKind, config: WidgetConfig, raw: ReportRawData): WidgetData {
-  const slice = sliceFor(config, raw);
+export function computeWidgetData(
+  kind: WidgetKind,
+  config: WidgetConfig,
+  raw: ReportRawData,
+  today: string
+): WidgetData {
+  const slice = sliceFor(config, raw, today);
 
   switch (kind) {
     case "spend-over-time":
