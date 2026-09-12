@@ -32,15 +32,27 @@ bouncing off the real sending domain, and keeps training mail away from real sup
 
 ## Setting it up, once
 
-1. **Supabase.** Create a project called *FMB Sandbox* in Sydney. Then, in its SQL editor:
-   - run `supabase/migrations/combined_bootstrap.sql`, then every migration from `0041` onward in order;
-   - mark it as the sandbox, which is what allows it to be emptied:
-     ```sql
-     update deployment_kind set kind = 'sandbox', marked_at = now();
-     ```
-   - create the receipts bucket: `node scripts/create-receipts-bucket.mjs` with the sandbox keys in `.env.local`, or
-     add the bucket by hand and name it `receipts`.
-2. **Vercel.** Add a second project from this repository, deploying `main`, with these environment variables:
+1. **Supabase.** Create a project called *FMB Sandbox* in Sydney, then build its schema in one paste:
+   ```bash
+   node scripts/bundle-migrations.mjs --out sandbox-schema.sql
+   ```
+   That is every migration in order, 0001 through 0058. Paste it into the new project's SQL editor and run it once.
+
+   `combined_bootstrap.sql` is **not** a shortcut for this: it is an alternative to 0001 alone, and a database built
+   from it is forty migrations behind.
+
+   Then mark the project as the sandbox — this is what allows it to be emptied, and what keeps the reset away from
+   live:
+   ```sql
+   update deployment_kind set kind = 'sandbox', marked_at = now();
+   ```
+2. **This machine.** Create `.env.sandbox` beside `.env.local`, holding the sandbox project's
+   `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It is git-ignored, like every other env file.
+3. **The receipts bucket**, pointed at the sandbox rather than live:
+   ```bash
+   node scripts/create-receipts-bucket.mjs --env .env.sandbox
+   ```
+4. **Vercel.** Add a second project from this repository, deploying `main`, with these environment variables:
 
    | Variable | Value |
    | --- | --- |
@@ -51,9 +63,7 @@ bouncing off the real sending domain, and keeps training mail away from real sup
    | `ANTHROPIC_API_KEY` | the same as live, as decided |
    | `CRON_SECRET`, `INBOUND_EMAIL_SECRET` | **leave unset**, so the daily job and the receipts inbox stay off |
 
-3. **DNS.** Point `sandbox.fmbpurchasing.com.au` at that Vercel project.
-4. **This machine.** Create `.env.sandbox` beside `.env.local`, holding the sandbox project's
-   `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It is git-ignored, like every other env file.
+5. **DNS.** Point `sandbox.fmbpurchasing.com.au` at that Vercel project.
 
 ## Filling it, and resetting it
 
