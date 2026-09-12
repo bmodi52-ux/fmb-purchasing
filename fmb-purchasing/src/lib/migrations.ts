@@ -29,6 +29,7 @@ export const LEDGERED_MIGRATIONS = [
   "0054_receipt_capture.sql",
   "0055_records.sql",
   "0056_offline_receipts.sql",
+  "0057_split_admin_pages.sql",
 ] as const;
 
 export type MigrationStatus =

@@ -10,7 +10,7 @@ import { requirePermission } from "@/lib/permissions";
 export async function recordRestoreRehearsal(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  await requirePermission(user, "admin_users", "manage_users");
+  await requirePermission(user, "records", "manage");
 
   const day = String(formData.get("rehearsed_on") ?? "");
   const what = String(formData.get("what") ?? "");

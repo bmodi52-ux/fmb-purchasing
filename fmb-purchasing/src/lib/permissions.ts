@@ -17,7 +17,12 @@ export type PageKey =
   | "review_queue"
   | "budgets"
   | "admin_users"
-  | "admin_teams";
+  | "admin_teams"
+  // Split out of payments/admin_users by 0057, so each can be granted alone.
+  | "accounting"
+  | "announcements"
+  | "app_settings"
+  | "records";
 
 export type ActionKey =
   | "view"
@@ -29,7 +34,8 @@ export type ActionKey =
   | "approve_master_data"
   | "manage_users"
   | "manage_teams"
-  | "export";
+  | "export"
+  | "manage";
 
 /**
  * All (page, action) grants the user holds: everything their teams grant, and

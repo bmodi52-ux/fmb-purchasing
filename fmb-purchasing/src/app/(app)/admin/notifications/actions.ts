@@ -13,7 +13,7 @@ import { reportError } from "@/lib/errors";
 async function requireNotificationsAdmin() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  await requirePermission(user, "admin_users", "manage_users");
+  await requirePermission(user, "announcements", "manage");
   return user;
 }
 

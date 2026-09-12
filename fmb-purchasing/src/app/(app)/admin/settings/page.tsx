@@ -30,7 +30,7 @@ export const maxDuration = 300;
 export default async function AppSettingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  await requirePermission(user, "admin_users", "manage_users");
+  await requirePermission(user, "app_settings", "view");
 
   const admin = createAdminClient();
   const [settings, { data: teams }, { data: lastRun }] = await Promise.all([

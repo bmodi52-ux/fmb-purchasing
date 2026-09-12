@@ -85,3 +85,39 @@ export async function togglePermission(formData: FormData) {
     "The permission could not be changed. Try again."
   );
 }
+
+/**
+ * Grant or revoke a whole row (every action on one page) or column (one
+ * action on every page) in one go — the "all" toggles on the grid.
+ *
+ * The page and action lists come from the registry rather than the form, so a
+ * posted key can only ever widen to cells that exist. One database call, so a
+ * row is never left half granted.
+ */
+export async function setPermissionScope(formData: FormData) {
+  const user = await requireTeamsAdmin();
+  const teamId = String(formData.get("team_id"));
+  const scope = String(formData.get("scope"));
+  const key = String(formData.get("key"));
+  const granted = String(formData.get("granted")) === "true";
+  if (!teamId || !key || (scope !== "row" && scope !== "column")) return;
+
+  const admin = createAdminClient();
+  const [{ data: pages }, { data: actions }] = await Promise.all([
+    admin.from("app_pages").select("key").eq("is_permission_scope", true),
+    admin.from("app_actions").select("key"),
+  ]);
+  const pageKeys = (pages ?? []).map((p) => p.key as string);
+  const actionKeys = (actions ?? []).map((a) => a.key as string);
+
+  const targetPages = scope === "row" ? pageKeys.filter((p) => p === key) : pageKeys;
+  const targetActions = scope === "column" ? actionKeys.filter((a) => a === key) : actionKeys;
+  if (targetPages.length === 0 || targetActions.length === 0) return;
+
+  await run(
+    user.id,
+    "admin_set_permissions",
+    { p_team_id: teamId, p_pages: targetPages, p_actions: targetActions, p_granted: granted },
+    "Those permissions could not be changed. Try again."
+  );
+}

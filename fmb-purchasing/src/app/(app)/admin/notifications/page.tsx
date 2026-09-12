@@ -21,7 +21,7 @@ const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", curr
 export default async function NotificationsAdminPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  await requirePermission(user, "admin_users", "manage_users");
+  await requirePermission(user, "announcements", "view");
 
   const admin = createAdminClient();
   const [
