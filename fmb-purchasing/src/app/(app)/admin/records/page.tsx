@@ -182,7 +182,8 @@ export default async function RecordsPage() {
       <section className="flex flex-col gap-2">
         <h2 className="section-title text-ink">Keeping receipts</h2>
         <p className="max-w-2xl text-sm text-ink/70">
-          {(receiptCount ?? 0).toLocaleString("en-AU")} receipt files are attached to expenses. None can be removed for
+          {(receiptCount ?? 0).toLocaleString("en-AU")}{" "}
+          receipt files are attached to expenses. None can be removed for
           five years: once an expense is decided its receipts can&apos;t be taken off it, and an expense with receipts
           can&apos;t be deleted. While an expense is still waiting, its submitter can swap a wrong file for the right one.
         </p>
