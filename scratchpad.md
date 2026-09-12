@@ -10,25 +10,15 @@ renumbers a list and would show #12 as 10.
 
 <!-- What happened, where, and what you expected instead. -->
 
-### 20. Approving and paying can half-fail without anyone knowing
-
-**When:** now.
-
-Approve, decline, reopen, mark paid and reverse payment each make two or three
-separate database writes (the status change, the history row, and for payments
-the payment run), and none checks whether a write failed. If one fails partway,
-an expense can show Paid with no history row, or an empty PR- payment run is
-left behind — and the person sees success either way. Fix: one database
-function per action, as migration 0031 did for creating an expense, and an
-error shown when it fails. (`approvals/actions.ts` decide and reopenExpense;
-`payments/actions.ts` pay and reversePayment.)
+None outstanding.
 
 ## Improvements
 
 <!-- Existing things that should work better. -->
 
 Items 18–50 came from the systems review of 2026-09-11, each with the timing
-decided for it.
+decided for it. Everything marked "now" is in Done; what remains here was
+marked "later".
 
 ### 18. Keep submitting, approving and paying with different people
 
@@ -48,204 +38,12 @@ Plan: new accounts always start unconfirmed; a different person confirms,
 noting they called the supplier on a number already on file; payers and the
 FMB Head are told whenever an account changes.
 
-### 21. Show possible duplicates to the approver
-
-**When:** now. May be rolled back after seeing how it goes, so it should be
-easy to switch off.
-
-The "same file" and "same invoice number" warnings only appear on the submit
-form, where the submitter can carry on regardless. Show "Possible duplicate of
-E-0123" on Approvals, and on Payments too.
-
-### 22. Choose the financial year: Hijri or Australian
-
-**When:** now. The user had this in mind too.
-
-Everything that works by year — Reports, Budgets, All expenses, the dashboard,
-exports — should work with either the Hijri year (from 1 Shawwal) or the
-Australian financial year (1 July – 30 June), which the GST return uses.
-
-Decided (2026-09-11):
-
-- A switch on each page, not a per-person setting.
-- Three kinds of year: Hijri, Australian financial year, and calendar year
-  (January – December). Quarters and single months in each, plus a custom
-  date range under "Advanced".
-- Budgets can be set in any of the calendars and carry across seamlessly: view
-  a July – June year and each Hijri year's budget contributes the part that
-  falls inside it, with the rest taken from the next Hijri year.
-
-Build plan (proposed 2026-09-11; the questions it raised were all answered):
-
-- One period picker used on every page that works by year. Basic: the kind of
-  year, which year, then whole year / quarter / month. Advanced: a custom
-  from–to range, with both ends also shown in the other calendar. Presets:
-  this year so far, previous year, last 12 months.
-- Quarters follow the chosen year: Hijri quarters are three Hijri months;
-  Australian quarters start in July, matching BAS quarters.
-- The period lives in the page address, so a link, a saved view (#41) and the
-  browser's back button all keep it.
-- "Compare with previous period" picks the matching period in the same kind of
-  year.
-- Budgets are stored as a date range (start, end, amount, and which calendar
-  they were entered in) instead of a Hijri year number. Any period's budget is
-  the sum of the days it shares with each budget. A 365-day July – June year
-  can touch three Hijri years, since a Hijri year is 354 or 355 days.
-- A period partly covered by no budget says so ("133 days have no budget
-  set"), rather than showing a smaller number as if it were the whole budget.
-- Monthly phasing (#39), when set, replaces even spreading by day.
-
-Decided (2026-09-11, second round):
-
-- Every page opens on the current Hijri year, as today.
-- A yearly budget is spread evenly by day unless monthly amounts are set (#39)
-  — taken as agreed; the user left the suggestion unchanged.
-- Overlapping budgets in different calendars: the older budget keeps the days
-  it already covers, and the newer budget's total is made true by putting the
-  remainder on its days that no budget covered. Both totals hold.
-
-  Worked example (made-up dates): Hijri budget $9,000 for 1 May 2026 – 19 Apr
-  2027 (354 days). Financial year 1 Jul 2026 – 30 Jun 2027 set at $10,000. The
-  Hijri budget puts 293 days × $25.42 ≈ $7,449 inside the financial year; the 72
-  uncovered days (20 Apr – 30 Jun 2027) get $10,000 − $7,449 ≈ $2,551. The Hijri
-  year still totals $9,000, the financial year $10,000. Confirmed: the user's
-  own figures were only illustrative, and the rule is that both totals hold.
-
-- When both totals can't hold, warn and let the person override (decided
-  2026-09-11, third round). This covers three cases: a new budget with no
-  uncovered days (e.g. a quarter inside a budgeted Hijri year); a new budget
-  smaller than what older budgets already put in its period; and an edit to an
-  older budget that would push a newer budget's leftover days below zero. The
-  warning names the budget already set and what will happen to it.
-
-  Meaning of override, confirmed by the user: the budget being saved takes the days in
-  dispute, and the other budget's total moves by the difference. The warning
-  shows it before saving, e.g. "Hijri 1447 Meat will change from $9,000 to
-  $8,400". Every override is recorded — who, when, and both amounts — in the
-  budget's history (#45).
-
-### 23. Withdraw a submission instead of deleting it
-
-**When:** now.
-
-Deleting a submission before a decision also deletes its history, and the
-duplicate check can no longer see it. Replace it with a Withdrawn status,
-hidden from the normal lists, keeping the files and the history.
-
-### 24. Record changes to teams and permissions
-
-**When:** now.
-
-Who granted or removed which permission, for which team or person, and when —
-shown on Teams & permissions. Today nothing is recorded.
-
-### 25. Record which migrations each database has had
-
-**When:** now.
-
-Migrations are pasted into the Supabase SQL editor by hand, and nothing records
-which have run. Needed before the sandbox (#1) becomes a second database: a
-table of applied migrations, and a script that applies only the missing ones.
-
 ### 26. Two-factor sign-in for the accounts that move money
 
 **When:** later.
 
 An authenticator-app code required for anyone with Mark paid, Manage users or
 Manage teams; optional for everyone else.
-
-### 27. Reminders for things left waiting, then escalation
-
-**When:** now, once the questions below are answered.
-
-Notifications are in-app only, so something waiting is only seen by someone
-who opens the app. A reminder goes out when something has waited too long, and
-if it keeps waiting, someone else is told.
-
-Decided (2026-09-11): the user left the design to Claude. Proposed defaults,
-all changeable by an admin on a Reminders settings page:
-
-| What is waiting | Reminded | First reminder | Escalated |
-|---|---|---|---|
-| Expenses to approve | Approvers | after 2 days | after 5 days |
-| Approved, not yet paid | Payers | after 3 days | after 7 days |
-| Bank accounts not confirmed | Payers | after 1 day | after 3 days |
-| Declined, not resubmitted | The submitter | once, after 3 days | never |
-| New vendors, items and packs | Pricelist approvers | weekly, Monday | never |
-
-- One summary per person per day at 8:00am Sydney time, not a message per
-  expense: "3 expenses waiting for approval, oldest 5 days".
-- Sent by push or email according to each person's settings (#28), and always
-  in the app. Escalations go by both push and email.
-- Escalation goes to the person's active stand-in (#35) if they have one,
-  otherwise to a team the admin chooses for each list (e.g. FMB Head).
-- A reminder stops as soon as the thing is dealt with.
-- Runs as one scheduled job a day.
-
-### 28. Push notifications
-
-**When:** now.
-
-Notifications that reach a phone or computer when the app isn't open. On an
-iPhone this only works once the app has been added to the home screen (iOS 16.4
-or later), and each person allows it once per device.
-
-Decided (2026-09-11):
-
-- Each person customises their notifications: which kinds they get, turned on
-  or off individually.
-- Admins can create new notifications.
-
-The app sends six kinds today: submitted (to the submitter), new expense to
-review, approved, declined, paid, and system error (to admins). The reminders
-in #27 and the account-change alert in #19 would add more.
-
-Proposed build:
-
-- A Notifications settings page: one row per kind, with a switch for each way
-  it can arrive — in the app, push, email.
-- Admins set the starting choices for each team, so a new Treasurer starts with
-  "expense approved, ready to pay" on push without having to find the setting.
-- Admins can mark a kind as required for a team (e.g. bank account changed, for
-  payers), which that team's members can't turn off.
-
-"Admins can create new notifications" means both (decided 2026-09-11):
-
-- Announcements: an admin writes a message and sends it to everyone, chosen
-  teams or chosen people ("Ashara purchasing closes Friday").
-- Alert rules: an admin builds a new alert from set building blocks — when
-  (expense submitted / approved / paid, vendor added, budget passes a
-  percentage), only if (amount over, category, vendor, cost centre), tell whom
-  (a team or a person). E.g. "When an Events expense over $1,000 is submitted,
-  tell the FMB Head."
-
-Budget-percentage and cost-centre conditions depend on #39.
-
-### 29. Pricelist: price alerts, preferred vendors, and price list import
-
-**When:** now.
-
-- An alert when the price paid per kg, litre or each moves more than a set
-  percentage from the last purchase. Overlaps #42 — build them together.
-- A preferred vendor for each item, and a "cheapest recent source" column.
-- Import a supplier's price list from a CSV or spreadsheet (#16 left this out).
-
-Decided (2026-09-11): the alert limit is set by the user, not fixed. Proposed:
-
-- A default percentage for the whole Pricelist (starting at 10%), with a
-  separate limit for rises and for falls.
-- Overridable per category and per item — meat may warrant a tighter limit
-  than disposables.
-- Optionally an expected price range per item ("Chicken: $6.50–$8.00 per kg"),
-  alerting whenever a purchase falls outside it.
-
-### 30. Check a vendor's GST registration
-
-**When:** now.
-
-The ABN lookup also says whether a business is registered for GST. Record it on
-the vendor, and flag an expense where GST is charged by a vendor that isn't
-registered.
 
 ### 31. Payment terms and due dates
 
@@ -263,23 +61,6 @@ the FMB Head, and Events go to the events lead. The status history already
 records any number of steps (migration 0001), so approvals in several steps
 need no change to how history is stored.
 
-### 35. A stand-in approver for a date range
-
-**When:** now.
-
-An approver names someone to approve in their place between two dates, and the
-stand-in's decisions are recorded as made on their behalf.
-
-Decided (2026-09-11): the person going away nominates their own stand-in and
-the dates. Proposed details:
-
-- Covers paying as well as approving: whoever holds either duty can nominate.
-- The stand-in can be anyone with an active login; they gain only the duties
-  being covered, and only between the dates.
-- Admins are told, and each nomination is recorded with the permission changes
-  (#24), since it is a temporary grant.
-- Once #18 is built, a stand-in still can't approve their own expense.
-
 ### 36. Purchase requests before spending
 
 **When:** later.
@@ -289,88 +70,11 @@ estimate, the vendor, and any quotes. The expense later links to its request,
 and the approver sees the estimate beside the actual. No purchase orders for
 routine shopping.
 
-### 37. Payments: bank file, remittance, and statement matching
-
-**When:** now.
-
-- An ABA file from a payment run, to upload to the bank's batch payments.
-- An email to the payee listing what a payment covered.
-- Import a bank statement CSV to confirm the money left, matched by reference.
-- A list of approved but unpaid expenses — ordered by approval date until
-  payment terms (#31) give each one a due date.
-
-Decided (2026-09-11): assume FMB's bank accepts batch payment (ABA) files.
-The file's header usually needs FMB's own bank details and a user ID number
-the bank issues for batch payments, so a settings page will ask for those.
-
-### 38. Accounting: account codes, GST summary, and a Xero integration plan
-
-**When:** now. Integration with Xero to be planned.
-
-- An account and a tax code for each category.
-- A GST summary for the chosen financial year (#22): GST on purchases, capital
-  purchases and other purchases.
-- A flag on GST claimed over $82.50 (incl. GST) without a valid tax invoice.
-- Lock a period once its GST return is lodged; later corrections go in as
-  adjustments.
-- Plan the Xero integration: an import file first, or straight to syncing;
-  what goes across (approved or paid expenses) and when; how categories map to
-  Xero accounts.
-
-Confirm the tax points with FMB's accountant before building on them.
-
-Decided (2026-09-11): FMB already uses Xero.
-
-Open questions:
-
-- The chart of accounts: a CSV export from Xero (Accounting → Chart of
-  accounts → Export) would settle how categories map to accounts.
-- How purchases reach Xero today: entered as bills and then paid, recorded as
-  "spend money" straight against the bank account, or bank-feed transactions
-  coded as they come in? This decides what the app sends.
-- Does FMB account for GST on a cash or accrual basis? This decides whether an
-  expense counts when it's approved or when it's paid.
-- Who holds Xero admin access, to approve connecting the app later?
-
-### 39. Budgets and cost centres
-
-**When:** now.
-
-- A cost centre or event on each expense (daily kitchen, Ashara, Ramadan,
-  maintenance, committees), each with its own budgets.
-- The budget position shown on the approval row ("Meat: 82% used, this takes it
-  to 86%").
-- Submitted and approved-but-unpaid expenses counted as committed.
-- Alerts at 80% and 100%.
-- Optional monthly phasing, since Ramadan spend isn't spread evenly.
-
-Open questions, to be answered later by the user: the list of cost centres and
-events; is it set per expense or per line?
-
 ### 40. Monthly committee pack by email
 
 **When:** later.
 
 A report emailed automatically each month to the committee.
-
-### 41. Saved report views
-
-**When:** now.
-
-Save a report's filters and period under a name ("Meat, this year, by vendor")
-and open it again later.
-
-Decided (2026-09-11): views can be shared. Proposed: whoever saves a view
-chooses to keep it to themselves or share it with everyone who can see
-Reports, or with chosen teams. Others open it or copy it; only its owner can
-change or delete it.
-
-### 42. Flag unusual spend and price jumps
-
-**When:** now.
-
-Flag when a vendor's spend or an item's price is well above its usual level.
-Overlaps #29's price alert — build them together.
 
 ### 43. Stock, recipes and menu costing
 
@@ -391,61 +95,6 @@ Overlaps #29's price alert — build them together.
 - Restricted database access for pages that only read.
 
 Two-factor sign-in is #26.
-
-### 45. Audit trail and records
-
-**When:** now.
-
-- A history of changes to vendor records (permissions are #24).
-- Scheduled backups of receipt files, which Supabase's point-in-time recovery
-  doesn't cover.
-- A record of when a restore was last rehearsed.
-- No receipt under five years old can be deleted.
-
-### 46. Engineering and reliability
-
-**When:** now, depending on workload.
-
-- End-to-end tests of submit → approve → pay.
-- An uptime check, and an alert when a new error is logged.
-
-The sandbox is #1; the migration record is #25.
-
-### 47. Offline receipt capture
-
-**When:** now.
-
-Take a receipt photo with no signal; it is kept on the phone and uploads once
-back online. Push notifications are #28.
-
-### 48. Show GST under category and item filters
-
-**When:** now.
-
-Reports hide GST whenever a category or item filter is on, because the code
-still assumes GST is only recorded per expense. Every line has carried its own
-GST since migration 0026. Load it and show GST under every filter, marking
-lines from before 0026 as apportioned. (`reports/aggregate.ts:178`)
-
-### 49. Receipt capture: forwarding address, supplier defaults, quality checks
-
-**When:** now.
-
-- An email address receipts can be forwarded to, creating a draft for the
-  sender.
-- Defaults per supplier: usual category, who gets paid, GST treatment.
-- Re-run the receipt-reading test set on a schedule, to catch it getting worse
-  when the AI model changes.
-- Warn about a blurry photo, or one with the total cut off, before upload.
-
-### 50. Check the lines' GST against the receipt
-
-**When:** now.
-
-- Flag, to the approver, when the GST on the lines doesn't add up to the GST
-  printed on the receipt.
-- Mark equipment lines as capital purchases, which the GST return reports
-  separately.
 
 ## Ideas
 
@@ -497,6 +146,170 @@ No-ABN withholding may apply when a contractor doesn't quote an ABN. Confirm
 with FMB's accountant whether it does.
 
 ## Done
+
+### 25. Record which migrations each database has had
+
+A `schema_migrations` ledger (0041), written to by every migration from 0041
+on, with `scripts/migration-status.mjs` listing what a database still needs and
+System errors warning when it is behind. A test fails if a migration forgets to
+record itself.
+
+### 20. Approving and paying can half-fail without anyone knowing
+
+One database function per action (0042): `decide_expenses`, `reopen_expense`,
+`pay_expenses` and `reverse_payment`, each writing the status, the history row
+and the payment run together, and reporting failure instead of showing success.
+
+### 23. Withdraw a submission instead of deleting it
+
+Submitters withdraw rather than delete (0043, 0044), so the history stays. A
+withdrawn expense has its own tab and can be submitted again, and it counts as
+spend nowhere.
+
+### 24. Record changes to teams and permissions
+
+Every change to teams, memberships, permissions and accounts is recorded with
+who made it (0045), shown as "Recent changes" on the Teams page. Automatic
+enrolments say so.
+
+### 21. Show possible duplicates to the approver
+
+"Possible duplicate of E-0123" now appears on Approvals and Payments as well as
+on the submit form, matched by receipt file or by vendor and invoice number.
+Switchable from App settings, as asked.
+
+### 22. Choose the financial year: Hijri or Australian
+
+Any period, chosen on the page: Hijri year (Shawwal–Ramadan, Fatimi/Misri), the
+Australian financial year, a calendar year, a quarter, a month, or custom dates
+(0049). Reports, Budgets, All expenses, Accounting and dashboard widgets all
+take it.
+
+Budgets carry across calendars as decided: a budget is a date range, the older
+one keeps its days, and a newer one's remainder spreads over the days it does
+not cover. Saving over an existing budget warns first and offers to override,
+and monthly phasing weights the days.
+
+### 48. Show GST under category and item filters
+
+Reports load each line's own GST, so it holds under any filter. Lines from
+before 0026 are marked as apportioned from the receipt total.
+
+### 50. Check the lines' GST against the receipt
+
+The GST printed on the receipt is stored (0048) and the approver is told when
+the lines disagree with it. Equipment lines over the threshold in App settings
+are marked as capital purchases, which the GST return reports separately.
+
+### 30. Check a vendor's GST registration
+
+The ABR's answer is read on vendor creation, when an ABN changes, on submission
+when it is over 30 days old, and on demand from a "Check with the ABR" button
+(0047). GST charged by a vendor that is not registered, or whose ABN is
+cancelled, is flagged to the approver.
+
+### 27. Reminders for things left waiting, then escalation
+
+A daily job at 8am Sydney sends one summary per person for anything waiting
+longer than the limit, then escalates to their stand-in or a chosen team. The
+limits, the escalation teams and the weekly master-data reminder are all set on
+App settings; defaults were chosen rather than asked for, as agreed.
+
+### 28. Push notifications
+
+Each person chooses how every kind of notification reaches them — in the app,
+by push, by email (0050). Teams can set defaults or require a channel, and the
+app locks escalations to push and email. Admins can post announcements and
+build alert rules from set parts (when, only if, tell), which now include price
+moves and unusual spend.
+
+### 35. A stand-in approver for a date range
+
+Whoever holds approving or paying names their own stand-in and the dates
+(0051). The stand-in gains only those duties, only between those dates, and
+each nomination is recorded with the permission changes.
+
+### 37. Payments: bank file, remittance, and statement matching
+
+An ABA batch file from a payment run, a remittance advice emailed to the payee,
+and a bank statement CSV imported to confirm the money actually left (0052).
+FMB's own bank details live on App settings, as the header needs them.
+
+### 38. Accounting: account codes, GST summary, and a Xero integration plan
+
+**Partly done.** An account code per category, a GST summary for any period
+(G10, G11, 1B, GST-free), a flag on GST over $82.50 without a tax invoice, and
+lodged periods locked against reopening or reversal (0052). A Xero bills CSV
+exports one draft bill per expense, and `docs/xero-integration.md` holds the
+plan.
+
+Still to answer, before a live Xero connection: the chart of accounts export,
+how purchases reach Xero today, cash or accrual GST, and who holds Xero admin.
+
+### 39. Budgets and cost centres
+
+**Partly done.** Budgets are ranges in any calendar, with committed spend
+counted, the position shown on the approval row ("Meat: 82% used, this takes it
+to 86%"), alerts at 80% and 100% to whoever sets budgets, and optional monthly
+phasing (0049, 0052).
+
+Cost centres and events were left for later, as decided; the list of them, and
+whether they sit per expense or per line, is still to come from FMB.
+
+### 29. Pricelist: price alerts, preferred vendors, and price list import
+
+An alert when a price per kg, litre or each moves further than the limit from
+the last purchase (0053). The limit is set for the whole Pricelist (10% up and
+down to start), per category and per item, with an optional expected price
+range per item. Each item can name a preferred vendor, and a "Cheapest
+recently" column shows the lowest price actually paid. A supplier's price list
+imports from CSV or Excel, read in pieces by the same reader as a photographed
+list.
+
+### 42. Flag unusual spend and price jumps
+
+An expense at least three times its vendor's usual — the median of that
+vendor's expenses in the year before, once there are five to judge by — is
+flagged on Approvals and on the expense, alongside #29's price flags. The
+multiple and the history needed are adjustable.
+
+### 41. Saved report views
+
+A report's period, filters and section save under a name (0053). The owner
+keeps it private, shares it with everyone who can see Reports, or with chosen
+teams; others open or copy it, and only the owner changes or deletes it.
+
+### 49. Receipt capture: forwarding address, supplier defaults, quality checks
+
+Receipts forwarded to the app's address wait on the sender's Submit page
+(0054); `docs/receipts-by-email.md` covers connecting an email service. Each
+vendor has usual settings — category, who is paid, GST treatment — filled in on
+Submit where the receipt left a gap. A blurry photo is caught before upload,
+and a total that could not be read says so. The confirmed receipts are read
+again every 30 days, a few each morning, and admins are told if accuracy drops.
+
+### 45. Audit trail and records
+
+Every change to a vendor is recorded with who made it and shown on its page
+(0055), bank changes as events without the numbers. The database refuses to
+lose a receipt inside five years. A Backups & records page tracks database and
+receipt-file backups and restore rehearsals, warns when either is overdue, and
+reminds admins on Mondays; `scripts/backup-receipts.mjs` mirrors the bucket.
+
+### 47. Offline receipt capture
+
+A photo taken with no signal stays on the phone and is sent once it is back
+online, waiting on Submit beside emailed-in receipts (0056). When the app
+cannot be reached at all, the service worker shows a page that still takes
+photos.
+
+### 46. Engineering and reliability
+
+An end-to-end test takes one expense from submission through approval and
+payment into a bank file and a Xero row, then reverses it. `/api/health`
+answers whether the database is reachable and its migrations current, and a
+GitHub schedule calls it every 15 minutes. A new kind of background failure now
+reaches admins by push and email. `docs/monitoring.md` explains all three.
 
 ### 17. Approvals and My submissions: optimise and streamline
 
