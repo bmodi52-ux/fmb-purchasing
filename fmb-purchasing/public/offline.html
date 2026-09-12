@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#D89C24">
+<title>Offline — FMB Purchasing</title>
+<!--
+  Shown by the service worker when the app can't be reached (scratchpad #47).
+  Self-contained on purpose: no scripts or styles from the app, which are not
+  cached. Photos are kept in IndexedDB under the same names as
+  src/lib/offline-queue.ts, and the app sends them once it is back online.
+-->
+<style>
+  :root { --gold: #d89c24; --gold-deep: #a97614; --ink: #2b211c; --cream: #fbf6ec; --palm: #009c48; --maroon: #4a160a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--cream); color: var(--ink);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 32rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; display: flex; flex-direction: column; gap: 1.25rem; }
+  header { display: flex; align-items: center; gap: .75rem; }
+  header img { width: 44px; height: 44px; }
+  h1 { font: 600 1.4rem/1.25 Georgia, "Times New Roman", serif; margin: 0; text-wrap: balance; }
+  p { margin: 0; }
+  .muted { color: rgb(43 33 28 / .65); font-size: .93rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+  .button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: .7rem 1.2rem;
+            border-radius: .5rem; font-weight: 600; font-size: 1rem; cursor: pointer; border: 1px solid transparent; }
+  .primary { background: var(--gold); color: var(--ink); }
+  .primary:active { background: var(--gold-deep); }
+  .secondary { background: white; color: var(--ink); border-color: rgb(43 33 28 / .15); }
+  .button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .status { border-radius: .5rem; padding: .75rem 1rem; font-size: .95rem; }
+  .ok { background: rgb(0 156 72 / .1); }
+  .warn { background: rgb(74 22 10 / .08); color: var(--maroon); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: .6rem; }
+  li { position: relative; }
+  li img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: .4rem; display: block; background: white; }
+  li button { position: absolute; top: -8px; right: -8px; width: 30px; height: 30px; border-radius: 50%;
+              border: 0; background: var(--ink); color: var(--cream); font-size: 1rem; cursor: pointer; }
+  li span { display: block; font-size: .72rem; color: rgb(43 33 28 / .6); margin-top: .2rem; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="/fmb-logo.png" alt="">
+    <h1>No connection</h1>
+  </header>
+
+  <p id="intro">FMB Purchasing can't be reached right now. You can still photograph a receipt: it's kept on this phone and sent as soon as you're back online, then waits on your Submit page.</p>
+
+  <div class="actions">
+    <label class="button primary">
+      <input id="camera" type="file" accept="image/*" capture="environment">
+      Take a photo of the receipt
+    </label>
+    <label class="button secondary">
+      <input id="files" type="file" accept="image/*" multiple>
+      Choose photos
+    </label>
+  </div>
+
+  <p id="message" class="status ok" role="status" hidden></p>
+  <p id="unsupported" class="status warn" hidden>This browser can't keep photos while offline. Take the photo with your camera and upload it on Submit once you have signal.</p>
+
+  <section id="kept" hidden>
+    <p class="muted" id="kept-count"></p>
+    <ul id="list"></ul>
+  </section>
+
+  <div class="actions">
+    <a class="button secondary" id="retry" href="/submit">Try the app again</a>
+  </div>
+  <p class="muted" id="online-note" hidden>You're back online. Open the app and the photos will be sent.</p>
+</main>
+
+<script>
+(function () {
+  var DB = "fmb-offline", VERSION = 1, STORE = "receipts";
+  var MAX_SIDE = 2000, QUALITY = 0.85;
+
+  if (!("indexedDB" in window)) {
+    document.getElementById("unsupported").hidden = false;
+    return;
+  }
+
+  function open() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(DB, VERSION);
+      req.onupgradeneeded = function () {
+        if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE, { keyPath: "id" });
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  function run(mode, work) {
+    return open().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(STORE, mode);
+        var req = work(tx.objectStore(STORE));
+        tx.oncomplete = function () { db.close(); resolve(req.result); };
+        tx.onerror = function () { db.close(); reject(tx.error); };
+      });
+    });
+  }
+
+  // The same shrinking the app does before an upload, so what is kept is small.
+  function shrink(file) {
+    if (!/^image\//.test(file.type) || !window.createImageBitmap) return Promise.resolve(file);
+    return createImageBitmap(file).then(function (bitmap) {
+      var scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+      if (scale === 1 && file.size < 1500000) { bitmap.close(); return file; }
+      var canvas = document.createElement("canvas");
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      return new Promise(function (resolve) {
+        canvas.toBlob(function (blob) { resolve(blob || file); }, "image/jpeg", QUALITY);
+      });
+    }).catch(function () { return file; });
+  }
+
+  var urls = [];
+  function render() {
+    run("readonly", function (store) { return store.getAll(); }).then(function (items) {
+      urls.forEach(URL.revokeObjectURL);
+      urls = [];
+      var list = document.getElementById("list");
+      list.textContent = "";
+      items.sort(function (a, b) { return a.takenAt < b.takenAt ? -1 : 1; });
+      items.forEach(function (item) {
+        var li = document.createElement("li");
+        var img = document.createElement("img");
+        var url = URL.createObjectURL(item.blob);
+        urls.push(url);
+        img.src = url;
+        img.alt = "Receipt photo";
+        var when = document.createElement("span");
+        when.textContent = new Date(item.takenAt).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" });
+        var remove = document.createElement("button");
+        remove.type = "button";
+        remove.setAttribute("aria-label", "Remove this photo");
+        remove.textContent = "×";
+        remove.onclick = function () {
+          run("readwrite", function (store) { return store.delete(item.id); }).then(render);
+        };
+        li.appendChild(img);
+        li.appendChild(remove);
+        li.appendChild(when);
+        list.appendChild(li);
+      });
+      document.getElementById("kept").hidden = items.length === 0;
+      document.getElementById("kept-count").textContent =
+        items.length + (items.length === 1 ? " photo" : " photos") + " kept on this phone, waiting to be sent:";
+    });
+  }
+
+  function keep(files) {
+    var message = document.getElementById("message");
+    var chosen = Array.prototype.slice.call(files || []);
+    if (!chosen.length) return;
+    Promise.all(chosen.map(function (file) {
+      return shrink(file).then(function (blob) {
+        var entry = {
+          id: Date.now() + "-" + Math.random().toString(36).slice(2, 10),
+          blob: blob,
+          name: (file.name || "Receipt photo").replace(/\.[^.]+$/, "") + ".jpg",
+          type: blob.type || "image/jpeg",
+          takenAt: new Date().toISOString()
+        };
+        return run("readwrite", function (store) { return store.put(entry); });
+      });
+    })).then(function () {
+      message.className = "status ok";
+      message.textContent = chosen.length === 1 ? "Kept. Take another, or put the phone away." : "Kept " + chosen.length + " photos.";
+      message.hidden = false;
+      render();
+    }).catch(function () {
+      message.className = "status warn";
+      message.textContent = "The photo couldn't be kept — the phone may be out of space.";
+      message.hidden = false;
+    });
+  }
+
+  ["camera", "files"].forEach(function (id) {
+    var input = document.getElementById(id);
+    input.addEventListener("change", function () { keep(input.files); input.value = ""; });
+  });
+
+  function onlineState() {
+    document.getElementById("online-note").hidden = !navigator.onLine;
+  }
+  window.addEventListener("online", onlineState);
+  window.addEventListener("offline", onlineState);
+  onlineState();
+  render();
+})();
+</script>
+</body>
+</html>
