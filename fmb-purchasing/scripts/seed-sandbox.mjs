@@ -32,6 +32,7 @@ import {
   scrubbedPersonName,
   scrubbedPhone,
   scrubbedVendorName,
+  withoutGeneratedColumns,
 } from "../src/lib/sandbox-scrub.ts";
 
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -201,7 +202,7 @@ function scrubRow(table, row, userMap) {
       remitterName: "FMB SANDBOX",
     };
   }
-  return out;
+  return withoutGeneratedColumns(table, out);
 }
 
 const rowCount = TABLE_ORDER.reduce((n, t) => n + (source[t]?.length || 0), 0);
@@ -297,6 +298,10 @@ for (const table of TABLE_ORDER) {
   }
   console.log("  " + table.padEnd(30) + String(rows.length).padStart(6) + " rows");
 }
+
+// The numbering sequences now sit past everything just written.
+const synced = await to.rpc("sandbox_sync_sequences");
+if (synced.error) console.log("  !! sequences: " + synced.error.message);
 
 // Trainees join the teams they are listed under.
 const teamsByName = new Map((source.teams || []).map((t) => [t.name.toLowerCase(), t.id]));

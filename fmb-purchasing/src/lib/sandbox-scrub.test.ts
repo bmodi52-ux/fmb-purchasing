@@ -8,6 +8,7 @@ import {
   scrubbedEmail,
   scrubbedPersonName,
   scrubbedVendorName,
+  withoutGeneratedColumns,
 } from "./sandbox-scrub.ts";
 
 describe("pseudonyms", () => {
@@ -57,5 +58,20 @@ describe("free text", () => {
     assert.equal(buildTextScrubber([])("anything at all"), "anything at all");
     // Two characters is too short to replace safely: it would rewrite words.
     assert.equal(buildTextScrubber([{ from: "Jo", to: "X" }])("Job done"), "Job done");
+  });
+});
+
+describe("columns the database generates", () => {
+  test("the numbering columns are dropped, so the sandbox assigns its own", () => {
+      const item = { id: "i1", name: "Rice", item_seq: 42, item_number: "GRO-0042", category_id: "c1" };
+    assert.deepEqual(withoutGeneratedColumns("items", item), { id: "i1", name: "Rice", category_id: "c1" });
+
+    const expense = { id: "e1", expense_seq: 7, expense_number: "E-0007", total: 10 };
+    assert.deepEqual(withoutGeneratedColumns("expenses", expense), { id: "e1", total: 10 });
+  });
+
+  test("a table with nothing generated is passed through untouched", () => {
+    const row = { id: "p1", display_name: "Someone" };
+    assert.equal(withoutGeneratedColumns("payees", row), row);
   });
 });
