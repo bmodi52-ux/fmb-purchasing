@@ -78,14 +78,40 @@ Then list the bucket and compare. Anything missing has to be re-uploaded by
 whoever submitted it; the expense itself is intact, so the figures and the
 approval trail are not at risk — only the evidence.
 
-To take a copy of the bucket before anything risky:
+## Backing up on a schedule
+
+Two scripts, each recording its run on **Admin → Backups & records**, which
+says when either is more than a week old (and reminds admins on Mondays):
 
 ```bash
-npx supabase storage download --recursive ss:///receipts ./receipts-backup
+node scripts/backup-data.mjs --out "G:/My Drive/FMB Backups/database"
+node scripts/backup-receipts.mjs --out "G:/My Drive/FMB Backups/receipts"
 ```
 
-Worth doing before applying a batch of migrations, and worth doing on a
-schedule if anyone is willing to own it.
+`backup-data.mjs` saves every table in `public` (it asks the database for the
+list, so new tables are included) and the account list, into a new dated folder
+each time. `backup-receipts.mjs` mirrors the `receipts` bucket and only copies
+files it doesn't have yet, so after the first run it is quick. A folder synced
+by Google Drive keeps a second copy off the machine.
+
+To run both every night at 11pm on Windows, from the `fmb-purchasing` folder:
+
+```bat
+schtasks /create /sc daily /st 23:00 /tn "FMB backups" /tr "cmd /c cd /d \"%CD%\" && node scripts/backup-data.mjs --out \"G:/My Drive/FMB Backups/database\" && node scripts/backup-receipts.mjs --out \"G:/My Drive/FMB Backups/receipts\""
+```
+
+The machine has to be on at that time; Task Scheduler's "run as soon as
+possible after a scheduled start is missed" setting catches the nights it isn't.
+
+## Keeping receipts for five years
+
+Migration 0055 makes the database refuse to lose a receipt inside five years:
+once an expense is decided its attachments can't be removed, and an expense with
+receipts can't be deleted. Where Supabase allows it, the same migration also
+stops files in the `receipts` bucket being deleted inside five years; if the
+project doesn't allow a trigger on `storage.objects`, the migration says so and
+the database rules still apply. `scripts/cleanup-data.mjs --empty-bucket` is
+refused by that rule too, which is intended.
 
 ## Reconstructing from the audit trail
 
@@ -114,6 +140,10 @@ Once, and again after any significant schema change:
 Step 4 is the one that matters. Steps 1–3 test the backup; only step 4 tests
 that the backup is *usable*.
 
+Then record it on **Admin → Backups & records** — the date, what was restored,
+whether it worked, and anything that went wrong. The page asks again after six
+months.
+
 ## What is not covered
 
 - **Anthropic and Resend keys** are in Vercel only. Note where they came from;
@@ -123,6 +153,5 @@ that the backup is *usable*.
   nowhere else — if it is lost, register a new one. Confirm it is set in Vercel
   rather than assuming: the failure mode is silent, and name search returns
   "no matches" rather than an error when it is missing.
-- **Deleted expenses are gone.** Deletion is hard, and since the file cleanup
-  landed it removes the receipt too. Only the submitter can delete, and only
-  before a decision, so the window is small — but there is no undo.
+- **Withdrawn expenses stay.** Submitters withdraw rather than delete (0043),
+  and an expense with receipts can't be deleted for five years (0055).

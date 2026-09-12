@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { diffFields, recordVendorChange } from "@/lib/vendor-history";
 import { lookupAbn } from "@/lib/abn-lookup";
 
 /**
@@ -37,15 +38,25 @@ export async function refreshVendorRegistration(
   const result = await lookupAbn(digits);
   if ("error" in result) return false;
 
+  const { data: before } = await admin
+    .from("vendors")
+    .select("gst_registered, abn_active, abr_checked_at")
+    .eq("id", vendorId)
+    .maybeSingle();
+  const next = { gst_registered: result.gstRegistered, abn_active: result.abnActive };
   await admin
     .from("vendors")
-    .update({
-      gst_registered: result.gstRegistered,
-      gst_registered_from: result.gstRegisteredFrom,
-      abn_active: result.abnActive,
-      abr_checked_at: new Date().toISOString(),
-    })
+    .update({ ...next, gst_registered_from: result.gstRegisteredFrom, abr_checked_at: new Date().toISOString() })
     .eq("id", vendorId);
+  // Only a change since an earlier check is history; the first answer isn't.
+  if (before?.abr_checked_at) {
+    await recordVendorChange(admin, {
+      vendorId,
+      userId: null,
+      kind: "gst_registration_changed",
+      changes: diffFields(before, next, ["gst_registered", "abn_active"]),
+    });
+  }
   return true;
 }
 

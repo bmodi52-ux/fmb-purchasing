@@ -27,4 +27,5 @@ export const NAV_ITEMS: {
   { key: "admin_users", label: "System errors", href: "/admin/errors", action: "manage_users" },
   { key: "admin_users", label: "Announcements & alerts", href: "/admin/notifications", action: "manage_users" },
   { key: "admin_users", label: "App settings", href: "/admin/settings", action: "manage_users" },
+  { key: "admin_users", label: "Backups & records", href: "/admin/records", action: "manage_users" },
 ];

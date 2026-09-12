@@ -8,11 +8,13 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { after } from "next/server";
 import { refreshVendorRegistration } from "@/lib/vendor-registration";
+import { diffFields, recordVendorChange } from "@/lib/vendor-history";
 
 async function requireVendorEdit() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "vendors", "edit_master_data");
+  return user;
 }
 
 /** Asks the ABR now, rather than waiting for the next expense to (#30). */
@@ -34,7 +36,7 @@ export async function checkVendorRegistration(formData: FormData) {
 }
 
 export async function updateVendorDetails(formData: FormData) {
-  await requireVendorEdit();
+  const user = await requireVendorEdit();
   const vendorId = String(formData.get("vendor_id"));
   const name = String(formData.get("name") ?? "").trim();
   const abn = String(formData.get("abn") ?? "").replace(/\D/g, "") || null;
@@ -53,11 +55,17 @@ export async function updateVendorDetails(formData: FormData) {
   );
 
   const admin = createAdminClient();
-  const { data: before } = await admin.from("vendors").select("abn").eq("id", vendorId).maybeSingle();
-  await admin
-    .from("vendors")
-    .update({ name, abn, billing_address: hasAnyAddressField ? billingAddress : null })
-    .eq("id", vendorId);
+  const { data: before } = await admin.from("vendors").select("name, abn, billing_address").eq("id", vendorId).maybeSingle();
+  const next = { name, abn, billing_address: hasAnyAddressField ? billingAddress : null };
+  await admin.from("vendors").update(next).eq("id", vendorId);
+  if (before) {
+    await recordVendorChange(admin, {
+      vendorId,
+      userId: user.id,
+      kind: "details_changed",
+      changes: diffFields(before, next, ["name", "abn", "billing_address"]),
+    });
+  }
 
   // A changed ABN makes the recorded GST registration someone else's (#30).
   if ((before?.abn ?? null) !== abn) {
@@ -71,25 +79,37 @@ export async function updateVendorDetails(formData: FormData) {
 
 /** What a receipt from this vendor usually is (#49). */
 export async function updateVendorDefaults(formData: FormData) {
-  await requireVendorEdit();
+  const user = await requireVendorEdit();
   const vendorId = String(formData.get("vendor_id") ?? "");
   if (!vendorId) return;
   const payee = String(formData.get("default_payee") ?? "");
   const gst = String(formData.get("gst_treatment") ?? "");
-  const { error } = await createAdminClient()
+  const admin = createAdminClient();
+  const next = {
+    default_category_id: String(formData.get("default_category_id") ?? "") || null,
+    default_payee: payee === "me" || payee === "vendor" ? payee : null,
+    gst_treatment: gst === "gst_free" || gst === "taxable" ? gst : null,
+  };
+  const { data: before } = await admin
     .from("vendors")
-    .update({
-      default_category_id: String(formData.get("default_category_id") ?? "") || null,
-      default_payee: payee === "me" || payee === "vendor" ? payee : null,
-      gst_treatment: gst === "gst_free" || gst === "taxable" ? gst : null,
-    })
-    .eq("id", vendorId);
+    .select("default_category_id, default_payee, gst_treatment")
+    .eq("id", vendorId)
+    .maybeSingle();
+  const { error } = await admin.from("vendors").update(next).eq("id", vendorId);
   if (error) throw new Error("The usual settings could not be saved. Try again.");
+  if (before) {
+    await recordVendorChange(admin, {
+      vendorId,
+      userId: user.id,
+      kind: "usual_settings_changed",
+      changes: diffFields(before, next, ["default_category_id", "default_payee", "gst_treatment"]),
+    });
+  }
   revalidatePath(`/vendors/${vendorId}`);
 }
 
 export async function addCollectionAddress(formData: FormData) {
-  await requireVendorEdit();
+  const user = await requireVendorEdit();
   const vendorId = String(formData.get("vendor_id"));
   const line1 = String(formData.get("line1") ?? "").trim();
   if (!vendorId || !line1) return;
@@ -105,23 +125,37 @@ export async function addCollectionAddress(formData: FormData) {
     postcode: String(formData.get("postcode") ?? "").trim() || null,
     country: String(formData.get("country") ?? "").trim() || "Australia",
   });
+  await recordVendorChange(admin, { vendorId, userId: user.id, kind: "address_added", changes: { label: line1 } });
 
   revalidatePath(`/vendors/${vendorId}`);
 }
 
 export async function removeCollectionAddress(formData: FormData) {
-  await requireVendorEdit();
+  const user = await requireVendorEdit();
   const addressId = String(formData.get("address_id"));
   const vendorId = String(formData.get("vendor_id"));
   if (!addressId) return;
 
   const admin = createAdminClient();
+  const { data: address } = await admin
+    .from("vendor_collection_addresses")
+    .select("vendor_id, line1")
+    .eq("id", addressId)
+    .maybeSingle();
   await admin.from("vendor_collection_addresses").delete().eq("id", addressId);
+  if (address) {
+    await recordVendorChange(admin, {
+      vendorId: address.vendor_id as string,
+      userId: user.id,
+      kind: "address_removed",
+      changes: { label: address.line1 as string },
+    });
+  }
   revalidatePath(`/vendors/${vendorId}`);
 }
 
 export async function addContact(formData: FormData) {
-  await requireVendorEdit();
+  const user = await requireVendorEdit();
   const vendorId = String(formData.get("vendor_id"));
   const name = String(formData.get("contact_name") ?? "").trim();
   if (!vendorId || !name) return;
@@ -132,18 +166,28 @@ export async function addContact(formData: FormData) {
     name,
     phone: String(formData.get("contact_phone") ?? "").trim() || null,
   });
+  await recordVendorChange(admin, { vendorId, userId: user.id, kind: "contact_added", changes: { label: name } });
 
   revalidatePath(`/vendors/${vendorId}`);
 }
 
 export async function removeContact(formData: FormData) {
-  await requireVendorEdit();
+  const user = await requireVendorEdit();
   const contactId = String(formData.get("contact_id"));
   const vendorId = String(formData.get("vendor_id"));
   if (!contactId) return;
 
   const admin = createAdminClient();
+  const { data: contact } = await admin.from("vendor_contacts").select("vendor_id, name").eq("id", contactId).maybeSingle();
   await admin.from("vendor_contacts").delete().eq("id", contactId);
+  if (contact) {
+    await recordVendorChange(admin, {
+      vendorId: contact.vendor_id as string,
+      userId: user.id,
+      kind: "contact_removed",
+      changes: { label: contact.name as string },
+    });
+  }
   revalidatePath(`/vendors/${vendorId}`);
 }
 
@@ -208,6 +252,7 @@ export async function updateVendorPaymentDetails(formData: FormData) {
       status: "approved",
       created_by: user.id,
     });
+    await recordVendorChange(admin, { vendorId, userId: user.id, kind: "bank_account_added" });
     revalidatePath(`/vendors/${vendorId}`);
     return;
   }
@@ -224,6 +269,14 @@ export async function updateVendorPaymentDetails(formData: FormData) {
       .from("payees")
       .update({ ...details, updated_at: new Date().toISOString() })
       .eq("id", current.id);
+    if ((current.bank_account_name ?? null) !== details.bank_account_name) {
+      await recordVendorChange(admin, {
+        vendorId,
+        userId: user.id,
+        kind: "bank_details_changed",
+        changes: { label: "account name" },
+      });
+    }
     revalidatePath(`/vendors/${vendorId}`);
     return;
   }
@@ -235,6 +288,7 @@ export async function updateVendorPaymentDetails(formData: FormData) {
     details,
     userId: user.id,
   });
+  await recordVendorChange(admin, { vendorId, userId: user.id, kind: "bank_account_replaced" });
 
   revalidatePath(`/vendors/${vendorId}`);
 }
@@ -324,6 +378,7 @@ export async function reviewProposedVendorAccount(formData: FormData) {
       .from("payees")
       .update({ status: "superseded", superseded_at: now, updated_at: now })
       .eq("id", payeeId);
+    await recordVendorChange(admin, { vendorId, userId: user.id, kind: "bank_account_discarded" });
     revalidatePath(`/vendors/${vendorId}`);
     return;
   }
@@ -351,6 +406,7 @@ export async function reviewProposedVendorAccount(formData: FormData) {
     .from("payees")
     .update({ status: "approved", updated_at: now })
     .eq("id", payeeId);
+  await recordVendorChange(admin, { vendorId, userId: user.id, kind: "bank_account_confirmed" });
 
   revalidatePath(`/vendors/${vendorId}`);
 }

@@ -4,6 +4,7 @@ import { runDailyReminders } from "@/lib/reminders";
 import { reportError } from "@/lib/errors";
 import { ORG_TIME_ZONE } from "@/lib/format";
 import { continueExtractionCheck } from "@/lib/extraction-check";
+import { remindAboutRecords } from "@/lib/records";
 
 /**
  * The once-a-day job: reminders and escalation (#27).
@@ -56,7 +57,16 @@ export async function GET(request: Request): Promise<Response> {
       await reportError({ source: "extraction-check", error: err });
       extractionCheck = { state: "failed" };
     }
-    const summary = { ...reminders, extractionCheck };
+    // Mondays: backups or a restore rehearsal overdue (#45).
+    let recordsReminded = 0;
+    if (new Date(`${today}T12:00:00Z`).getUTCDay() === 1) {
+      try {
+        recordsReminded = await remindAboutRecords(admin, new Date());
+      } catch (err) {
+        await reportError({ source: "records-reminder", error: err });
+      }
+    }
+    const summary = { ...reminders, extractionCheck, recordsReminded };
     await admin.from("scheduled_runs").update({ summary }).eq("job", JOB);
     return Response.json({ ran: today, summary });
   } catch (err) {
