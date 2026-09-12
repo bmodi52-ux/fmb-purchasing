@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter, IBM_Plex_Mono, Amiri } from "next/font/google";
 import "./globals.css";
+import { SandboxBanner } from "@/components/sandbox-banner";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
@@ -67,6 +68,7 @@ export default function RootLayout({
       className={`${fraunces.variable} ${inter.variable} ${plexMono.variable} ${amiri.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-cream text-ink font-sans">
+        <SandboxBanner />
         {children}
       </body>
     </html>

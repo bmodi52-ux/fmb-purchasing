@@ -1,3 +1,5 @@
+import { isSandbox, sandboxRecipients, sandboxSubject } from "@/lib/sandbox";
+
 // Email clients need a real, publicly-reachable URL for images — can't
 // reference localhost or a relative path. Update this if the domain changes.
 //
@@ -100,15 +102,29 @@ export function detailsBox(rows: { label: string; value: string }[]): string {
  */
 export async function sendEmail({
   to,
-  subject,
+  subject: subjectIn,
   html,
 }: {
   to: string | string[];
   subject: string;
   html: string;
 }): Promise<boolean> {
+  let subject = subjectIn;
   const apiKey = process.env.RESEND_API_KEY;
-  const recipients = Array.isArray(to) ? to : [to];
+  let recipients = Array.isArray(to) ? to : [to];
+
+  // The sandbox holds scrubbed data, so every address in it is either invented
+  // or somebody who never asked to hear from a training system. Only trainees
+  // are written to, and the subject says where it came from (#1).
+  if (isSandbox()) {
+    const { send, held } = sandboxRecipients(recipients);
+    if (held.length > 0) {
+      console.log(`[sandbox] held "${subject}" from ${held.join(", ")} — not a trainee`);
+    }
+    if (send.length === 0) return false;
+    recipients = send;
+    subject = sandboxSubject(subject);
+  }
   if (!apiKey || recipients.length === 0) {
     console.log(`[notifications] skipped "${subject}" to ${recipients.join(", ") || "(none)"} (RESEND_API_KEY not set)`);
     return false;
