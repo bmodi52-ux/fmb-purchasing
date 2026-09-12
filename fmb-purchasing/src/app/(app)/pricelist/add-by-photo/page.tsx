@@ -8,6 +8,9 @@ import { AddByPhotoForm } from "./add-by-photo-form";
 
 export const metadata = { title: "Add item by photo" };
 
+// A long supplier price list is read in several pieces (#29).
+export const maxDuration = 300;
+
 export default async function AddByPhotoPage({ searchParams }: { searchParams: Promise<{ vendor?: string }> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -36,8 +39,8 @@ export default async function AddByPhotoPage({ searchParams }: { searchParams: P
         )}
         <h1 className="page-title mt-1 text-ink">Add item by photo</h1>
         <p className="page-description mt-1 max-w-xl">
-          Photograph the price tag, the product&apos;s label, or both — or a supplier&apos;s price list. Everything that
-          can be read is filled in for you to check.
+          Photograph the price tag, the product&apos;s label, or both — or a supplier&apos;s price list, or choose the
+          list as a CSV or Excel file. Everything that can be read is filled in for you to check.
         </p>
       </div>
       <AddByPhotoForm

@@ -137,7 +137,7 @@ export async function saveAlertRule(_prev: AlertRuleState, formData: FormData): 
       name,
       event,
       conditions: {
-        ...(minAmount !== null && event !== "budget_threshold" && event !== "vendor_added" ? { minAmount } : {}),
+        ...(minAmount !== null && !["budget_threshold", "vendor_added", "price_change"].includes(event) ? { minAmount } : {}),
         ...(categoryIds.length && event !== "vendor_added" ? { categoryIds } : {}),
         ...(vendorIds.length && event !== "budget_threshold" ? { vendorIds } : {}),
         ...(event === "budget_threshold" ? { budgetPercent, calendar: ["hijri", "au", "cy"].includes(calendar) ? calendar : "hijri" } : {}),

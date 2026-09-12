@@ -40,7 +40,28 @@ export const SETTING_DEFAULTS = {
   budget_alerts: { enabled: true as boolean, percents: [80, 100] as number[] },
   /** Email payees a remittance advice when they are paid (#37). */
   remittance_emails: true as boolean,
+  /**
+   * Price alerts and unusual spend (#29, #42). The percentages are the
+   * Pricelist-wide limits; a category or an item can set its own (0053).
+   */
+  price_alerts: {
+    enabled: true as boolean,
+    /** A price per kg, L or each more than this % above the last purchase. */
+    risePercent: 10,
+    /** …or more than this % below it. */
+    fallPercent: 10,
+    /** Tell whoever edits the Pricelist when one fires. Alert rules can tell anyone else. */
+    notifyPricelistEditors: true as boolean,
+    /** An expense at least this many times its vendor's usual expense is flagged. */
+    spendMultiple: 3,
+    /** …once the vendor has at least this many expenses in the year before to judge by. */
+    spendMinHistory: 5,
+    /** How far back the Pricelist's "cheapest recent source" looks, in days. */
+    cheapestRecentDays: 90,
+  },
 };
+
+export type PriceAlertSettings = (typeof SETTING_DEFAULTS)["price_alerts"];
 
 export type ReminderSettings = (typeof SETTING_DEFAULTS)["reminders"];
 export type AbaSettingValue = (typeof SETTING_DEFAULTS)["aba"];

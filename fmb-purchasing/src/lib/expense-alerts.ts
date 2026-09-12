@@ -44,6 +44,8 @@ export function alertOnExpense(
   event: "expense_submitted" | "expense_approved" | "expense_paid",
   expense: { id: string; expense_number?: string | null; vendor_name_raw: string | null; total: number }
 ): void {
+  if (event === "expense_submitted") alertOnPrices(admin, expense);
+
   later(async () => {
     const [rules, budgetRules, builtIn] = await Promise.all([
       hasRules(admin, event),
@@ -158,6 +160,97 @@ async function checkBudgetThresholds(
     }
   }
 }
+
+/**
+ * Price moves and unusual spend on a submitted expense (#29, #42): whoever
+ * edits the Pricelist is told, if that is switched on, and any alert rules
+ * built on them run. Each flag is sent once, however often the expense is
+ * edited and resubmitted.
+ */
+function alertOnPrices(
+  admin: SupabaseClient,
+  expense: { id: string; expense_number?: string | null; vendor_name_raw: string | null; total: number }
+): void {
+  later(async () => {
+    const settings = await getSetting(admin, "price_alerts");
+    if (!settings.enabled) return;
+    const [priceRules, spendRules] = await Promise.all([hasRules(admin, "price_change"), hasRules(admin, "unusual_spend")]);
+    if (!settings.notifyPricelistEditors && !priceRules && !spendRules) return;
+
+    const { data: row } = await admin
+      .from("expenses")
+      .select("id, vendor_id, total, receipt_date, created_at")
+      .eq("id", expense.id)
+      .maybeSingle();
+    if (!row) return;
+
+    const { loadPriceFlags, loadSpendFlags } = await import("@/lib/price-alerts-data");
+    const { describePriceFlag, describeUnusualSpend } = await import("@/lib/price-alerts");
+    const [priceFlags, spendFlags] = await Promise.all([
+      loadPriceFlags(admin, [expense.id], settings),
+      loadSpendFlags(admin, [row as ExpenseForSpendRow], settings),
+    ]);
+    const flags = priceFlags.get(expense.id) ?? [];
+    const spend = spendFlags.get(expense.id) ?? null;
+    if (flags.length === 0 && !spend) return;
+
+    const editors = settings.notifyPricelistEditors ? await userIdsWithPermission(admin, "pricelist", "edit_master_data") : [];
+    const firstTime = async (key: string) => !(await admin.from("price_alert_firings").insert({ fired_key: key })).error;
+    const ref = expense.expense_number ?? "An expense";
+    const vendorId = (row.vendor_id as string | null) ?? null;
+
+    if (flags.length) {
+      const itemIds = [...new Set(flags.map((f) => f.itemId))];
+      const { data: items } = await admin.from("items").select("id, category_id").in("id", itemIds);
+      const categoryOf = new Map((items ?? []).map((i) => [i.id as string, i.category_id as string | null]));
+
+      for (const flag of flags) {
+        const key = `price:${flag.lineId}:${flag.kind}`;
+        if (!(await firstTime(key))) continue;
+        const message = {
+          title: describePriceFlag(flag),
+          body: `${ref} · ${expense.vendor_name_raw ?? "Vendor not recorded"}`,
+          link: `/expenses/${expense.id}`,
+          expenseId: expense.id,
+        };
+        await notify(admin, editors.map((userId) => ({ userId, kind: "alert" as const, ...message })));
+        if (priceRules) {
+          const categoryId = categoryOf.get(flag.itemId);
+          await runAlertRules(
+            admin,
+            "price_change",
+            { amount: Number(expense.total), categoryIds: categoryId ? [categoryId] : [], vendorId },
+            message,
+            () => key
+          );
+        }
+      }
+    }
+
+    if (spend && (await firstTime(`spend:${expense.id}`))) {
+      const message = {
+        title: `${ref} is ${describeUnusualSpend(spend)}`,
+        body: `${expense.vendor_name_raw ?? "Vendor not recorded"} · ${money(Number(expense.total))}`,
+        link: `/expenses/${expense.id}`,
+        expenseId: expense.id,
+      };
+      await notify(admin, editors.map((userId) => ({ userId, kind: "alert" as const, ...message })));
+      if (spendRules) {
+        const { data: lines } = await admin.from("expense_line_items").select("category_id").eq("expense_id", expense.id);
+        const categoryIds = [...new Set((lines ?? []).map((l) => l.category_id as string | null).filter(Boolean) as string[])];
+        await runAlertRules(
+          admin,
+          "unusual_spend",
+          { amount: Number(expense.total), categoryIds, vendorId },
+          message,
+          () => `spend:${expense.id}`
+        );
+      }
+    }
+  });
+}
+
+type ExpenseForSpendRow = { id: string; vendor_id: string | null; total: number; receipt_date: string | null; created_at: string };
 
 export function alertOnVendorAdded(admin: SupabaseClient, vendor: { id: string; name: string }): void {
   later(async () => {

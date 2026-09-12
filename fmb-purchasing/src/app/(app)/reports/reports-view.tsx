@@ -14,6 +14,8 @@ import {
 } from "./report-filters";
 import { PrintRegistryProvider, Printable } from "./printable";
 import { PrintButton } from "./print-button";
+import { SavedViews } from "./saved-views";
+import type { SavedReportView } from "@/lib/saved-report-views";
 import {
   totals,
   percentChange,
@@ -135,6 +137,9 @@ export function ReportsView({
   perUnitRows,
   unitCostByItem,
   hasCategoryOrItemFilter,
+  savedViews,
+  userId,
+  teams,
 }: {
   query: ReportQuery;
   today: string;
@@ -149,6 +154,9 @@ export function ReportsView({
   perUnitRows: PerUnitRow[];
   unitCostByItem: Record<string, { average: number; unit: string }>;
   hasCategoryOrItemFilter: boolean;
+  savedViews: SavedReportView[];
+  userId: string;
+  teams: { id: string; name: string }[];
 }) {
   const [calendar, setCalendar] = useState<"gregorian" | "hijri">("gregorian");
 
@@ -182,13 +190,16 @@ export function ReportsView({
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <SectionTabs query={query} active={query.section} />
-          {!empty && (
-            <PrintButton
-              title={`Reports — ${sectionLabel}`}
-              subtitle={filterSummary}
-              filenameBase={`reports-${query.section}-${query.period}`}
-            />
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <SavedViews views={savedViews} query={query} userId={userId} teams={teams} />
+            {!empty && (
+              <PrintButton
+                title={`Reports — ${sectionLabel}`}
+                subtitle={filterSummary}
+                filenameBase={`reports-${query.section}-${query.period}`}
+              />
+            )}
+          </div>
         </div>
 
         {/* One filter row, above every section — so whichever tab you are on,

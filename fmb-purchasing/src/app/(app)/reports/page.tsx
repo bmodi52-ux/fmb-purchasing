@@ -13,6 +13,7 @@ import {
   type Slice,
 } from "./aggregate";
 import { loadReportRawData, spanOf, withinRange } from "./data";
+import { loadSavedViews } from "@/lib/saved-report-views";
 import { ReportsView, type PerUnitRow } from "./reports-view";
 import {
   SECTIONS,
@@ -52,9 +53,12 @@ export default async function ReportsPage({
   // The period before comes back in the same fetch so the dashboard can show
   // change without a second round trip — the function runs a long way from
   // the database, so each one is expensive.
-  const [raw, earliest] = await Promise.all([
+  const admin = createAdminClient();
+  const [raw, earliest, savedViews, { data: teams }] = await Promise.all([
     loadReportRawData(spanOf(period, previousRange)),
-    earliestExpenseDate(createAdminClient()),
+    earliestExpenseDate(admin),
+    loadSavedViews(admin, user),
+    admin.from("teams").select("id, name").order("name"),
   ]);
 
   const currentRaw = withinRange(raw, period);
@@ -181,6 +185,9 @@ export default async function ReportsPage({
       perUnitRows={perUnitRows}
       unitCostByItem={Object.fromEntries(unitCostByItem)}
       hasCategoryOrItemFilter={selectedCategories.length > 0 || selectedItems.length > 0}
+      savedViews={savedViews}
+      userId={user.id}
+      teams={(teams ?? []).map((t) => ({ id: t.id as string, name: t.name as string }))}
     />
   );
 }

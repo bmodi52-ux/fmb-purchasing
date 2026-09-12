@@ -31,6 +31,10 @@ export type ApprovalFlags = {
   duplicateOf: DuplicateMatch[];
   /** What the ABR says is wrong with GST from this vendor, in words. */
   gstConcerns: string[];
+  /** Lines whose price per unit moved past its limit or sits outside its expected range (#29). */
+  prices: { label: string; serious: boolean }[];
+  /** How far above the vendor's usual expense this one is, in words (#42). */
+  unusualSpend: string | null;
 };
 
 export type ApprovalRow = {
@@ -206,6 +210,8 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
   if (e.flags.duplicateOf.length > 0) flags.push({ label: duplicateLabel(e.flags.duplicateOf), serious: true });
   for (const concern of e.flags.gstConcerns) flags.push({ label: concern, serious: true });
   if (e.flags.unconfirmedAccount) flags.push({ label: "Bank account not confirmed", serious: true });
+  if (e.flags.unusualSpend) flags.push({ label: e.flags.unusualSpend, serious: true });
+  for (const price of e.flags.prices) flags.push(price);
   if (e.flags.newVendor) flags.push({ label: "New vendor" });
   if (e.flags.newItems > 0) {
     flags.push({ label: `${e.flags.newItems} new Pricelist ${e.flags.newItems === 1 ? "item" : "items"}` });

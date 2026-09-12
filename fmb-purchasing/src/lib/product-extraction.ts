@@ -150,6 +150,7 @@ const SYSTEM_PROMPT = `You read photos taken in shops, and supplier price lists,
 WHAT YOU MAY BE GIVEN
 - A shelf price tag, a product's own label or packaging, or both, of one product. When a tag and a label are both given they are the same product: take the price from the tag, and the size and brand from the label.
 - A supplier's price list, catalogue page or order sheet, photographed or as a PDF, listing many products. Record every product that has a price.
+- Part of a supplier's price list exported as a spreadsheet, given as CSV text with its column headings first. Each row with a price is a product; rows that are only a heading or a section name are not. Where a list shows prices both excluding and including GST, use the price including GST — what is actually paid.
 
 FOR EACH PRODUCT
 - name: what the kitchen would call it — short and generic, with no brand, size or packaging. "Tilda Pure Basmati Rice 10kg" is "Basmati Rice". "Coles Truss Tomatoes per kg" is "Tomato".
@@ -178,7 +179,12 @@ function positive(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-function block(file: { base64: string; mediaType: string }): Anthropic.ContentBlockParam {
+/** A photo or PDF, or rows of a price list file already turned into text. */
+export type ProductSource = { base64: string; mediaType: string } | { text: string; label: string };
+
+function block(file: ProductSource): Anthropic.ContentBlockParam {
+  if ("text" in file) return { type: "text", text: `${file.label}:
+${file.text}` };
   return file.mediaType === "application/pdf"
     ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: file.base64 } }
     : {
@@ -191,10 +197,8 @@ function block(file: { base64: string; mediaType: string }): Anthropic.ContentBl
       };
 }
 
-export async function extractProducts(
-  files: { base64: string; mediaType: string }[],
-  categoryNames: string[]
-): Promise<ProductPhotoReading> {
+export async function extractProducts(files: ProductSource[], categoryNames: string[]): Promise<ProductPhotoReading> {
+  const spreadsheet = files.some((f) => "text" in f);
   const response = await getClient().messages.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
@@ -209,8 +213,9 @@ export async function extractProducts(
           ...files.map(block),
           {
             type: "text",
-            text:
-              files.length > 1
+            text: spreadsheet
+              ? "Record every product with a price in these rows of the price list."
+              : files.length > 1
                 ? "These were taken together. Record the products they show."
                 : "Record the products this shows.",
           },
@@ -220,7 +225,11 @@ export async function extractProducts(
   });
 
   if (response.stop_reason === "max_tokens") {
-    throw new Error("That list was too long to read in one go. Try photographing it a page at a time.");
+    throw new Error(
+      spreadsheet
+        ? "Part of that price list was too long to read in one go."
+        : "That list was too long to read in one go. Try photographing it a page at a time."
+    );
   }
   if (response.stop_reason === "refusal") throw new Error("The model declined to read this photo.");
 
