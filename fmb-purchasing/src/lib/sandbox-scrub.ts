@@ -136,6 +136,8 @@ export const GENERATED_COLUMNS: Record<string, string[]> = {
   items: ["item_seq", "item_number"],
   expenses: ["expense_seq", "expense_number"],
   vendors: ["vendor_seq", "vendor_number"],
+  // Worked out by the database from inner_quantity and pack_count.
+  item_pack_sizes: ["total_quantity"],
 };
 
 export function withoutGeneratedColumns(table: string, row: Record<string, unknown>): Record<string, unknown> {

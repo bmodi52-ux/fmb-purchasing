@@ -68,6 +68,10 @@ describe("columns the database generates", () => {
 
     const expense = { id: "e1", expense_seq: 7, expense_number: "E-0007", total: 10 };
     assert.deepEqual(withoutGeneratedColumns("expenses", expense), { id: "e1", total: 10 });
+
+    // Worked out by the database from the other two, so it cannot be written.
+    const pack = { id: "p1", inner_quantity: 10, pack_count: 2, total_quantity: 20 };
+    assert.deepEqual(withoutGeneratedColumns("item_pack_sizes", pack), { id: "p1", inner_quantity: 10, pack_count: 2 });
   });
 
   test("a table with nothing generated is passed through untouched", () => {

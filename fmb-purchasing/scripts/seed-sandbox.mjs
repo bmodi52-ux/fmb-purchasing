@@ -54,8 +54,9 @@ function readEnv(file) {
 const TABLE_ORDER = [
   "teams", "team_permissions",
   "categories", "units",
-  "vendors", "vendor_contacts", "vendor_collection_addresses", "vendor_item_descriptions", "vendor_changes",
-  "items", "item_number_aliases", "item_pack_sizes", "item_history", "item_duplicate_dismissals",
+  "vendors", "vendor_contacts", "vendor_collection_addresses", "vendor_changes",
+  // items before vendor_item_descriptions, which points at both.
+  "items", "vendor_item_descriptions", "item_number_aliases", "item_pack_sizes", "item_history", "item_duplicate_dismissals",
   "pricelist_items", "pricelist_item_history",
   "payees", "payment_runs",
   "expenses", "expense_line_items", "expense_attachments", "expense_status_history",
