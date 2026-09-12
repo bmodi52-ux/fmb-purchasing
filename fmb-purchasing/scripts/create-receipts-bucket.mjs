@@ -1,8 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 
+// Which project: .env.local by default, or another with --env (the sandbox).
+const envFlag = process.argv.indexOf("--env");
+const envFile = envFlag !== -1 && process.argv[envFlag + 1] ? process.argv[envFlag + 1] : ".env.local";
+
 function loadEnvLocal() {
-  const text = readFileSync(new URL("../.env.local", import.meta.url), "utf8");
+  const text = readFileSync(new URL("../" + envFile, import.meta.url), "utf8");
   for (const line of text.split("\n")) {
     const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
     if (match) process.env[match[1]] ??= match[2];
@@ -15,6 +19,8 @@ const admin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
+
+console.log("Project: " + new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).host + "  (" + envFile + ")");
 
 const { data: existing } = await admin.storage.getBucket("receipts");
 if (existing) {

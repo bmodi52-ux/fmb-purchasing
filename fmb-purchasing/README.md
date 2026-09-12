@@ -40,6 +40,7 @@ Needs a `.env.local` — copy `.env.local.example` and fill it in:
 | `CRON_SECRET` | the daily reminders job (`/api/cron/daily`, scheduled in `vercel.json`); without it the job refuses every call |
 | `INBOUND_EMAIL_SECRET` | receipts forwarded by email (`/api/inbound-email`); without it every post is refused — see `docs/receipts-by-email.md` |
 | `INBOUND_EMAIL_ADDRESS` | the forwarding address shown on Submit (optional) |
+| `NEXT_PUBLIC_SANDBOX` | set to `1` on the sandbox deployment only: shows the banner and keeps email to trainees — see `docs/sandbox.md` |
 
 ```bash
 npm test          # 323 tests, incl. migrations applied to a real Postgres
