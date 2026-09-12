@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createTeam, addTeamMember, removeTeamMember, togglePermission } from "./actions";
+import { createTeam, addTeamMember, removeTeamMember, togglePermission, setPermissionScope } from "./actions";
 import { accessChangeActor, describeAccessChange, type AccessChangeRow } from "@/lib/access-changes";
 import { formatDateTime } from "@/lib/format";
 
@@ -53,6 +53,9 @@ export default async function TeamsAdminPage() {
   const profileName = new Map((profiles ?? []).map((p) => [p.id as string, (p.full_name || p.email) as string]));
   const changeRows = (changes ?? []) as AccessChangeRow[];
 
+  const pageKeys = (pages ?? []).map((p) => p.key as string);
+  const actionKeys = (actions ?? []).map((a) => a.key as string);
+
   const grantSet = new Set(
     (grants ?? []).map((g) => `${g.team_id}:${g.page_key}:${g.action_key}`)
   );
@@ -88,6 +91,12 @@ export default async function TeamsAdminPage() {
             (members ?? []).filter((m) => m.team_id === team.id).map((m) => m.user_id)
           );
           const nonMembers = (profiles ?? []).filter((p) => !teamMemberIds.has(p.id));
+
+          // Whether a whole row or column is already granted decides what its
+          // "all" toggle does: a full row offers to clear itself.
+          const has = (pageKey: string, actionKey: string) => grantSet.has(`${team.id}:${pageKey}:${actionKey}`);
+          const rowGranted = (pageKey: string) => actionKeys.every((a) => has(pageKey, a));
+          const columnGranted = (actionKey: string) => pageKeys.every((pg) => has(pg, actionKey));
 
           return (
             <section key={team.id} className="rounded-lg border border-ink/10 bg-white/60 p-5">
@@ -154,9 +163,19 @@ export default async function TeamsAdminPage() {
                         <th scope="col" className="p-1 text-left font-medium text-ink/60">Page</th>
                         {(actions ?? []).map((a) => (
                           <th scope="col" key={a.key} className="p-1 text-center font-medium text-ink/60">
-                            {a.label}
+                            <span className="block">{a.label}</span>
+                            <ScopeToggle
+                              teamId={team.id}
+                              scope="column"
+                              scopeKey={a.key}
+                              granted={columnGranted(a.key)}
+                              label={`${a.label} on every page`}
+                            />
                           </th>
                         ))}
+                        <th scope="col" className="p-1 text-center font-medium text-ink/60">
+                          Whole page
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -186,6 +205,15 @@ export default async function TeamsAdminPage() {
                               </td>
                             );
                           })}
+                          <td className="p-1 text-center">
+                            <ScopeToggle
+                              teamId={team.id}
+                              scope="row"
+                              scopeKey={page.key}
+                              granted={rowGranted(page.key)}
+                              label={`every action on ${page.label}`}
+                            />
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -231,5 +259,41 @@ export default async function TeamsAdminPage() {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Grants or clears a whole row or column of the grid. Says "all" when there
+ * is something left to grant and "none" when the row or column is already
+ * complete, so the button always names what pressing it does.
+ */
+function ScopeToggle({
+  teamId,
+  scope,
+  scopeKey,
+  granted,
+  label,
+}: {
+  teamId: string;
+  scope: "row" | "column";
+  scopeKey: string;
+  granted: boolean;
+  label: string;
+}) {
+  return (
+    <form action={setPermissionScope}>
+      <input type="hidden" name="team_id" value={teamId} />
+      <input type="hidden" name="scope" value={scope} />
+      <input type="hidden" name="key" value={scopeKey} />
+      <input type="hidden" name="granted" value={String(!granted)} />
+      <SubmitButton
+        aria-label={`${granted ? "Revoke" : "Grant"} ${label}`}
+        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+          granted ? "text-maroon/70 hover:bg-maroon/10" : "text-ink/50 hover:bg-ink/5"
+        }`}
+      >
+        {granted ? "none" : "all"}
+      </SubmitButton>
+    </form>
   );
 }

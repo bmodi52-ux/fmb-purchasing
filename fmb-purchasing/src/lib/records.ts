@@ -67,7 +67,7 @@ export async function loadRecordsState(admin: SupabaseClient): Promise<RecordsSt
 export async function remindAboutRecords(admin: SupabaseClient, today: Date): Promise<number> {
   const due = recordsAttention(await loadRecordsState(admin), today);
   if (due.length === 0) return 0;
-  const admins = await userIdsWithPermission(admin, "admin_users", "manage_users");
+  const admins = await userIdsWithPermission(admin, "records", "manage");
   await notify(
     admin,
     admins.map((userId) => ({

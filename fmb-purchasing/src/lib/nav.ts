@@ -15,8 +15,8 @@ export const NAV_ITEMS: {
   { key: "vendors", label: "Vendors", href: "/vendors", action: "view" },
   { key: "approvals", label: "Approvals", href: "/approvals", action: "view" },
   { key: "payments", label: "Payments", href: "/payments", action: "view" },
-  // GST, the Xero file and lodged periods are the payer's work (#38).
-  { key: "payments", label: "Accounting", href: "/accounting", action: "mark_paid" },
+  // Its own page since 0057: paying and doing the books are different jobs.
+  { key: "accounting", label: "Accounting", href: "/accounting", action: "view" },
   { key: "review_queue", label: "Needs attention", href: "/review-queue", action: "view" },
   { key: "reports", label: "Reports", href: "/reports", action: "view" },
   { key: "budgets", label: "Budgets", href: "/budgets", action: "view" },
@@ -25,7 +25,7 @@ export const NAV_ITEMS: {
   // Shares the users-admin grant rather than adding a page key nobody has
   // been granted; whoever administers accounts is who should see breakage.
   { key: "admin_users", label: "System errors", href: "/admin/errors", action: "manage_users" },
-  { key: "admin_users", label: "Announcements & alerts", href: "/admin/notifications", action: "manage_users" },
-  { key: "admin_users", label: "App settings", href: "/admin/settings", action: "manage_users" },
-  { key: "admin_users", label: "Backups & records", href: "/admin/records", action: "manage_users" },
+  { key: "announcements", label: "Announcements & alerts", href: "/admin/notifications", action: "view" },
+  { key: "app_settings", label: "App settings", href: "/admin/settings", action: "view" },
+  { key: "records", label: "Backups & records", href: "/admin/records", action: "view" },
 ];

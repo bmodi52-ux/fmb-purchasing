@@ -148,7 +148,7 @@ export async function continueExtractionCheck(admin: SupabaseClient, options?: {
 
   const worse = readingGotWorse(totals, previous ? { checks: Number(previous.checks), passed: Number(previous.passed) } : null, settings.alertDropPoints);
   if (worse || failedCases > 0) {
-    const admins = await userIdsWithPermission(admin, "admin_users", "manage_users");
+    const admins = await userIdsWithPermission(admin, "app_settings", "manage");
     const now = accuracy(totals);
     const before = previous ? accuracy({ checks: Number(previous.checks), passed: Number(previous.passed) }) : null;
     await notify(

@@ -34,7 +34,7 @@ export default async function AccountingPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  await requirePermission(user, "payments", "mark_paid");
+  await requirePermission(user, "accounting", "view");
 
   const params = await searchParams;
   const today = todayIso();

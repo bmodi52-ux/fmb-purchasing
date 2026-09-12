@@ -4,17 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, type ActionKey } from "@/lib/permissions";
 import { parsePeriod } from "@/lib/periods";
 import { todayIso } from "@/lib/periods-data";
 import { loadAccountingPeriod, type Basis } from "@/lib/accounting-data";
 import { buildXeroBillsCsv, linesMissingAccountCodes } from "@/lib/xero-export";
 import { reportError } from "@/lib/errors";
 
-async function requireAccounting() {
+async function requireAccounting(action: ActionKey = "manage") {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  await requirePermission(user, "payments", "mark_paid");
+  await requirePermission(user, "accounting", action);
   return user;
 }
 
@@ -23,7 +23,7 @@ export async function exportXeroBills(
   periodCode: string,
   basis: Basis
 ): Promise<{ filename: string; content: string; rows: number; missingAccountCodes: number }> {
-  await requireAccounting();
+  await requireAccounting("export");
   const period = parsePeriod(periodCode, todayIso());
   const { xeroLines } = await loadAccountingPeriod(createAdminClient(), period, basis);
   return {

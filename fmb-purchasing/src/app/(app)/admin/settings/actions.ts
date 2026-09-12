@@ -13,7 +13,7 @@ import { continueExtractionCheck } from "@/lib/extraction-check";
 async function requireSettingsAdmin() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  await requirePermission(user, "admin_users", "manage_users");
+  await requirePermission(user, "app_settings", "manage");
   return user;
 }
 

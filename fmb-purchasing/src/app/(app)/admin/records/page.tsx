@@ -29,7 +29,7 @@ function formatBytes(bytes: number): string {
 export default async function RecordsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  await requirePermission(user, "admin_users", "manage_users");
+  await requirePermission(user, "records", "view");
 
   const admin = createAdminClient();
   const [state, { data: runs }, { data: rehearsals }, { count: receiptCount }] = await Promise.all([
