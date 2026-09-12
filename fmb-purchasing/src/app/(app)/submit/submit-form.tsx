@@ -2,7 +2,7 @@
 
 import { SubmitButton } from "@/components/submit-button";
 import { useReportPending } from "@/components/pending";
-import { Fragment, useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { Fragment, startTransition, useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   extractReceiptAction,
@@ -42,6 +42,9 @@ import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image
 import { normalizeReceiptDate } from "@/lib/format";
 import { round2, sumLines, residualFor } from "@/lib/expense-money";
 import { categoriesForLineGroup, lineGroupFor } from "@/lib/categories";
+import { BLURRY_BELOW, measureSharpness } from "@/lib/image-quality";
+import { applyLineDefaults, hasDefaults } from "@/lib/supplier-defaults";
+import type { StoredFile } from "@/lib/receipt-storage";
 
 const initialExtractState: ExtractState = { data: null, attachment: null, error: null };
 const initialUploadState: UploadFileState = { attachment: null, error: null };
@@ -244,6 +247,7 @@ export function SubmitForm({
   myName,
   editExpense,
   resubmitFrom,
+  inbound,
 }: {
   /** Leaf categories, sorted, each tagged with the line kinds it suits. */
   categories: PickableCategory[];
@@ -252,6 +256,8 @@ export function SubmitForm({
   editExpense?: ExpenseForEdit | null;
   /** A declined expense to start a corrected, new submission from. */
   resubmitFrom?: ResubmitSource | null;
+  /** A receipt the person emailed in, read as soon as the page opens (#49). */
+  inbound?: StoredFile | null;
 }) {
   // What the form opens filled with: the expense being edited, or the declined
   // one being corrected. Only an edit saves over an existing expense.
@@ -289,6 +295,11 @@ export function SubmitForm({
   );
   const [extractedPayeeName, setExtractedPayeeName] = useState<string | null>(null);
   const [extractionNote, setExtractionNote] = useState<string | null>(null);
+  /** A photo that looks out of focus, held until the person decides (#49). */
+  const [blurry, setBlurry] = useState<{ file: File; onRejected?: () => void } | null>(null);
+  /** What the vendor's usual settings filled in, in words (#49). */
+  const [defaultsNote, setDefaultsNote] = useState<string | null>(null);
+  const defaultsAppliedFor = useRef<string | null>(null);
   const [items, setItems] = useState<ReviewItem[]>(() =>
     seed
       ? seed.lineItems.map((it, i) => ({ ...it, key: `edit-${i}`, itemNumber: "" }))
@@ -404,7 +415,7 @@ export function SubmitForm({
   // Offer an unfinished submission back, once, on a fresh form only. Editing an
   // existing expense is a different job and must never be seeded from a draft.
   useEffect(() => {
-    if (editExpense || mode === "review") return;
+    if (editExpense || inbound || mode === "review") return;
     const draft = readDraft();
     if (!draft || draft.items.length === 0) return;
     // localStorage is an external system, and it cannot be read during render
@@ -461,7 +472,17 @@ export function SubmitForm({
       setTotal(receiptTotal);
       setPrintedGst(d.gstAmount);
       setExtractedPayeeName(d.payee?.name ?? null);
-      setExtractionNote(d.note);
+      // A total that couldn't be read is most often one the photo cut off.
+      setExtractionNote(
+        [
+          d.note,
+          d.total == null && extractState.attachment?.contentType.startsWith("image/")
+            ? "No total could be read. If the photo cuts it off, take it again with the whole receipt in view."
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" ") || null
+      );
       if (d.payee?.name) {
         setPayee({
           kind: "new",
@@ -481,6 +502,45 @@ export function SubmitForm({
       setMode("review");
     }
   }, [extractState]);
+
+  // A receipt emailed in is already stored, so it goes straight to being read,
+  // exactly as an upload would once its file had arrived (#49).
+  const inboundStarted = useRef(false);
+  useEffect(() => {
+    if (!inbound || seed || inboundStarted.current) return;
+    inboundStarted.current = true;
+    const payload = new FormData();
+    payload.append("attachment", JSON.stringify(inbound));
+    setStage("reading");
+    startTransition(() => extractAction(payload));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inbound]);
+
+  // The vendor's usual category, payee and GST treatment, once per vendor and
+  // only for a new submission — an edit or a correction already says what it
+  // means. The receipt's own answers win: a category it gave stays, and a
+  // payee it named is not replaced.
+  useEffect(() => {
+    if (seed || mode !== "review" || !resolvedVendor) return;
+    if (defaultsAppliedFor.current === resolvedVendor.id) return;
+    defaultsAppliedFor.current = resolvedVendor.id;
+    const defaults = resolvedVendor.defaults;
+    if (!hasDefaults(defaults)) return;
+
+    const changes: string[] = [];
+    const applied = applyLineDefaults(items, defaults);
+    if (applied.changes.length) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setItems(applied.lines);
+      changes.push(...applied.changes);
+    }
+    if (defaults.payee === "vendor" && payee?.kind === "me" && !extractedPayeeName) {
+      setPayee({ kind: "vendor" });
+      changes.push("paid to the vendor directly");
+    }
+    setDefaultsNote(changes.length ? `Filled in from ${resolvedVendor.name}'s usual settings: ${changes.join("; ")}.` : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedVendor, mode]);
 
   // Keep the draft current. Debounced so typing a description is one write at
   // the end rather than one per keystroke.
@@ -510,10 +570,21 @@ export function SubmitForm({
    * "save it somewhere, then find it again in a picker" was a detour around
    * the clipboard the person was already holding it on.
    */
-  async function readReceiptFile(chosen: File, onRejected?: () => void) {
+  async function readReceiptFile(chosen: File, onRejected?: () => void, acceptBlurry = false) {
     setSizeError(null);
+    setBlurry(null);
     setStage("preparing");
     try {
+      // Checked on the original, before it is shrunk for upload: a sharp
+      // photo stays sharp when scaled, and the question is whether the
+      // camera caught the print.
+      if (!acceptBlurry) {
+        const sharpness = await measureSharpness(chosen);
+        if (sharpness !== null && sharpness < BLURRY_BELOW) {
+          setBlurry({ file: chosen, onRejected });
+          return;
+        }
+      }
       const prepared = await shrinkImageForUpload(chosen);
       if (prepared.size > MAX_UPLOAD_BYTES) {
         setSizeError(
@@ -733,6 +804,33 @@ export function SubmitForm({
               )}
             </div>
           )}
+          {blurry && !busy && (
+            <div className="flex flex-col items-center gap-2 rounded-md bg-gold/10 px-4 py-3 text-sm" role="alert">
+              <p className="text-ink/80">
+                That photo looks blurry, so the amounts may be read wrong. Hold the phone steady, with the whole
+                receipt in view.
+              </p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    blurry.onRejected?.();
+                    setBlurry(null);
+                  }}
+                  className="rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep"
+                >
+                  Take it again
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void readReceiptFile(blurry.file, blurry.onRejected, true)}
+                  className="rounded-md border border-ink/15 px-4 py-2 text-ink/70 hover:border-ink/30"
+                >
+                  Use it anyway
+                </button>
+              </div>
+            </div>
+          )}
           {sizeError && !extracting && <p className="text-sm text-red-700">{sizeError}</p>}
           {extractState.error && !extracting && (
             <p className="text-sm text-red-700">{extractState.error}</p>
@@ -777,6 +875,7 @@ export function SubmitForm({
       setPayee={setPayee}
       extractedPayeeName={extractedPayeeName}
       extractionNote={extractionNote}
+      defaultsNote={defaultsNote}
       restoredDraft={restoredDraft}
       resolvedVendor={resolvedVendor}
       resolvingVendor={resolvingVendor}
@@ -818,6 +917,8 @@ function ReviewForm(props: {
   setPayee: (p: PayeeChoice | null) => void;
   extractedPayeeName: string | null;
   extractionNote: string | null;
+  /** What the vendor's usual settings filled in (#49). */
+  defaultsNote: string | null;
   restoredDraft: boolean;
   onDiscard: () => void;
   onSubmitted: () => void;
@@ -1181,6 +1282,10 @@ function ReviewForm(props: {
 
       {props.extractionNote && (
         <p className="mb-4 rounded-md bg-gold/10 px-3 py-2 text-sm text-ink/70">{props.extractionNote}</p>
+      )}
+
+      {props.defaultsNote && (
+        <p className="mb-4 rounded-md bg-palm/10 px-3 py-2 text-sm text-ink/75">{props.defaultsNote}</p>
       )}
 
       {duplicates.length > 0 && (

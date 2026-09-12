@@ -7,6 +7,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { setSetting } from "@/lib/app-settings";
 import { reportError } from "@/lib/errors";
+import { after } from "next/server";
+import { continueExtractionCheck } from "@/lib/extraction-check";
 
 async function requireSettingsAdmin() {
   const user = await getCurrentUser();
@@ -123,4 +125,42 @@ export async function setDuplicateFlags(formData: FormData): Promise<void> {
   revalidatePath("/admin/settings");
   revalidatePath("/approvals");
   revalidatePath("/payments");
+}
+
+/** The scheduled receipt-reading check (#49): on or off, how often, how many a morning, and when to worry. */
+export async function setExtractionCheck(formData: FormData): Promise<void> {
+  const user = await requireSettingsAdmin();
+  const whole = (key: string, fallback: number, lo: number, hi: number) => {
+    const n = Math.round(Number(formData.get(key)));
+    return Number.isFinite(n) && n >= lo && n <= hi ? n : fallback;
+  };
+  const value = {
+    enabled: formData.get("enabled") === "on",
+    everyDays: whole("every_days", 30, 1, 365),
+    perMorning: whole("per_morning", 6, 1, 20),
+    alertDropPoints: whole("drop_points", 5, 1, 100),
+  };
+  const { error } = await setSetting(createAdminClient(), "extraction_check", value, user.id);
+  if (error) {
+    await reportError({ source: "app-settings", error, detail: "extraction_check", userId: user.id });
+    throw new Error("The setting could not be saved. Try again.");
+  }
+  revalidatePath("/admin/settings");
+}
+
+/**
+ * Starts a check now, or continues the one under way, reading the next few
+ * receipts after the response; the rest are read on the following mornings.
+ */
+export async function runExtractionCheckNow(): Promise<void> {
+  await requireSettingsAdmin();
+  const admin = createAdminClient();
+  after(async () => {
+    try {
+      await continueExtractionCheck(admin, { force: true });
+    } catch (err) {
+      await reportError({ source: "extraction-check", error: err });
+    }
+  });
+  revalidatePath("/admin/settings");
 }

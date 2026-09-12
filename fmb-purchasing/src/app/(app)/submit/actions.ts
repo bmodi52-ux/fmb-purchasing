@@ -38,6 +38,8 @@ import { reportError } from "@/lib/errors";
 import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { getSetting } from "@/lib/app-settings";
 import { alertOnVendorAdded } from "@/lib/expense-alerts";
+import { markInboundReceiptsUsed } from "@/lib/inbound-email";
+import type { SupplierDefaults } from "@/lib/supplier-defaults";
 import { lineGst, lineSubtotal, reconcile, round2, sumLineGst } from "@/lib/expense-money";
 import {
   resolvePayee,
@@ -386,6 +388,8 @@ export type ResolvedVendor = {
    * to be told the number to know that.
    */
   hasPaymentDetails: boolean;
+  /** What a receipt from this vendor usually is (#49). */
+  defaults: SupplierDefaults;
 };
 
 /**
@@ -417,7 +421,7 @@ export async function resolveVendorAction(
   if (!cleanAbn && !trimmed) return null;
 
   const admin = createAdminClient();
-  const select = "id, vendor_number, name, status, created_at";
+  const select = "id, vendor_number, name, status, created_at, default_category_id, default_payee, gst_treatment";
 
   let match = cleanAbn
     ? preferredVendor(
@@ -439,12 +443,21 @@ export async function resolveVendorAction(
 
   if (!match) return null;
 
+  const { data: defaultCategory } = match.default_category_id
+    ? await admin.from("categories").select("name").eq("id", match.default_category_id).maybeSingle()
+    : { data: null };
+
   return {
     id: match.id,
     vendorNumber: match.vendor_number,
     name: match.name,
     status: match.status,
     hasPaymentDetails: (await vendorPaymentDetails(admin, match.id)) !== null,
+    defaults: {
+      categoryName: (defaultCategory?.name as string | undefined) ?? null,
+      payee: match.default_payee === "me" || match.default_payee === "vendor" ? match.default_payee : null,
+      gstTreatment: match.gst_treatment === "gst_free" || match.gst_treatment === "taxable" ? match.gst_treatment : null,
+    },
   };
 }
 
@@ -1053,6 +1066,9 @@ export async function createExpense(
   }
 
   const created = data as { id: string; expense_number: string };
+
+  // A receipt emailed in leaves the waiting list once it is submitted (#49).
+  await markInboundReceiptsUsed(admin, user.id, input.attachments.map((a) => a.sha256), created.id);
 
   await notifyExpenseSubmitted({
     id: created.id,

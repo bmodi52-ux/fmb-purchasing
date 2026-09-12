@@ -14,7 +14,9 @@ import {
   updateVendorPaymentDetails,
   reviewProposedVendorAccount,
   checkVendorRegistration,
+  updateVendorDefaults,
 } from "./actions";
+import { DEFAULT_PAYEE_LABELS, GST_TREATMENT_LABELS } from "@/lib/supplier-defaults";
 import { reviewVendor } from "../actions";
 import { formatDate, formatPlainDate } from "@/lib/format";
 import { ReviewDecision, StatusPill } from "@/components/review-decision";
@@ -56,6 +58,9 @@ type Vendor = {
   gst_registered_from: string | null;
   abn_active: boolean | null;
   abr_checked_at: string | null;
+  default_category_id: string | null;
+  default_payee: "me" | "vendor" | null;
+  gst_treatment: "gst_free" | "taxable" | null;
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -96,7 +101,7 @@ export default async function VendorDetailPage({
     admin
       .from("vendors")
       .select(
-        "id, name, abn, vendor_number, status, billing_address, gst_registered, gst_registered_from, abn_active, abr_checked_at"
+        "id, name, abn, vendor_number, status, billing_address, gst_registered, gst_registered_from, abn_active, abr_checked_at, default_category_id, default_payee, gst_treatment"
       )
       .eq("id", id)
       .maybeSingle<Vendor>(),
@@ -205,7 +210,7 @@ async function DetailsTab({
   canSeeBankDetails: boolean;
 }) {
   const admin = createAdminClient();
-  const [{ data: addresses }, { data: contacts }, paymentRow] = await Promise.all([
+  const [{ data: addresses }, { data: contacts }, paymentRow, { data: categoryRows }] = await Promise.all([
     admin.from("vendor_collection_addresses").select("*").eq("vendor_id", vendor.id).order("created_at"),
     admin.from("vendor_contacts").select("*").eq("vendor_id", vendor.id).order("created_at"),
     // Every account this vendor has ever had, newest first: the one in use,
@@ -216,7 +221,10 @@ async function DetailsTab({
       .select("id, bank_account_name, bank_bsb, bank_account_number, notes, remittance_email, status, created_at, superseded_at")
       .eq("vendor_id", vendor.id)
       .order("created_at", { ascending: false }),
+    admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
   ]);
+  const categoryLabels = categoryLabelsById(categoryRows ?? []);
+  const defaultCategoryOptions = leafCategories(sortCategories(categoryRows ?? []));
 
   const accounts = paymentRow.data ?? [];
   const stored = accounts.find((a) => a.status === "approved");
@@ -286,6 +294,52 @@ async function DetailsTab({
             )}
           </div>
         )}
+      </section>
+
+      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <h2 className="mb-1 section-title text-ink">Usual settings</h2>
+        <p className="mb-4 text-sm text-ink/55">
+          Filled in on Submit when a receipt from this vendor doesn&apos;t say otherwise. The receipt&apos;s own category
+          and payee always win.
+        </p>
+        <form action={updateVendorDefaults} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <input type="hidden" name="vendor_id" value={vendor.id} />
+          <Field label="Usual category">
+            <select name="default_category_id" defaultValue={vendor.default_category_id ?? ""} disabled={!canEdit} className="input">
+              <option value="">None</option>
+              {defaultCategoryOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {categoryLabels.get(c.id) ?? c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Usually paid to">
+            <select name="default_payee" defaultValue={vendor.default_payee ?? ""} disabled={!canEdit} className="input">
+              <option value="">Whoever submits chooses</option>
+              {(Object.keys(DEFAULT_PAYEE_LABELS) as ("me" | "vendor")[]).map((k) => (
+                <option key={k} value={k}>
+                  {DEFAULT_PAYEE_LABELS[k]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="GST">
+            <select name="gst_treatment" defaultValue={vendor.gst_treatment ?? ""} disabled={!canEdit} className="input">
+              <option value="">As each receipt shows</option>
+              {(Object.keys(GST_TREATMENT_LABELS) as ("gst_free" | "taxable")[]).map((k) => (
+                <option key={k} value={k}>
+                  {GST_TREATMENT_LABELS[k]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {canEdit && (
+            <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30 sm:col-span-3">
+              Save usual settings
+            </SubmitButton>
+          )}
+        </form>
       </section>
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">

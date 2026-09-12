@@ -37,6 +37,7 @@ import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 
 import path from "node:path";
 import { extractReceiptDetailed } from "../src/lib/receipt-extraction.ts";
 import { leafCategories } from "../src/lib/categories.ts";
+import { scoreReading } from "../src/lib/extraction-scoring.ts";
 
 /* ------------------------------------------------------------------ setup */
 
@@ -138,9 +139,6 @@ function receiptFiles() {
 
 /* --------------------------------------------------------------- scoring */
 
-const digits = (v) => String(v ?? "").replace(/\D/g, "");
-const money = (v) => (v == null ? null : Math.round(Number(v) * 100) / 100);
-
 /**
  * Compares one extraction against whatever the ground truth actually states.
  * Fields absent from the truth entry are not scored — an entry can assert the
@@ -148,22 +146,8 @@ const money = (v) => (v == null ? null : Math.round(Number(v) * 100) / 100);
  */
 function score(receipt, truth) {
   if (!truth) return null;
-  const checks = [];
-  const add = (field, ok, got, want) => checks.push({ field, ok, got, want });
-  const text = (a, b) => String(a ?? "").toLowerCase().includes(String(b).toLowerCase());
-
-  if (truth.vendor !== undefined) add("vendor", text(receipt.vendor, truth.vendor), receipt.vendor, truth.vendor);
-  if (truth.abn !== undefined) add("abn", digits(receipt.abn) === digits(truth.abn), receipt.abn, truth.abn);
-  if (truth.invoiceNumber !== undefined)
-    add("invoiceNumber", text(receipt.invoiceNumber, truth.invoiceNumber), receipt.invoiceNumber, truth.invoiceNumber);
-  if (truth.date !== undefined) add("date", text(receipt.date, truth.date), receipt.date, truth.date);
-  if (truth.subtotal !== undefined) add("subtotal", money(receipt.subtotal) === money(truth.subtotal), receipt.subtotal, truth.subtotal);
-  if (truth.gstAmount !== undefined) add("gstAmount", money(receipt.gstAmount) === money(truth.gstAmount), receipt.gstAmount, truth.gstAmount);
-  if (truth.total !== undefined) add("total", money(receipt.total) === money(truth.total), receipt.total, truth.total);
-  if (truth.lineCount !== undefined) add("lineCount", receipt.lineItems.length === truth.lineCount, receipt.lineItems.length, truth.lineCount);
-  if (truth.payeeName !== undefined) add("payeeName", text(receipt.payee?.name, truth.payeeName), receipt.payee?.name ?? null, truth.payeeName);
-
-  return { checks, passed: checks.filter((c) => c.ok).length, total: checks.length };
+  // The same rules the scheduled check in the app scores by.
+  return scoreReading(receipt, truth);
 }
 
 /**

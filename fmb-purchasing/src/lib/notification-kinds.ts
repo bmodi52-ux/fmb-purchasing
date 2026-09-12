@@ -34,7 +34,8 @@ export type NotificationKind =
   | "escalation"
   | "announcement"
   | "alert"
-  | "stand_in";
+  | "stand_in"
+  | "receipt_received";
 
 /** Who a kind can reach at all, so nobody is offered settings for things they never receive. */
 export type Audience = "everyone" | "approvers" | "payers" | "admins" | "reviewers";
@@ -82,6 +83,13 @@ export const NOTIFICATION_KINDS: KindDefinition[] = [
     kind: "expense_paid",
     label: "Your expense was paid",
     description: "An expense you submitted has been paid.",
+    audience: ["everyone"],
+    defaults: { in_app: true, push: true, email: false },
+  },
+  {
+    kind: "receipt_received",
+    label: "A receipt you emailed in",
+    description: "A receipt you forwarded to the app's address is ready to submit.",
     audience: ["everyone"],
     defaults: { in_app: true, push: true, email: false },
   },

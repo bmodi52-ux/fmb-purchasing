@@ -69,6 +69,25 @@ export async function updateVendorDetails(formData: FormData) {
   revalidateReports();
 }
 
+/** What a receipt from this vendor usually is (#49). */
+export async function updateVendorDefaults(formData: FormData) {
+  await requireVendorEdit();
+  const vendorId = String(formData.get("vendor_id") ?? "");
+  if (!vendorId) return;
+  const payee = String(formData.get("default_payee") ?? "");
+  const gst = String(formData.get("gst_treatment") ?? "");
+  const { error } = await createAdminClient()
+    .from("vendors")
+    .update({
+      default_category_id: String(formData.get("default_category_id") ?? "") || null,
+      default_payee: payee === "me" || payee === "vendor" ? payee : null,
+      gst_treatment: gst === "gst_free" || gst === "taxable" ? gst : null,
+    })
+    .eq("id", vendorId);
+  if (error) throw new Error("The usual settings could not be saved. Try again.");
+  revalidatePath(`/vendors/${vendorId}`);
+}
+
 export async function addCollectionAddress(formData: FormData) {
   await requireVendorEdit();
   const vendorId = String(formData.get("vendor_id"));
