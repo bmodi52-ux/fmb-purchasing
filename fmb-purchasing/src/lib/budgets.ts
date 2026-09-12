@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { allocate, budgetForPeriod, type BudgetRecord, type PeriodBudget } from "@/lib/budget-allocation";
+import { monthOf, parsePeriod } from "@/lib/periods";
 
 /**
  * Reading budgets for a period (#22) — the database half of
@@ -26,7 +27,21 @@ export async function loadBudgets(admin: SupabaseClient, categoryIds?: string[])
     .order("start_date");
   if (categoryIds) query = query.in("category_id", categoryIds);
   const { data } = await query;
-  return ((data ?? []) as BudgetRow[]).map((r) => ({
+  const rows = (data ?? []) as BudgetRow[];
+
+  // Monthly phasing (#39, 0052). Missing before that migration has run, when
+  // every budget simply spreads evenly.
+  const { data: phasing } = rows.length
+    ? await admin.from("category_budget_phasing").select("budget_id, month_index, percent").in("budget_id", rows.map((r) => r.id))
+    : { data: [] };
+  const percentsOf = new Map<string, Map<number, number>>();
+  for (const p of phasing ?? []) {
+    const map = percentsOf.get(p.budget_id as string) ?? new Map<number, number>();
+    map.set(p.month_index as number, Number(p.percent));
+    percentsOf.set(p.budget_id as string, map);
+  }
+
+  return rows.map((r) => ({
     id: r.id,
     categoryId: r.category_id,
     start: r.start_date,
@@ -35,7 +50,25 @@ export async function loadBudgets(admin: SupabaseClient, categoryIds?: string[])
     label: r.label,
     amount: Number(r.amount),
     priority: r.priority,
+    months: monthsFor(r.period_code, percentsOf.get(r.id)),
   }));
+}
+
+/** A whole year's twelve months with their percentages, when the budget is phased. */
+export function monthsFor(periodCode: string, percents: Map<number, number> | undefined) {
+  if (!percents?.size) return undefined;
+  const period = parsePeriod(periodCode, "2000-01-01");
+  if (!period.calendar || period.year === null || period.part.type !== "year" || period.code !== periodCode) return undefined;
+  return Array.from({ length: 12 }, (_, i) => {
+    const m = monthOf(period.calendar!, period.year!, i + 1);
+    return { start: m.start, end: m.end, percent: percents.get(i + 1) ?? 0 };
+  });
+}
+
+/** Whether a budget's period is a whole year of one calendar, which is what can be phased by month. */
+export function canPhase(periodCode: string): boolean {
+  const period = parsePeriod(periodCode, "2000-01-01");
+  return period.code === periodCode && period.calendar !== null && period.part.type === "year";
 }
 
 export type CategoryPeriodBudget = PeriodBudget & {

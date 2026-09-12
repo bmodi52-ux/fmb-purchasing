@@ -4,6 +4,8 @@ import { runAlertRules, type AlertEvent } from "@/lib/alert-rules";
 import { parsePeriod, periodCode, yearContaining, type CalendarKind } from "@/lib/periods";
 import { todayIso } from "@/lib/periods-data";
 import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
+import { getSetting } from "@/lib/app-settings";
+import { notify, userIdsWithPermission } from "@/lib/notifications-inapp";
 
 /**
  * Where the app's events meet the alert rules admins have built (#28).
@@ -43,11 +45,13 @@ export function alertOnExpense(
   expense: { id: string; expense_number?: string | null; vendor_name_raw: string | null; total: number }
 ): void {
   later(async () => {
-    const [rules, budgetRules] = await Promise.all([
+    const [rules, budgetRules, builtIn] = await Promise.all([
       hasRules(admin, event),
       event === "expense_submitted" ? hasRules(admin, "budget_threshold") : Promise.resolve(false),
+      event === "expense_submitted" ? getSetting(admin, "budget_alerts") : Promise.resolve(null),
     ]);
-    if (!rules && !budgetRules) return;
+    const builtInOn = !!builtIn?.enabled && builtIn.percents.length > 0;
+    if (!rules && !budgetRules && !builtInOn) return;
 
     const [{ data: row }, { data: lines }] = await Promise.all([
       admin.from("expenses").select("vendor_id, receipt_date, created_at").eq("id", expense.id).maybeSingle(),
@@ -69,32 +73,37 @@ export function alertOnExpense(
       );
     }
 
-    if (budgetRules && row) {
+    if ((budgetRules || builtInOn) && row) {
       const date = (row.receipt_date as string | null) ?? (row.created_at as string).slice(0, 10);
-      await checkBudgetThresholds(admin, date, categoryIds, lines ?? []);
+      await checkBudgetThresholds(admin, date, categoryIds, lines ?? [], budgetRules, builtInOn ? builtIn!.percents : []);
     }
   });
 }
 
 /**
- * A budget alert fires when an expense takes a category across the rule's
- * percentage of its budget for the year the expense falls in — once per rule,
- * category, year and percentage.
+ * A budget alert fires when an expense takes a category across a percentage
+ * of its budget for the year the expense falls in: once per rule, category,
+ * year and percentage for an admin's rules, and once per category, Hijri year
+ * and percentage for the built-in alerts to whoever sets budgets (#39).
  */
 async function checkBudgetThresholds(
   admin: SupabaseClient,
   date: string,
   categoryIds: string[],
-  lines: { category_id: unknown; line_total: unknown }[]
+  lines: { category_id: unknown; line_total: unknown }[],
+  withRules: boolean,
+  builtInPercents: number[]
 ): Promise<void> {
-  const { data: rules } = await admin
-    .from("alert_rules")
-    .select("conditions")
-    .eq("event", "budget_threshold")
-    .eq("active", true);
+  const { data: rules } = withRules
+    ? await admin.from("alert_rules").select("conditions").eq("event", "budget_threshold").eq("active", true)
+    : { data: [] };
   const calendars = [
-    ...new Set((rules ?? []).map((r) => ((r.conditions as { calendar?: CalendarKind })?.calendar ?? "hijri") as CalendarKind)),
+    ...new Set([
+      ...(builtInPercents.length ? (["hijri"] as CalendarKind[]) : []),
+      ...(rules ?? []).map((r) => ((r.conditions as { calendar?: CalendarKind })?.calendar ?? "hijri") as CalendarKind),
+    ]),
   ];
+  const budgetSetters = builtInPercents.length ? await userIdsWithPermission(admin, "budgets", "edit_master_data") : [];
 
   const { loadReportRawData, withinRange } = await import("@/app/(app)/reports/data");
   const budgets = await loadBudgets(admin, categoryIds);
@@ -116,17 +125,36 @@ async function checkBudgetThresholds(
       const usedBefore = (spentAfter - thisExpense) / budget.amount;
 
       const { data: category } = await admin.from("categories").select("name").eq("id", categoryId).maybeSingle();
-      await runAlertRules(
-        admin,
-        "budget_threshold",
-        { budget: { categoryId, usedBefore, usedAfter, calendar } },
-        {
-          title: `${category?.name ?? "A category"} has used ${Math.round(usedAfter * 100)}% of its budget`,
-          body: `${money(spentAfter)} of ${money(budget.amount)} for ${period.label}.`,
-          link: `/budgets?period=${period.code}`,
-        },
-        (rule) => `${categoryId}:${period.code}:${rule.conditions.budgetPercent}`
-      );
+      const message = {
+        title: `${category?.name ?? "A category"} has used ${Math.round(usedAfter * 100)}% of its budget`,
+        body: `${money(spentAfter)} of ${money(budget.amount)} for ${period.label}.`,
+        link: `/budgets?period=${period.code}`,
+      };
+
+      if (withRules) {
+        await runAlertRules(
+          admin,
+          "budget_threshold",
+          { budget: { categoryId, usedBefore, usedAfter, calendar } },
+          message,
+          (rule) => `${categoryId}:${period.code}:${rule.conditions.budgetPercent}`
+        );
+      }
+
+      if (calendar === "hijri") {
+        for (const percent of builtInPercents) {
+          const line = percent / 100;
+          if (!(usedBefore < line && usedAfter >= line)) continue;
+          const { error: already } = await admin
+            .from("budget_alert_firings")
+            .insert({ category_id: categoryId, period_code: period.code, percent });
+          if (already) continue;
+          await notify(
+            admin,
+            budgetSetters.map((userId) => ({ userId, kind: "alert" as const, title: message.title, body: message.body, link: message.link }))
+          );
+        }
+      }
     }
   }
 }

@@ -14,6 +14,7 @@ import { ReviewDecision } from "@/components/review-decision";
 import { reversePayment } from "../../payments/actions";
 import { GST_CONCERN_LABEL, gstConcerns } from "@/lib/vendor-registration";
 import { storedGstDisagreement } from "@/lib/expense-money";
+import { mayLackTaxInvoice } from "@/lib/gst-summary";
 import { setLineCapital } from "./actions";
 import { SubmitButton } from "@/components/submit-button";
 
@@ -91,7 +92,7 @@ export default async function ExpenseDetailPage({
   const { data: expense } = await admin
     .from("expenses")
     .select(
-      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, payee_id, created_at"
+      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, payee_id, created_at, bank_confirmed_on, bank_statement_text"
     )
     .eq("id", id)
     .maybeSingle();
@@ -133,7 +134,7 @@ export default async function ExpenseDetailPage({
     expense.vendor_id
       ? admin
           .from("vendors")
-          .select("id, name, vendor_number, gst_registered, abn_active")
+          .select("id, name, vendor_number, gst_registered, abn_active, abn")
           .eq("id", expense.vendor_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -150,6 +151,15 @@ export default async function ExpenseDetailPage({
   const concerns = [
     ...gstConcerns(vendor, Number(expense.gst_amount)).map((c) => GST_CONCERN_LABEL[c]),
     ...(gstOff === null ? [] : [`The line GST doesn't match the ${money(printedGst!)} printed on the receipt`]),
+    // A GST credit over $82.50 needs a tax invoice (#38).
+    ...(mayLackTaxInvoice({
+      gst: Number(expense.gst_amount),
+      total: Number(expense.total),
+      hasAttachment: (attachmentCount ?? 0) > 0,
+      vendorAbn: vendor?.abn ?? null,
+    })
+      ? [(attachmentCount ?? 0) > 0 ? "GST over $82.50, but the vendor has no ABN recorded" : "GST over $82.50, but no receipt is attached"]
+      : []),
   ];
 
   // One round trip each for the names and labels the page needs, rather than
@@ -458,6 +468,18 @@ export default async function ExpenseDetailPage({
               {expense.payment_date ? formatDate(expense.payment_date) : "—"}
             </Field>
             <Field label="Marked paid by">{person(expense.paid_by)}</Field>
+            <Field label="Bank statement">
+              {expense.bank_confirmed_on ? (
+                <span className="text-palm">
+                  Seen {formatDate(expense.bank_confirmed_on)}
+                  {expense.bank_statement_text && (
+                    <span className="block text-xs text-ink/50">{expense.bank_statement_text}</span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-ink/50">Not yet checked against a statement</span>
+              )}
+            </Field>
           </dl>
         </section>
       )}

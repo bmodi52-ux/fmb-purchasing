@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { SubmitButton } from "@/components/submit-button";
 import { useState } from "react";
-import { markExpensePaid, bulkMarkPaid } from "./actions";
+import { markExpensePaid, bulkMarkPaid, buildBankFile } from "./actions";
 import { formatDate } from "@/lib/format";
 import { FilterableSection, type SortOption } from "@/components/filterable-section";
 import { ReceiptViewer } from "@/components/receipt-viewer";
@@ -58,6 +58,35 @@ function BulkPayBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => voi
   const [reference, setReference] = useState("");
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [bankFile, setBankFile] = useState<{ message: string; skipped: { label: string; reason: string }[]; error: boolean } | null>(null);
+
+  /** Builds the batch payment file and hands it to the browser to save (#37). */
+  async function downloadBankFile() {
+    setPending(true);
+    setBankFile(null);
+    try {
+      const result = await buildBankFile(ids);
+      if (!result.ok) {
+        setBankFile({ message: result.message, skipped: [], error: true });
+        return;
+      }
+      const url = URL.createObjectURL(new Blob([result.content], { type: "text/plain" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setBankFile({
+        message: `Saved ${result.filename}: ${result.payments} ${result.payments === 1 ? "transfer" : "transfers"}, ${(result.totalCents / 100).toLocaleString("en-AU", { style: "currency", currency: "AUD" })}. Upload it to the bank, then mark these paid.`,
+        skipped: result.skipped,
+        error: false,
+      });
+    } catch {
+      setBankFile({ message: "The bank file couldn't be made. Try again.", skipped: [], error: true });
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function submit() {
     setPending(true);
@@ -91,6 +120,14 @@ function BulkPayBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => voi
       >
         {pending ? "…" : `Mark ${ids.length} paid`}
       </button>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={downloadBankFile}
+        className="rounded-md border border-ink/20 px-3 py-1 text-xs font-medium text-ink/80 hover:border-ink/40 disabled:opacity-50"
+      >
+        Download bank file
+      </button>
       <button type="button" onClick={onClear} className="text-xs text-ink/50 hover:text-ink">
         Clear
       </button>
@@ -98,6 +135,20 @@ function BulkPayBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => voi
         <p role="alert" className="basis-full text-xs text-maroon">
           The payment wasn&apos;t recorded, and nothing was marked paid. Try again.
         </p>
+      )}
+      {bankFile && (
+        <div role="status" className={`basis-full text-xs ${bankFile.error ? "text-maroon" : "text-ink/70"}`}>
+          <p>{bankFile.message}</p>
+          {bankFile.skipped.length > 0 && (
+            <ul className="mt-1 list-disc pl-5 text-maroon">
+              {bankFile.skipped.map((s) => (
+                <li key={s.label}>
+                  Left out {s.label}: {s.reason.toLowerCase()}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );

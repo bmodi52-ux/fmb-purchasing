@@ -64,6 +64,52 @@ export async function setReminders(formData: FormData): Promise<void> {
   revalidatePath("/admin/settings");
 }
 
+/** FMB's own bank details for batch payment files (#37). */
+export async function setAbaSettings(formData: FormData): Promise<void> {
+  const user = await requireSettingsAdmin();
+  const text = (key: string) => String(formData.get(key) ?? "").trim();
+  const value = {
+    bankAbbreviation: text("bank").toUpperCase().slice(0, 3),
+    userName: text("user_name").slice(0, 26),
+    userId: text("user_id").replace(/\D/g, "").slice(0, 6),
+    bsb: text("bsb").replace(/\D/g, "").slice(0, 6),
+    accountNumber: text("account_number").replace(/\D/g, "").slice(0, 9),
+    remitterName: text("remitter_name").slice(0, 16) || "FMB SYDNEY",
+    description: text("description").slice(0, 12) || "PAYMENTS",
+    balancing: formData.get("balancing") === "on",
+  };
+  const { error } = await setSetting(createAdminClient(), "aba", value, user.id);
+  if (error) {
+    await reportError({ source: "app-settings", error, detail: "aba", userId: user.id });
+    throw new Error("The bank file settings could not be saved. Try again.");
+  }
+  revalidatePath("/admin/settings");
+}
+
+export async function setRemittanceEmails(formData: FormData): Promise<void> {
+  const user = await requireSettingsAdmin();
+  const { error } = await setSetting(createAdminClient(), "remittance_emails", String(formData.get("on")) === "true", user.id);
+  if (error) throw new Error("The setting could not be saved. Try again.");
+  revalidatePath("/admin/settings");
+}
+
+/** The built-in budget alerts (#39): on or off, and at which percentages. */
+export async function setBudgetAlerts(formData: FormData): Promise<void> {
+  const user = await requireSettingsAdmin();
+  const percents = String(formData.get("percents") ?? "")
+    .split(/[\s,]+/)
+    .map((p) => Math.round(Number(p.replace("%", ""))))
+    .filter((p) => Number.isFinite(p) && p > 0 && p <= 500);
+  const { error } = await setSetting(
+    createAdminClient(),
+    "budget_alerts",
+    { enabled: formData.get("enabled") === "on", percents: [...new Set(percents)].sort((a, b) => a - b) },
+    user.id
+  );
+  if (error) throw new Error("The setting could not be saved. Try again.");
+  revalidatePath("/admin/settings");
+}
+
 export async function setDuplicateFlags(formData: FormData): Promise<void> {
   const user = await requireSettingsAdmin();
   const on = String(formData.get("on")) === "true";

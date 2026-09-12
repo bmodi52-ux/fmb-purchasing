@@ -168,6 +168,9 @@ export async function updateVendorPaymentDetails(formData: FormData) {
     bank_bsb: String(formData.get("bank_bsb") ?? "").replace(/\D/g, "") || null,
     bank_account_number: String(formData.get("bank_account_number") ?? "").replace(/\D/g, "") || null,
     notes: String(formData.get("payment_notes") ?? "").trim() || null,
+    // Where the remittance advice goes when they are paid (#37). Describes the
+    // account rather than changing it, like the notes.
+    remittance_email: String(formData.get("remittance_email") ?? "").trim() || null,
   };
 
   const { data: existing } = await admin

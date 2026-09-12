@@ -24,6 +24,7 @@ export const LEDGERED_MIGRATIONS = [
   "0049_budget_periods.sql",
   "0050_notification_channels.sql",
   "0051_stand_ins.sql",
+  "0052_finance.sql",
 ] as const;
 
 export type MigrationStatus =

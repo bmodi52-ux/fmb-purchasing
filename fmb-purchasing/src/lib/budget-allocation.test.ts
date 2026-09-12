@@ -40,6 +40,44 @@ describe("allocate", () => {
   });
 });
 
+describe("monthly phasing — #39", () => {
+  test("a phased year puts each month's share on that month, and still adds up to its total", () => {
+    const year: BudgetRecord = {
+      id: "cy",
+      start: "2026-01-01",
+      end: "2026-12-31",
+      amount: 12000,
+      priority: 1,
+      label: "2026",
+      // March carries a quarter of the year; the other eleven months share the rest.
+      months: Array.from({ length: 12 }, (_, i) => {
+        const m = String(i + 1).padStart(2, "0");
+        const last = new Date(Date.UTC(2026, i + 1, 0)).getUTCDate();
+        return { start: `2026-${m}-01`, end: `2026-${m}-${last}`, percent: i === 2 ? 25 : 75 / 11 };
+      }),
+    };
+    const a = allocate([year]);
+    assert.equal(Math.round(budgetForPeriod(a, [year], "2026-03-01", "2026-03-31").amount), 3000);
+    assert.equal(budgetForPeriod(a, [year], "2026-01-01", "2026-12-31").amount, 12000);
+  });
+
+  test("an override keeps a phased budget's own days as they were", () => {
+    const phased: BudgetRecord = {
+      ...hijri,
+      months: [
+        { start: "2026-05-01", end: "2026-06-30", percent: 50 },
+        { start: "2026-07-01", end: "2027-04-19", percent: 50 },
+      ],
+    };
+    const plan = planBudgetSave([phased], { ...fy, amount: 1000 });
+    assert.equal(plan.conflicts, true);
+    const change = plan.override.changes[0];
+    // May and June keep their $4,500; the rest now carries the financial year's rate.
+    const expected = 4500 + 293 * (1000 / 365);
+    assert.equal(Math.round(change.to), Math.round(expected));
+  });
+});
+
 describe("planBudgetSave", () => {
   test("a new budget that fits saves without changing anything else", () => {
     const plan = planBudgetSave([hijri], { ...fy, amount: 10000 });
