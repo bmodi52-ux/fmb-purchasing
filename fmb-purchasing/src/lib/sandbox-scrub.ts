@@ -121,3 +121,29 @@ export function scrubDeep(value: unknown, scrub: (text: string) => string): unkn
   }
   return value;
 }
+
+/**
+ * Columns the database insists on generating itself.
+ *
+ * items.item_seq, expenses.expense_seq and vendors.vendor_seq are GENERATED
+ * ALWAYS AS IDENTITY, so a copied row carrying one is refused outright. They
+ * are dropped on the way in and the sandbox assigns its own, which the
+ * numbering triggers then turn into item, expense and vendor numbers of its
+ * own. Those numbers therefore differ from live — the sandbox is internally
+ * consistent rather than number-for-number identical.
+ */
+export const GENERATED_COLUMNS: Record<string, string[]> = {
+  items: ["item_seq", "item_number"],
+  expenses: ["expense_seq", "expense_number"],
+  vendors: ["vendor_seq", "vendor_number"],
+  // Worked out by the database from inner_quantity and pack_count.
+  item_pack_sizes: ["total_quantity"],
+};
+
+export function withoutGeneratedColumns(table: string, row: Record<string, unknown>): Record<string, unknown> {
+  const drop = GENERATED_COLUMNS[table];
+  if (!drop) return row;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) if (!drop.includes(key)) out[key] = value;
+  return out;
+}

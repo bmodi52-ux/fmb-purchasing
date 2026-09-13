@@ -32,6 +32,7 @@ import {
   scrubbedPersonName,
   scrubbedPhone,
   scrubbedVendorName,
+  withoutGeneratedColumns,
 } from "../src/lib/sandbox-scrub.ts";
 
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -53,8 +54,9 @@ function readEnv(file) {
 const TABLE_ORDER = [
   "teams", "team_permissions",
   "categories", "units",
-  "vendors", "vendor_contacts", "vendor_collection_addresses", "vendor_item_descriptions", "vendor_changes",
-  "items", "item_number_aliases", "item_pack_sizes", "item_history", "item_duplicate_dismissals",
+  "vendors", "vendor_contacts", "vendor_collection_addresses", "vendor_changes",
+  // items before vendor_item_descriptions, which points at both.
+  "items", "vendor_item_descriptions", "item_number_aliases", "item_pack_sizes", "item_history", "item_duplicate_dismissals",
   "pricelist_items", "pricelist_item_history",
   "payees", "payment_runs",
   "expenses", "expense_line_items", "expense_attachments", "expense_status_history",
@@ -201,7 +203,7 @@ function scrubRow(table, row, userMap) {
       remitterName: "FMB SANDBOX",
     };
   }
-  return out;
+  return withoutGeneratedColumns(table, out);
 }
 
 const rowCount = TABLE_ORDER.reduce((n, t) => n + (source[t]?.length || 0), 0);
@@ -297,6 +299,10 @@ for (const table of TABLE_ORDER) {
   }
   console.log("  " + table.padEnd(30) + String(rows.length).padStart(6) + " rows");
 }
+
+// The numbering sequences now sit past everything just written.
+const synced = await to.rpc("sandbox_sync_sequences");
+if (synced.error) console.log("  !! sequences: " + synced.error.message);
 
 // Trainees join the teams they are listed under.
 const teamsByName = new Map((source.teams || []).map((t) => [t.name.toLowerCase(), t.id]));
