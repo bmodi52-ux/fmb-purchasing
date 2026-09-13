@@ -100,37 +100,6 @@ Two-factor sign-in is #26.
 
 <!-- Worth considering, not yet decided. -->
 
-### 1. Sandbox environment for training and testing
-
-A place where new users can be trained and play around without touching real
-data. Needs a decision on the approach — a separate Supabase project and Vercel
-deployment (e.g. sandbox.fmbpurchasing.com.au) with its own seeded demo data,
-emails that never reach real vendors or approvers, a clear "Sandbox" banner, and
-a way to reset it to a clean state.
-
-Parked until later; not to be started until asked.
-
-Decided (2026-09-10):
-
-- Address: sandbox.fmbpurchasing.com.au — a subdomain, so no new domain to buy.
-- Database: delete the old Tokyo project and create a fresh Sydney project named
-  "FMB Sandbox".
-- Tokyo: deleted as it is, no export first.
-- Data: a scrubbed copy of real data, with vendor names, bank details and
-  people replaced. A fresh copy is taken at every reset.
-- Receipt files: copied in too. Accepted knowingly: the real details printed on
-  them (vendor, ABN, sometimes bank details) stay visible to trainees.
-- Email: sent the same way as the live site, with subjects prefixed "[Sandbox]".
-- Logins: a personal login for each trainee, kept across resets.
-- Receipt reading: the same Anthropic key as live.
-- Updates: the sandbox gets every change automatically when it is merged.
-- Reset: a script run from this computer, for now. An admin button in the
-  sandbox may come later. Its drawbacks: the sandbox would hold a key to the
-  live database; a mix-up in its settings could wipe live; a big copy may
-  outrun Vercel's time limit; and a reset can be clicked mid-session. The middle
-  ground is a button that starts a GitHub Action, which keeps the live key out
-  of the sandbox.
-
 ### 32. Expiry reminders for food-safety certificates and insurance
 
 **When:** noted only — last priority.
@@ -146,6 +115,30 @@ No-ABN withholding may apply when a contractor doesn't quote an ABN. Confirm
 with FMB's accountant whether it does.
 
 ## Done
+
+### 1. Sandbox environment for training and testing
+
+Live at sandbox.fmbpurchasing.com.au, built to the decisions of 2026-09-10 and
+the three settled on 2026-09-12: email reaches trainees only, a reset copies
+everything, and trainees are a list in the repo.
+
+A separate Sydney Supabase project (FMB Sandbox) and Vercel project
+(fmb-sandbox), deploying `main` like live. `NEXT_PUBLIC_SANDBOX=1` puts an
+undismissable banner on every page and holds email to trainees, prefixed
+[Sandbox]. `scripts/seed-sandbox.mjs` fills or resets it from a scrubbed copy
+of live — vendor names, people, bank details, addresses and emails invented and
+stable across resets, and real names rewritten inside free text. Real people
+are not copied; their work is attributed to trainees. Receipt images are copied
+unscrubbed, as decided. Item, expense and vendor numbers differ from live,
+because the database generates them.
+
+Guarded twice: every database says whether it is live or sandbox (0058), and
+`sandbox_reset()` refuses anywhere marked live (0059); the seed also refuses if
+`.env.sandbox` points at the live project. How to set up, reset and add
+trainees is in `docs/sandbox.md`.
+
+Left for later, as decided: an admin reset button, ideally one that starts a
+GitHub Action so the live key never sits in the sandbox.
 
 ### 25. Record which migrations each database has had
 
