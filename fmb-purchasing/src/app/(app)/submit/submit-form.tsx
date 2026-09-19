@@ -29,6 +29,7 @@ import type { ExtractedReceipt } from "@/lib/receipt-extraction";
 import type { StoredLineKind } from "@/lib/line-kinds";
 import type { PayeeChoice } from "@/lib/payees";
 import { VendorLookupFields } from "./vendor-lookup-fields";
+import type { VendorOption } from "@/lib/vendor-options";
 import { ItemLookupCells } from "./item-lookup-cells";
 import { LineMatchRow } from "./line-match";
 import { PayeePicker } from "./payee-picker";
@@ -40,7 +41,7 @@ import {
 } from "./reconciliation-strip";
 import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image-resize";
 import { normalizeReceiptDate } from "@/lib/format";
-import { round2, sumLines, residualFor } from "@/lib/expense-money";
+import { round2, sumLines, residualFor, claimVsReceipt, totalChangedFromScan } from "@/lib/expense-money";
 import { categoriesForLineGroup, lineGroupFor } from "@/lib/categories";
 import { BLURRY_BELOW, measureSharpness } from "@/lib/image-quality";
 import { applyLineDefaults, hasDefaults } from "@/lib/supplier-defaults";
@@ -48,6 +49,8 @@ import { isConnectionFailure, offlineQueueSupported, queueReceipt } from "@/lib/
 import type { StoredFile } from "@/lib/receipt-storage";
 
 const initialExtractState: ExtractState = { data: null, attachment: null, error: null };
+
+const formatMoney = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 const initialUploadState: UploadFileState = { attachment: null, error: null };
 
 type ReviewItem = LineItemInput & {
@@ -113,6 +116,8 @@ type Draft = {
   invoiceNumber: string;
   receiptDate: string;
   total: number;
+  receiptTotalScanned?: number | null;
+  receiptTotalNote?: string;
   printedGst: number | null;
   submitterComment: string;
   attachments: AttachmentInput[];
@@ -244,7 +249,7 @@ function withBookedResidual(items: ReviewItem[], receiptTotal: number): ReviewIt
 
 export function SubmitForm({
   categories,
-  vendorNames,
+  vendors,
   myName,
   editExpense,
   resubmitFrom,
@@ -252,7 +257,7 @@ export function SubmitForm({
 }: {
   /** Leaf categories, sorted, each tagged with the line kinds it suits. */
   categories: PickableCategory[];
-  vendorNames: string[];
+  vendors: VendorOption[];
   myName: string;
   editExpense?: ExpenseForEdit | null;
   /** A declined expense to start a corrected, new submission from. */
@@ -289,6 +294,9 @@ export function SubmitForm({
   const [invoiceNumber, setInvoiceNumber] = useState(seed?.invoiceNumber ?? "");
   const [receiptDate, setReceiptDate] = useState(seed?.receiptDate ?? "");
   const [total, setTotal] = useState(seed?.total ?? 0);
+  // What the scan read the total as, and why it was changed if it was (#51).
+  const [scannedTotal, setScannedTotal] = useState<number | null>(seed?.receiptTotalScanned ?? null);
+  const [totalNote, setTotalNote] = useState(seed?.receiptTotalNote ?? "");
   const [printedGst, setPrintedGst] = useState<number | null>(seed?.printedGst ?? null);
   const [submitterComment, setSubmitterComment] = useState(seed?.submitterComment ?? "");
   const [payee, setPayee] = useState<PayeeChoice | null>(
@@ -430,6 +438,8 @@ export function SubmitForm({
     setInvoiceNumber(draft.invoiceNumber);
     setReceiptDate(draft.receiptDate);
     setTotal(draft.total);
+    setScannedTotal(draft.receiptTotalScanned ?? null);
+    setTotalNote(draft.receiptTotalNote ?? "");
     setPrintedGst(draft.printedGst);
     setSubmitterComment(draft.submitterComment);
     setAttachments(draft.attachments);
@@ -473,6 +483,8 @@ export function SubmitForm({
       const withResidual = withBookedResidual(reviewItems, receiptTotal);
       setItems(withResidual.length ? withResidual : [blankItem()]);
       setTotal(receiptTotal);
+      setScannedTotal(d.total == null ? null : round2(d.total));
+      setTotalNote("");
       setPrintedGst(d.gstAmount);
       setExtractedPayeeName(d.payee?.name ?? null);
       // A total that couldn't be read is most often one the photo cut off.
@@ -553,6 +565,7 @@ export function SubmitForm({
       try {
         const draft: Draft = {
           vendorName, abn, invoiceNumber, receiptDate, total, printedGst,
+          receiptTotalScanned: scannedTotal, receiptTotalNote: totalNote,
           submitterComment, attachments, items, payee, savedAt: Date.now(),
         };
         localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -562,7 +575,7 @@ export function SubmitForm({
     }, 800);
     return () => clearTimeout(timer);
   }, [editExpense, mode, vendorName, abn, invoiceNumber, receiptDate, total,
-      printedGst, submitterComment, attachments, items, payee]);
+      scannedTotal, totalNote, printedGst, submitterComment, attachments, items, payee]);
 
   /**
    * Read a receipt, however it arrived.
@@ -704,6 +717,8 @@ export function SubmitForm({
     setInvoiceNumber("");
     setReceiptDate("");
     setTotal(0);
+    setScannedTotal(null);
+    setTotalNote("");
     setPrintedGst(null);
     setItems([blankItem()]);
     setAttachments([]);
@@ -881,7 +896,7 @@ export function SubmitForm({
   return (
     <ReviewForm
       categories={categories}
-      vendorNames={vendorNames}
+      vendors={vendors}
       myName={myName}
       vendorName={vendorName}
       setVendorName={setVendorName}
@@ -897,6 +912,9 @@ export function SubmitForm({
       setItems={setItems}
       total={total}
       setTotal={setTotal}
+      scannedTotal={scannedTotal}
+      totalNote={totalNote}
+      setTotalNote={setTotalNote}
       printedGst={printedGst}
       submitterComment={submitterComment}
       setSubmitterComment={setSubmitterComment}
@@ -921,7 +939,7 @@ export function SubmitForm({
 function ReviewForm(props: {
   /** Leaf categories, sorted, each tagged with the line kinds it suits. */
   categories: PickableCategory[];
-  vendorNames: string[];
+  vendors: VendorOption[];
   myName: string;
   vendorName: string;
   setVendorName: (v: string) => void;
@@ -939,6 +957,10 @@ function ReviewForm(props: {
   setItems: React.Dispatch<React.SetStateAction<ReviewItem[]>>;
   total: number;
   setTotal: (v: number) => void;
+  /** The total as the scan read it; null when nothing was scanned (#51). */
+  scannedTotal: number | null;
+  totalNote: string;
+  setTotalNote: (v: string) => void;
   printedGst: number | null;
   submitterComment: string;
   setSubmitterComment: (v: string) => void;
@@ -1182,6 +1204,18 @@ function ReviewForm(props: {
     });
   }
 
+  /**
+   * Mark a line as claimed but not on the receipt (#51). GST goes off with it:
+   * without a tax invoice showing the line there is no GST credit to claim.
+   */
+  function setNotOnReceipt(key: string, on: boolean) {
+    props.setItems((prev) =>
+      prev.map((it) =>
+        it.key !== key ? it : { ...it, notOnReceipt: on, ...(on ? { gstApplicable: false } : { notOnReceiptNote: null }) }
+      )
+    );
+  }
+
   function addCharge(kind: StoredLineKind, amount: number) {
     props.setItems((prev) => [...prev, blankItem(kind, amount)]);
   }
@@ -1249,7 +1283,18 @@ function ReviewForm(props: {
     kind: it.kind,
     lineTotal: it.lineTotal,
     gstApplicable: it.gstApplicable,
+    notOnReceipt: it.notOnReceipt === true,
   }));
+  const comparison = claimVsReceipt(moneyLines, props.total);
+  // Only worth a warning when it is a real part of the receipt, not pennies.
+  const unitemised = props.items.find(
+    (i) => i.autoAdded && i.kind === "unallocated" && Math.abs(i.lineTotal) > Math.max(1, Math.abs(props.total) * 0.02)
+  );
+
+  // Lines that don't match the receipt are allowed through (#51), but only
+  // once the submitter has seen the difference and said to go ahead.
+  const [mismatchConfirmed, setMismatchConfirmed] = useState<number | null>(null);
+  const needsMismatchConfirm = comparison.unexplained !== 0 && mismatchConfirmed !== comparison.unexplained;
 
   function handleSubmit() {
     setError(null);
@@ -1273,6 +1318,21 @@ function ReviewForm(props: {
       setError(`Choose which pack of ${packless.match?.itemName ?? "the item"} "${packless.description}" is.`);
       return;
     }
+    const offWithoutNote = props.items.find(
+      (it) => it.notOnReceipt && it.description.trim() && !it.notOnReceiptNote?.trim()
+    );
+    if (offWithoutNote) {
+      setError(`Say why "${offWithoutNote.description}" isn't on the receipt, so the approver knows what it is for.`);
+      return;
+    }
+    if (totalChangedFromScan(props.total, props.scannedTotal) && !props.totalNote.trim()) {
+      setError(`The receipt total was read as ${formatMoney(props.scannedTotal ?? 0)} — say why you changed it.`);
+      return;
+    }
+    if (needsMismatchConfirm) {
+      setError("The lines don't match the receipt total — tick \"Submit anyway\" above the button, or fix the lines.");
+      return;
+    }
     startSubmit(async () => {
       const payload = {
         vendorName: props.vendorName,
@@ -1281,6 +1341,8 @@ function ReviewForm(props: {
         receiptDate: props.receiptDate || null,
         attachments: props.attachments,
         total: props.total,
+        receiptTotalScanned: props.scannedTotal,
+        receiptTotalNote: props.totalNote.trim() || null,
         printedGst: props.printedGst,
         submitterComment: props.submitterComment.trim() || null,
         payee: props.payee,
@@ -1360,6 +1422,7 @@ function ReviewForm(props: {
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
         <VendorLookupFields
+          vendors={props.vendors}
           vendorName={props.vendorName}
           setVendorName={props.setVendorName}
           vendorNumber={props.vendorNumber}
@@ -1414,6 +1477,21 @@ function ReviewForm(props: {
           extractedName={props.extractedPayeeName}
         />
       </div>
+
+      {/* A reading that stopped partway leaves most of the receipt in one
+          "Not itemised" line (#58). That line is tinted like any the app
+          added, which was easy to take for a surcharge; this says plainly how
+          much of the receipt is missing. */}
+      {unitemised && (
+        <div role="status" className="mb-4 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-sm text-ink/80">
+          <strong className="font-medium text-ink">
+            Only {props.items.filter((i) => !i.autoAdded && i.description.trim()).length}{" "}
+            {props.items.filter((i) => !i.autoAdded && i.description.trim()).length === 1 ? "line was" : "lines were"} read.
+          </strong>{" "}
+          {formatMoney(unitemised.lineTotal)} of the {formatMoney(props.total)} total isn&apos;t itemised. Add the
+          missing lines and remove the &ldquo;Not itemised&rdquo; line, or scan the receipt again.
+        </div>
+      )}
 
       {/* Phones: one card per line. The table below is ten columns wide, which
           on a phone meant scrolling sideways past the description to reach the
@@ -1537,12 +1615,26 @@ function ReviewForm(props: {
                 />
                 GST applies
               </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={item.notOnReceipt === true}
+                  onChange={(e) => setNotOnReceipt(item.key, e.target.checked)}
+                />
+                Not on this receipt
+              </label>
               {item.normalizedQuantity != null && (
                 <span className="font-mono">
                   {item.normalizedQuantity} {item.normalizedUnit ?? ""}
                 </span>
               )}
             </div>
+            {item.notOnReceipt && (
+              <NotOnReceiptNote
+                value={item.notOnReceiptNote ?? ""}
+                onChange={(v) => updateItem(item.key, { notOnReceiptNote: v })}
+              />
+            )}
           </li>
         ))}
       </ul>
@@ -1564,6 +1656,9 @@ function ReviewForm(props: {
               <th scope="col" className="p-1">Unit price</th>
               <th scope="col" className="p-1">Line total</th>
               <th scope="col" className="p-1" title="Whether GST applies to this line">GST</th>
+              <th scope="col" className="p-1 whitespace-nowrap" title="Claimed, but not on the attached receipt">
+                Not on receipt
+              </th>
               <th scope="col" className="p-1">Per-unit</th>
               <th scope="col" className="p-1" />
             </tr>
@@ -1674,6 +1769,14 @@ function ReviewForm(props: {
                     aria-label={`GST applies to ${item.description || "this line"}`}
                   />
                 </td>
+                <td className="p-1 text-center">
+                  <input
+                    type="checkbox"
+                    checked={item.notOnReceipt === true}
+                    onChange={(e) => setNotOnReceipt(item.key, e.target.checked)}
+                    aria-label={`${item.description || "This line"} is not on the receipt`}
+                  />
+                </td>
                 <td className="p-1 whitespace-nowrap font-mono text-xs text-ink/60">
                   {item.normalizedQuantity != null ? `${item.normalizedQuantity} ${item.normalizedUnit ?? ""}` : "—"}
                 </td>
@@ -1688,6 +1791,16 @@ function ReviewForm(props: {
                   </button>
                 </td>
               </tr>
+              {item.notOnReceipt && (
+                <tr className="bg-gold/5">
+                  <td colSpan={11} className="px-1 pb-2">
+                    <NotOnReceiptNote
+                      value={item.notOnReceiptNote ?? ""}
+                      onChange={(v) => updateItem(item.key, { notOnReceiptNote: v })}
+                    />
+                  </td>
+                </tr>
+              )}
               {item.kind === "goods" && (
                 <LineMatchRow
                   description={item.description}
@@ -1735,6 +1848,9 @@ function ReviewForm(props: {
         printedGst={props.printedGst}
         onAddCharge={addCharge}
         autoAddedCount={props.items.filter((i) => i.autoAdded).length}
+        scannedTotal={props.scannedTotal}
+        totalNote={props.totalNote}
+        onTotalNoteChange={props.setTotalNote}
       />
 
       {/* Below the numbers, because it is usually written about them — a price
@@ -1760,6 +1876,23 @@ function ReviewForm(props: {
           travels with it, so a refused submission says why right where the
           finger is. */}
       <div className="sticky bottom-0 z-30 -mx-6 mt-6 flex flex-col gap-2 border-t border-ink/10 bg-cream/95 px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+        {comparison.unexplained !== 0 && (
+          <label className="flex items-start gap-2 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-sm text-ink/80">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={!needsMismatchConfirm}
+              onChange={(e) => setMismatchConfirmed(e.target.checked ? comparison.unexplained : null)}
+            />
+            <span>
+              <strong className="font-medium text-ink">Submit anyway.</strong>{" "}
+              {comparison.unexplained > 0
+                ? `${formatMoney(comparison.unexplained)} of the receipt total isn't on a line.`
+                : `The lines come to ${formatMoney(-comparison.unexplained)} more than the receipt total.`}{" "}
+              The approver will see the difference.
+            </span>
+          </label>
+        )}
         {error && <p className="text-sm text-red-700">{error}</p>}
         <div className="flex gap-3">
           <button
@@ -1780,6 +1913,21 @@ function ReviewForm(props: {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Why a line isn't on the receipt — required, and shown to the approver (#51). */
+function NotOnReceiptNote({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex flex-col gap-1 text-xs text-ink/60 sm:flex-row sm:items-center sm:gap-2">
+      <span className="shrink-0">Not on this receipt — why?</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="e.g. cleaning and cutting charge, paid in cash"
+        className={`w-full rounded border bg-white px-2 py-1 text-sm text-ink ${value.trim() ? "border-ink/15" : "border-gold-deep/50"}`}
+      />
+    </label>
   );
 }
 

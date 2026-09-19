@@ -116,6 +116,61 @@ with FMB's accountant whether it does.
 
 ## Done
 
+### 54. Item Details: "Measured in" shows the old unit after saving
+
+Fixed 2026-09-20. React resets a form after saving, and a dropdown came back
+showing the value the page first loaded with (or its first option), so saving
+again undid the change. The item details, pack size, offer and Buying forms
+redraw their fields from the saved values after each save; the vendor, app
+settings and notification dropdowns are keyed on their saved value.
+
+### 58. Handwritten receipt: only the first 4 of 18 lines were read
+
+Fixed 2026-09-20. Read again, the same photo gave 17 lines, then 6. The prompt
+now asks for every row to the last and a check against the total, which read
+all 18 three times out of three; lines still well short of the total are read
+a second time, keeping the reading closer to the total. The Submit form says
+plainly when a large part of a receipt isn't itemised.
+
+### 51. Receipt total mismatch: warn and flag, don't block
+
+Done 2026-09-20 (migration 0060, run on sandbox and live). The scanned total
+is locked and changing it needs a reason; a line can be marked "Not on this
+receipt" with a required note and GST off; a remaining difference needs
+"Submit anyway" rather than blocking. The expense page and Approvals flag all
+three with the submitter's reasons. expenses.total is the claim (the sum of
+the lines); the receipt total is kept beside it.
+
+### 53. Pricelist item page: split into tabs
+
+Done 2026-09-20, as decided: Overview, Settings, History, each its own address.
+Also covers #52 (Buying is on Settings).
+
+### 55. Vendor item descriptions: show where each one came from
+
+Done 2026-09-20. Each description says which expense it came from, with links
+to the expense and its receipt, and how many receipts use it; otherwise that it
+was kept from an old name, or who added it. Worked out from the expense lines
+and rename history, so older descriptions answer too.
+
+### 56. Tables: rearrange columns, and remember the order
+
+Done 2026-09-20. Drag a heading, or drag or use the arrows in the Columns menu;
+saved to the person's profile, with Reset to default. Exports follow the
+order. Every table built on ColumnsDataTable.
+
+### 57. Long "Loading…": say what's loading, offer Try again, log slow pages
+
+Done 2026-09-20. Names the page; after 8s "taking longer than usual" with Try
+again; after 20s "something may be wrong" with a way home. Slow loads go on
+System errors, grouped by page.
+
+### 59. Submit: Vendor and Vendor # as dropdowns, still searchable
+
+Done 2026-09-20. ▾ lists every approved vendor, the five most recent first;
+typing filters, and "8" finds V-0008. Keyboard works; a new name can still be
+typed.
+
 ### 1. Sandbox environment for training and testing
 
 Live at sandbox.fmbpurchasing.com.au, built to the decisions of 2026-09-10 and

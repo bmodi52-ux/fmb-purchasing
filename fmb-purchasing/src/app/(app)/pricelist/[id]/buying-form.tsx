@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { updateItemBuying, type ItemBuyingState } from "../price-alert-actions";
+import { FormResetBoundary } from "@/components/form-reset-boundary";
 
 /**
  * An item's preferred vendor, its own price alert limits and the price it is
@@ -35,6 +36,7 @@ export function BuyingForm({
 
   return (
     <form action={action} className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+      <FormResetBoundary>
       <input type="hidden" name="item_id" value={itemId} />
 
       <label className="flex flex-col gap-1 sm:col-span-2">
@@ -130,6 +132,7 @@ export function BuyingForm({
           )}
         </div>
       )}
+      </FormResetBoundary>
     </form>
   );
 }

@@ -20,6 +20,7 @@ import { storedGstDisagreement } from "@/lib/expense-money";
 import { mayLackTaxInvoice } from "@/lib/gst-summary";
 import { setLineCapital } from "./actions";
 import { SubmitButton } from "@/components/submit-button";
+import { receiptFlags } from "@/lib/receipt-flags";
 
 /**
  * The tab carries the entry number, not the word "Expense".
@@ -95,7 +96,7 @@ export default async function ExpenseDetailPage({
   const { data: expense } = await admin
     .from("expenses")
     .select(
-      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, payee_id, created_at, bank_confirmed_on, bank_statement_text"
+      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, payee_id, created_at, bank_confirmed_on, bank_statement_text, receipt_total, receipt_total_scanned, receipt_total_note"
     )
     .eq("id", id)
     .maybeSingle();
@@ -125,7 +126,7 @@ export default async function ExpenseDetailPage({
     admin
       .from("expense_line_items")
       .select(
-        "id, description_raw, kind, category_id, pricelist_item_id, quantity, unit_price, line_subtotal, line_gst, line_total, gst_applicable, is_capital, normalized_quantity, normalized_unit, sort_order"
+        "id, description_raw, kind, category_id, pricelist_item_id, quantity, unit_price, line_subtotal, line_gst, line_total, gst_applicable, is_capital, normalized_quantity, normalized_unit, sort_order, not_on_receipt, not_on_receipt_note"
       )
       .eq("expense_id", id)
       .order("sort_order"),
@@ -163,6 +164,19 @@ export default async function ExpenseDetailPage({
     })
       ? [(attachmentCount ?? 0) > 0 ? "GST over $82.50, but the vendor has no ABN recorded" : "GST over $82.50, but no receipt is attached"]
       : []),
+    // Money claimed that the receipt doesn't show, a changed total, or a
+    // difference nobody explained (#51).
+    ...receiptFlags({
+      receiptTotal: expense.receipt_total == null ? null : Number(expense.receipt_total),
+      receiptTotalScanned: expense.receipt_total_scanned == null ? null : Number(expense.receipt_total_scanned),
+      receiptTotalNote: expense.receipt_total_note ?? null,
+      lines: (lineItems ?? []).map((l) => ({
+        description: l.description_raw as string,
+        lineTotal: Number(l.line_total),
+        notOnReceipt: l.not_on_receipt === true,
+        notOnReceiptNote: (l.not_on_receipt_note as string | null) ?? null,
+      })),
+    }).map((f) => f.label),
   ];
 
   // Prices past their alert limit and spend well above the vendor's usual
@@ -351,6 +365,9 @@ export default async function ExpenseDetailPage({
             </Field>
             <Field label="Total">
               <span className="text-base font-semibold">{money(expense.total)}</span>
+              {expense.receipt_total != null && Math.abs(Number(expense.receipt_total) - Number(expense.total)) > 0.01 && (
+                <span className="block text-xs text-ink/55">receipt says {money(Number(expense.receipt_total))}</span>
+              )}
             </Field>
           </dl>
 
@@ -389,6 +406,7 @@ export default async function ExpenseDetailPage({
                     className="rounded-lg border border-ink/10 bg-white/60 p-4 text-sm"
                   >
                     <p className="font-medium text-ink">{line.description_raw}</p>
+                    <NotOnReceiptBadge line={line} />
                     {line.normalized_quantity && line.normalized_unit && (
                       <p className="text-xs text-ink/50">
                         {line.normalized_quantity} {line.normalized_unit}
@@ -443,6 +461,7 @@ export default async function ExpenseDetailPage({
                     <tr key={line.id} className="border-b border-ink/5 last:border-0">
                       <td className="px-4 py-2">
                         {line.description_raw}
+                        <NotOnReceiptBadge line={line} />
                         {line.normalized_quantity && line.normalized_unit && (
                           <span className="block text-xs text-ink/50">
                             {line.normalized_quantity} {line.normalized_unit}
@@ -620,5 +639,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <dt className="text-xs text-ink/55">{label}</dt>
       <dd className="mt-0.5 text-sm text-ink">{children}</dd>
     </div>
+  );
+}
+
+/** A line claimed but not on the receipt, and why (#51). */
+function NotOnReceiptBadge({ line }: { line: { not_on_receipt?: boolean | null; not_on_receipt_note?: string | null } }) {
+  if (!line.not_on_receipt) return null;
+  return (
+    <span className="mt-0.5 block text-xs text-maroon">
+      Not on the receipt{line.not_on_receipt_note ? ` — ${line.not_on_receipt_note}` : ""}
+    </span>
   );
 }

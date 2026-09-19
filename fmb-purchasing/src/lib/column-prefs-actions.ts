@@ -16,3 +16,11 @@ export async function saveColumnPreference(pageKey: string, columns: string[]) {
       { onConflict: "user_id,page_key" }
     );
 }
+
+/** Back to the page's own columns and order: the saved choice is simply forgotten. */
+export async function resetColumnPreference(pageKey: string) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  await createAdminClient().from("user_column_preferences").delete().eq("user_id", user.id).eq("page_key", pageKey);
+}

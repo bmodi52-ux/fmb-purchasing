@@ -169,7 +169,7 @@ export default async function AppSettingsPage() {
                       <input type="number" min={0} max={365} name={`${key}_escalate`} defaultValue={r[key].escalateAfterDays} className="input w-20 py-1" aria-label={`${label}: escalate after days`} /> days
                     </td>
                     <td className="py-2">
-                      <select name={`${key}_team`} defaultValue={r[key].escalateTeamId ?? ""} className="input py-1" aria-label={`${label}: escalate to team`}>
+                      <select key={r[key].escalateTeamId ?? ""} name={`${key}_team`} defaultValue={r[key].escalateTeamId ?? ""} className="input py-1" aria-label={`${label}: escalate to team`}>
                         <option value="">Nobody</option>
                         {(teams ?? []).map((t) => (
                           <option key={t.id} value={t.id}>
@@ -191,7 +191,7 @@ export default async function AppSettingsPage() {
             </label>
             <label className="flex items-center gap-2">
               New vendors, items and packs: weekly, on
-              <select name="weekday" defaultValue={r.masterDataWeekday} className="input py-1">
+              <select key={r.masterDataWeekday} name="weekday" defaultValue={r.masterDataWeekday} className="input py-1">
                 {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d, i) => (
                   <option key={d} value={i}>
                     {d}

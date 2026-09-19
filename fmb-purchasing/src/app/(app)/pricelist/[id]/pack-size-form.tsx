@@ -2,6 +2,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { soldAsOf } from "@/lib/pack-description";
 import { updatePackSize } from "../actions";
 import { PackFields } from "../pack-fields";
+import { FormResetBoundary } from "@/components/form-reset-boundary";
 
 type Unit = { id: string; code: string; label: string };
 
@@ -36,6 +37,7 @@ export function PackSizeForm({
 }) {
   return (
     <form action={updatePackSize} className="flex flex-col gap-3">
+      <FormResetBoundary>
       <input type="hidden" name="pack_size_id" value={packSizeId} />
       <input type="hidden" name="item_id" value={itemId} />
 
@@ -61,6 +63,7 @@ export function PackSizeForm({
       <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
         Save pack size
       </SubmitButton>
+      </FormResetBoundary>
     </form>
   );
 }

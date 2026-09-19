@@ -10,6 +10,8 @@ import {
   storedGstDisagreement,
   suggestedKindForDifference,
   residualFor,
+  claimVsReceipt,
+  totalChangedFromScan,
   type MoneyLine,
 } from "./expense-money.ts";
 
@@ -243,5 +245,40 @@ describe("sums", () => {
 
   test("sumLineGst counts only the flagged lines", () => {
     assert.equal(sumLineGst([goods(110, true), goods(975, false)]), 10);
+  });
+});
+
+describe("claimVsReceipt (#51)", () => {
+  // Fresh Poultry: $990 of chicken on the invoice, and $150 "Clean and cut"
+  // added by hand that the invoice doesn't show.
+  const cleanAndCut: MoneyLine = { kind: "service", lineTotal: 150, gstApplicable: false, notOnReceipt: true };
+
+  test("a line marked not on the receipt is claimed but left out of the comparison", () => {
+    assert.deepEqual(claimVsReceipt([goods(990), cleanAndCut], 990), {
+      claimTotal: 1140,
+      offReceiptTotal: 150,
+      offReceiptCount: 1,
+      unexplained: 0,
+    });
+    assert.equal(reconcile([goods(990), cleanAndCut], 990).balanced, true);
+  });
+
+  test("without the mark, the same claim has an unexplained difference", () => {
+    const r = claimVsReceipt([goods(990), { ...cleanAndCut, notOnReceipt: false }], 990);
+    assert.equal(r.unexplained, -150);
+    assert.equal(r.offReceiptTotal, 0);
+  });
+
+  test("lines short of the receipt leave a positive difference", () => {
+    assert.equal(claimVsReceipt([goods(1270)], 2737).unexplained, 1467);
+  });
+});
+
+describe("totalChangedFromScan (#51)", () => {
+  test("only a real change from a scanned figure counts", () => {
+    assert.equal(totalChangedFromScan(1140, 990), true);
+    assert.equal(totalChangedFromScan(990, 990), false);
+    assert.equal(totalChangedFromScan(990.004, 990), false);
+    assert.equal(totalChangedFromScan(1140, null), false, "nothing was scanned");
   });
 });

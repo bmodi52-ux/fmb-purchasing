@@ -3,6 +3,7 @@
 import { SubmitButton } from "@/components/submit-button";
 import { formatUnitCost } from "@/lib/pack-description";
 import { useMemo, useState } from "react";
+import { FormResetBoundary } from "@/components/form-reset-boundary";
 
 type Vendor = { id: string; name: string; vendor_number: string | null };
 type PackSizeOption = { id: string; label: string };
@@ -53,6 +54,7 @@ export function OfferForm({
 
   return (
     <form action={action} className="flex flex-col gap-3">
+      <FormResetBoundary>
       <input type="hidden" name="item_id" value={itemId} />
       {offerId && <input type="hidden" name="offer_id" value={offerId} />}
 
@@ -126,6 +128,7 @@ export function OfferForm({
       <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
         {submitLabel}
       </SubmitButton>
+      </FormResetBoundary>
     </form>
   );
 }

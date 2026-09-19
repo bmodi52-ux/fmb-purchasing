@@ -177,7 +177,7 @@ export default async function PriceAlertsPage() {
         <div>
           <h2 className="section-title text-ink">Items with their own limits or expected price</h2>
           <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-ink/60">
-            Set on each item&apos;s page, under Buying.
+            Set on each item&apos;s Settings tab, under Buying.
           </p>
         </div>
         {(itemOverrides ?? []).length === 0 ? (

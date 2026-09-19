@@ -46,7 +46,7 @@ export function LineMatchRow({
   return (
     <tr>
       <td />
-      <td colSpan={9} className="px-1 pb-2 text-xs">
+      <td colSpan={10} className="px-1 pb-2 text-xs">
         {summary}
       </td>
     </tr>

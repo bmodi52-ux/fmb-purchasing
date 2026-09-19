@@ -33,14 +33,13 @@ import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
 import { leafCategories } from "@/lib/categories";
 import { packTitle } from "@/lib/pack-description";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
-import { ilikeContains, orFilter } from "@/lib/pgrst-filter";
 import { reportError } from "@/lib/errors";
 import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { getSetting } from "@/lib/app-settings";
 import { alertOnVendorAdded } from "@/lib/expense-alerts";
 import { markInboundReceiptsUsed } from "@/lib/inbound-email";
 import type { SupplierDefaults } from "@/lib/supplier-defaults";
-import { lineGst, lineSubtotal, reconcile, round2, sumLineGst } from "@/lib/expense-money";
+import { lineGst, lineSubtotal, round2, sumLineGst, totalChangedFromScan } from "@/lib/expense-money";
 import {
   resolvePayee,
   searchPayees,
@@ -348,28 +347,6 @@ export async function reportOversizeReceiptAction(input: {
       `way to proceed. Repeated occurrences are the signal to upload direct to storage via a signed URL.`,
     userId: user.id,
   });
-}
-
-export type VendorLookupSuggestion = { id: string; vendorNumber: string | null; name: string };
-
-/** Vendor #/name typeahead for manual entry (§ user feedback). */
-export async function searchVendorsAction(query: string): Promise<VendorLookupSuggestion[]> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  await requirePermission(user, "submit_expense", "submit");
-
-  const trimmed = query.trim();
-  if (trimmed.length < 1) return [];
-
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("vendors")
-    .select("id, vendor_number, name")
-    .or(orFilter(ilikeContains("vendor_number", trimmed), ilikeContains("name", trimmed)))
-    .eq("status", "approved")
-    .limit(8);
-
-  return (data ?? []).map((v) => ({ id: v.id, vendorNumber: v.vendor_number, name: v.name }));
 }
 
 export type ResolvedVendor = {
@@ -838,6 +815,9 @@ export type LineItemInput = {
   gstApplicable: boolean;
   normalizedQuantity: number | null;
   normalizedUnit: string | null;
+  /** Claimed, but not on the attached receipt (#51); needs notOnReceiptNote. */
+  notOnReceipt?: boolean;
+  notOnReceiptNote?: string | null;
 };
 
 export type AttachmentInput = {
@@ -856,11 +836,15 @@ export type CreateExpenseInput = {
   /** Receipt, delivery docket, covering email — see migration 0028. */
   attachments: AttachmentInput[];
   /**
-   * What the receipt says was paid. Captured, never computed: the line items
-   * must account for it, and a charge that is not itemised gets its own line
-   * rather than quietly changing this figure.
+   * What the receipt says was paid. Captured, never computed. Since #51 the
+   * claim is the sum of the lines, and a difference between this and the
+   * lines on the receipt is flagged to the approver rather than refused.
    */
   total: number;
+  /** The receipt total as the scan read it; null when nothing was scanned. */
+  receiptTotalScanned?: number | null;
+  /** Why `total` differs from the scanned figure — required when it does. */
+  receiptTotalNote?: string | null;
   /**
    * GST as printed on the receipt, when it printed one (0048). Kept so the
    * approver can see whether the line GST agrees with it.
@@ -981,31 +965,49 @@ async function buildLineRows(
         resolvedCategoryId !== null &&
         capitalCategoryIds.has(resolvedCategoryId) &&
         item.lineTotal >= capitalThreshold,
+      not_on_receipt: item.notOnReceipt === true,
+      not_on_receipt_note: item.notOnReceipt ? item.notOnReceiptNote?.trim() || null : null,
     });
   }
   return rows;
 }
 
-/** Shared validation, so create and update cannot drift apart. */
+/**
+ * Shared validation, so create and update cannot drift apart.
+ *
+ * Lines that don't add up to the receipt no longer stop a submission (#51):
+ * the form warns, and the approver sees the difference. What is refused is a
+ * claim that hides why — a line marked not on the receipt with no reason, or
+ * a scanned total changed without one.
+ */
 function validate(input: CreateExpenseInput): string | null {
   if (!input.vendorName.trim()) return "Vendor is required.";
   if (input.lineItems.length === 0) return "Add at least one line item.";
 
-  const balance = reconcile(
-    input.lineItems.map((l) => ({
-      kind: l.kind,
-      lineTotal: l.lineTotal,
-      gstApplicable: l.gstApplicable,
-    })),
-    input.total
-  );
-  if (!balance.balanced) {
-    const gap = Math.abs(balance.difference).toFixed(2);
-    return balance.difference > 0
-      ? `The line items come to $${balance.lineSum.toFixed(2)}, but the receipt total is $${input.total.toFixed(2)} — $${gap} is unaccounted for. Add it as a charge, or correct a line.`
-      : `The line items come to $${balance.lineSum.toFixed(2)}, which is $${gap} more than the receipt total of $${input.total.toFixed(2)}. Check for a discount that needs recording, or a duplicated line.`;
+  const unexplained = input.lineItems.find((l) => l.notOnReceipt && !l.notOnReceiptNote?.trim());
+  if (unexplained) {
+    return `"${unexplained.description}" is marked as not on the receipt — say why, so the approver knows what it is for.`;
+  }
+  if (totalChangedFromScan(input.total, input.receiptTotalScanned) && !input.receiptTotalNote?.trim()) {
+    return `The receipt total was read as $${input.receiptTotalScanned?.toFixed(2)} and has been changed — say why.`;
   }
   return null;
+}
+
+/** The receipt total as entered and as scanned, and why they differ (#51). */
+function receiptTotalArgs(input: CreateExpenseInput) {
+  return {
+    p_receipt_total: round2(input.total),
+    p_receipt_total_scanned: input.receiptTotalScanned ?? null,
+    p_receipt_total_note: totalChangedFromScan(input.total, input.receiptTotalScanned)
+      ? input.receiptTotalNote?.trim() || null
+      : null,
+  };
+}
+
+/** What is claimed: every line, including those not on the receipt. */
+function claimTotal(input: CreateExpenseInput): number {
+  return round2(input.lineItems.reduce((sum, l) => sum + l.lineTotal, 0));
 }
 
 export async function createExpense(
@@ -1048,15 +1050,16 @@ export async function createExpense(
       p_vendor_name_raw: input.vendorName,
       p_invoice_number: input.invoiceNumber,
       p_receipt_date: input.receiptDate,
-      p_subtotal: round2(input.total - gstAmount),
+      p_subtotal: round2(claimTotal(input) - gstAmount),
       p_gst_amount: gstAmount,
-      p_total: input.total,
+      p_total: claimTotal(input),
       p_submitter_comment: input.submitterComment,
       p_payee_id: payeeId,
       p_fiscal_year_hijri: fiscalYearForReceipt(input.receiptDate),
       p_lines: lines,
       p_attachments: toAttachmentRows(input.attachments),
       p_gst_printed: input.printedGst ?? null,
+      ...receiptTotalArgs(input),
     })
     .single();
 
@@ -1074,7 +1077,7 @@ export async function createExpense(
     id: created.id,
     expense_number: created.expense_number,
     vendor_name_raw: input.vendorName,
-    total: input.total,
+    total: claimTotal(input),
     submitted_by: user.id,
   });
 
@@ -1181,13 +1184,16 @@ async function expenseAsInput(
     submitter_comment: string | null;
     payee_id: string | null;
     gst_printed?: number | null;
+    receipt_total?: number | null;
+    receipt_total_scanned?: number | null;
+    receipt_total_note?: string | null;
   }
 ): Promise<CreateExpenseInput> {
   const [{ data: lineItems }, { data: attachments }] = await Promise.all([
     admin
       .from("expense_line_items")
       .select(
-        "description_raw, pricelist_item_id, kind, quantity, unit_price, line_total, category_id, gst_applicable, normalized_quantity, normalized_unit"
+        "description_raw, pricelist_item_id, kind, quantity, unit_price, line_total, category_id, gst_applicable, normalized_quantity, normalized_unit, not_on_receipt, not_on_receipt_note"
       )
       .eq("expense_id", expense.id)
       .order("sort_order"),
@@ -1216,7 +1222,11 @@ async function expenseAsInput(
       sizeBytes: a.size_bytes,
       sha256: a.sha256,
     })),
-    total: Number(expense.total),
+    // Before 0060 the lines had to add up to the receipt, so its total was
+    // the expense total.
+    total: Number(expense.receipt_total ?? expense.total),
+    receiptTotalScanned: expense.receipt_total_scanned == null ? null : Number(expense.receipt_total_scanned),
+    receiptTotalNote: expense.receipt_total_note ?? null,
     printedGst: expense.gst_printed == null ? null : Number(expense.gst_printed),
     submitterComment: expense.submitter_comment,
     payee: expense.payee_id ? { kind: "existing", payeeId: expense.payee_id } : null,
@@ -1236,6 +1246,8 @@ async function expenseAsInput(
       gstApplicable: li.gst_applicable === true,
       normalizedQuantity: li.normalized_quantity,
       normalizedUnit: li.normalized_unit,
+      notOnReceipt: li.not_on_receipt === true,
+      notOnReceiptNote: li.not_on_receipt_note ?? null,
     })),
   };
 }
@@ -1282,15 +1294,16 @@ export async function updateExpense(
     p_vendor_name_raw: input.vendorName,
     p_invoice_number: input.invoiceNumber,
     p_receipt_date: input.receiptDate,
-    p_subtotal: round2(input.total - gstAmount),
+    p_subtotal: round2(claimTotal(input) - gstAmount),
     p_gst_amount: gstAmount,
-    p_total: input.total,
+    p_total: claimTotal(input),
     p_submitter_comment: input.submitterComment,
     p_payee_id: payeeId,
     p_fiscal_year_hijri: fiscalYearForReceipt(input.receiptDate),
     p_lines: lines,
     p_attachments: toAttachmentRows(input.attachments),
     p_gst_printed: input.printedGst ?? null,
+    ...receiptTotalArgs(input),
   });
 
   if (error) {

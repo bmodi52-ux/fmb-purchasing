@@ -38,6 +38,10 @@ import { limitsFor } from "@/lib/price-alerts";
 import { loadCheapestRecent } from "@/lib/price-alerts-data";
 import { todayIso } from "@/lib/periods-data";
 import { formatPlainDate } from "@/lib/format";
+import { FormResetBoundary } from "@/components/form-reset-boundary";
+import { TabLink } from "@/components/tab-link";
+import { ReceiptViewer } from "@/components/receipt-viewer";
+import { describeSources, type DescriptionSource } from "@/lib/description-sources";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
   name: "Name",
@@ -83,8 +87,27 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: (data?.name as string | null) ?? "Item" };
 }
 
-export default async function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+type ItemTab = "overview" | "settings" | "history";
+
+/**
+ * One item, in three tabs (#53): Overview is what people come for day to day —
+ * what it costs and who sells it — Settings is the setup that is changed
+ * rarely, and History is the record of changes.
+ *
+ * Seven sections on one page read as cluttered, and the Details form sat on
+ * top of everything although it is the part least often touched. Each tab is
+ * its own address (?tab=settings), as on a vendor's page, so a link can open
+ * the right one.
+ */
+export default async function ItemDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const [{ id }, { tab: tabParam }] = await Promise.all([params, searchParams]);
+  const tab: ItemTab = tabParam === "settings" || tabParam === "history" ? tabParam : "overview";
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "pricelist", "view");
@@ -201,15 +224,76 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
 
   const { data: vendorDescriptions } = await admin
     .from("vendor_item_descriptions")
-    .select("id, vendor_id, description, created_at")
+    .select("id, vendor_id, description, created_at, created_by")
     .eq("item_id", id)
     .order("created_at");
+
+  // Where each description came from (#55): the expense lines filed against
+  // this item that say the same thing. Only Settings shows descriptions.
+  const { data: describedLines } =
+    tab === "settings" && offerIdList.length > 0 && (vendorDescriptions ?? []).length > 0
+      ? await admin
+          .from("expense_line_items")
+          .select("description_raw, expense_id, expenses!inner(expense_number, vendor_id, receipt_date, created_at, submitted_by)")
+          .in("pricelist_item_id", offerIdList)
+      : { data: [] };
+  type DescribedExpense = {
+    expense_number: string | null;
+    vendor_id: string | null;
+    receipt_date: string | null;
+    created_at: string | null;
+    submitted_by: string;
+  };
+  const expenseByLine = (describedLines ?? []).map((l) => ({
+    line: l,
+    expense: (Array.isArray(l.expenses) ? l.expenses[0] : l.expenses) as DescribedExpense,
+  }));
+  const descriptionSources = describeSources(
+    (vendorDescriptions ?? []).map((d) => ({
+      id: d.id as string,
+      vendorId: (d.vendor_id as string | null) ?? null,
+      description: d.description as string,
+      createdAt: d.created_at as string,
+      createdBy: (d.created_by as string | null) ?? null,
+    })),
+    expenseByLine.map(({ line, expense }) => ({
+      expenseId: line.expense_id as string,
+      expenseNumber: expense.expense_number,
+      vendorId: expense.vendor_id,
+      description: line.description_raw as string,
+      date: expense.receipt_date ?? expense.created_at,
+    })),
+    (itemHistory ?? []).flatMap((h) => {
+      const name = (h.changes as Record<string, { old: unknown; new: unknown }>).name;
+      return name ? [{ oldName: String(name.old ?? ""), newName: String(name.new ?? ""), changedAt: h.changed_at as string }] : [];
+    })
+  );
+  // The receipt behind an expense is only for those who may see the expense.
+  const seesAllExpenses =
+    can(permissions, "all_expenses", "view") || can(permissions, "approvals", "approve") || can(permissions, "payments", "mark_paid");
+  const submitterByExpense = new Map(expenseByLine.map(({ line, expense }) => [line.expense_id as string, expense.submitted_by]));
+  const canOpenExpense = (expenseId: string) => seesAllExpenses || submitterByExpense.get(expenseId) === user.id;
+  const sourceExpenseIds = [
+    ...new Set(
+      [...descriptionSources.values()].flatMap((s) => (s.kind === "receipt" && canOpenExpense(s.latest.expenseId) ? [s.latest.expenseId] : []))
+    ),
+  ];
+  const { data: sourceAttachments } = sourceExpenseIds.length
+    ? await admin.from("expense_attachments").select("expense_id").in("expense_id", sourceExpenseIds)
+    : { data: [] };
+  const expensesWithReceipt = new Set((sourceAttachments ?? []).map((a) => a.expense_id as string));
 
   const offerIds = new Set((offers ?? []).map((o) => o.id));
   const offerHistory = (offerHistoryRows ?? []).filter((h) => offerIds.has(h.item_id));
 
   const changedByIds = [
-    ...new Set([...(itemHistory ?? []).map((h) => h.changed_by), ...offerHistory.map((h) => h.changed_by)].filter(Boolean)),
+    ...new Set(
+      [
+        ...(itemHistory ?? []).map((h) => h.changed_by),
+        ...offerHistory.map((h) => h.changed_by),
+        ...(vendorDescriptions ?? []).map((d) => d.created_by),
+      ].filter(Boolean)
+    ),
   ];
   const { data: profiles } =
     changedByIds.length > 0
@@ -220,6 +304,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   const vendorNameById = new Map((vendors ?? []).map((v) => [v.id, `${v.vendor_number} — ${v.name}`]));
   const categoryNameById = categoryLabelsById(categories ?? []);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id, u.label]));
+  const canonicalUnitLabel = unitLabelById.get(item.canonical_unit_id) ?? null;
 
   const assignableCategories = leafCategories(sortCategories(categories ?? []));
   const currentCategory = (categories ?? []).find((c) => c.id === item.category_id);
@@ -317,11 +402,35 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             note="Approving confirms this is a real product worth keeping in the catalogue. Rejecting keeps it for the expenses that already name it, but marks it as one nobody should file against."
           />
         )}
+
+        {/* What the Details form holds, read at a glance — the form itself
+            is on Settings. */}
+        <p className="mt-3 text-sm text-ink/70">
+          {item.category_id ? (categoryNameById.get(item.category_id) ?? "Uncategorised") : "Uncategorised"}
+          <span className="text-ink/30"> · </span>
+          Measured in {canonicalUnitLabel ? unitOptionLabel(canonicalUnitLabel) : "—"}
+        </p>
+        {item.comments && <p className="mt-1 whitespace-pre-line text-sm text-ink/55">{item.comments}</p>}
+
+        <nav aria-label="Item sections" className="mt-5 flex gap-1 border-b border-ink/10">
+          <TabLink href={`/pricelist/${item.id}`} active={tab === "overview"}>
+            Overview
+          </TabLink>
+          <TabLink href={`/pricelist/${item.id}?tab=settings`} active={tab === "settings"}>
+            Settings
+          </TabLink>
+          <TabLink href={`/pricelist/${item.id}?tab=history`} active={tab === "history"}>
+            History <span className="ml-1 text-xs text-ink/45">{(itemHistory ?? []).length}</span>
+          </TabLink>
+        </nav>
       </div>
 
+      {tab === "settings" && (
+        <>
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-4 section-title text-ink">Details</h2>
         <form action={updateItem} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormResetBoundary>
           <input type="hidden" name="item_id" value={item.id} />
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
             <span className="text-ink/70">Item name</span>
@@ -361,6 +470,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             <span className="text-ink/70">Comments</span>
             <textarea name="comments" defaultValue={item.comments ?? ""} disabled={!canEdit} rows={2} className="input" />
           </label>
+          </FormResetBoundary>
           {canEdit && (
             <SubmitButton className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
               Save changes
@@ -401,7 +511,11 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           )}
         />
       </section>
+        </>
+      )}
 
+      {tab === "overview" && (
+        <>
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-1 section-title text-ink">What we&apos;ve actually paid</h2>
         <p className="mb-4 text-sm text-ink/50">
@@ -694,17 +808,23 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           <form action={addPackSize} className="mt-5 flex flex-col gap-3 border-t border-ink/10 pt-4">
             <input type="hidden" name="item_id" value={item.id} />
             <p className="text-xs font-medium uppercase tracking-wide text-ink/40">Add another pack size</p>
-            <PackFields
-              units={units ?? []}
-              defaults={{ soldAs: "", innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
-            />
+            <FormResetBoundary>
+              <PackFields
+                units={units ?? []}
+                defaults={{ soldAs: "", innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
+              />
+            </FormResetBoundary>
             <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
               + Add pack size
             </SubmitButton>
           </form>
         )}
       </section>
+        </>
+      )}
 
+      {tab === "settings" && (
+        <>
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-1 section-title text-ink">Vendor item descriptions</h2>
         <p className="mb-4 text-sm text-ink/50">
@@ -727,10 +847,14 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                 <div className="min-w-0">
                   <p className="break-words text-ink">{d.description}</p>
                   <p className="text-xs text-ink/45">
-                    {d.vendor_id
-                      ? (vendorNameById.get(d.vendor_id) ?? "unknown vendor")
-                      : "Any vendor — carried over from a rename or added by hand"}
+                    {d.vendor_id ? (vendorNameById.get(d.vendor_id) ?? "unknown vendor") : "Any vendor"}
                   </p>
+                  <DescriptionSourceLine
+                    source={descriptionSources.get(d.id)}
+                    canOpenExpense={canOpenExpense}
+                    hasReceipt={(expenseId) => expensesWithReceipt.has(expenseId)}
+                    nameOf={(userId) => (userId ? (profileNameById.get(userId) ?? null) : null)}
+                  />
                 </div>
                 {canEdit && (
                   <form action={removeVendorItemDescription}>
@@ -790,7 +914,10 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           />
         </section>
       )}
+        </>
+      )}
 
+      {tab === "history" && (
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-4 section-title text-ink">Item change history</h2>
         {(itemHistory ?? []).length === 0 ? (
@@ -816,6 +943,65 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           </ul>
         )}
       </section>
+      )}
+    </div>
+  );
+}
+
+/** "From E-0014 on 15/09/2026 · View receipt", or how it got here otherwise. */
+function DescriptionSourceLine({
+  source,
+  canOpenExpense,
+  hasReceipt,
+  nameOf,
+}: {
+  source: DescriptionSource | undefined;
+  canOpenExpense: (expenseId: string) => boolean;
+  hasReceipt: (expenseId: string) => boolean;
+  nameOf: (userId: string | null) => string | null;
+}) {
+  if (!source) return null;
+
+  if (source.kind === "rename") {
+    return (
+      <p className="mt-0.5 text-xs text-ink/55">
+        Kept from the item&apos;s old name when it was renamed to {source.renamedTo} on {formatDateTime(source.renamedAt)}
+      </p>
+    );
+  }
+
+  if (source.kind === "added") {
+    const who = nameOf(source.createdBy);
+    return (
+      <p className="mt-0.5 text-xs text-ink/55">
+        Added {who ? `by ${who} ` : ""}on {formatDateTime(source.createdAt)} — no receipt filed against this item says it
+      </p>
+    );
+  }
+
+  const { latest, expenseCount } = source;
+  const label = latest.expenseNumber ?? "an expense";
+  const open = canOpenExpense(latest.expenseId);
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-ink/55">
+      <span>
+        From{" "}
+        {open ? (
+          <Link href={`/expenses/${latest.expenseId}`} className="font-mono underline hover:text-ink">
+            {label}
+          </Link>
+        ) : (
+          <span className="font-mono">{label}</span>
+        )}
+        {latest.date && <> on {formatPlainDate(latest.date.slice(0, 10))}</>}
+        {expenseCount > 1 && <> · on {expenseCount} receipts in all</>}
+      </span>
+      {open && hasReceipt(latest.expenseId) && (
+        <>
+          <span className="text-ink/30">·</span>
+          <ReceiptViewer expenseId={latest.expenseId} label="View receipt" />
+        </>
+      )}
     </div>
   );
 }
