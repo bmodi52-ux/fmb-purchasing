@@ -12,6 +12,20 @@ describe("sandbox email", () => {
     assert.deepEqual(held, ["someone@sandbox.invalid", "real.vendor@example.com"]);
   });
 
+  test("a login an admin created in the sandbox is written to", () => {
+    const { send, held } = sandboxRecipients(
+      ["New.Person@Example.org", "real.vendor@example.com"],
+      ["new.person@example.org"]
+    );
+    assert.deepEqual(send, ["New.Person@Example.org"]);
+    assert.deepEqual(held, ["real.vendor@example.com"]);
+  });
+
+  test("a scrubbed address is held back even if it belongs to a login", () => {
+    const { send } = sandboxRecipients(["someone@sandbox.invalid"], ["someone@sandbox.invalid"]);
+    assert.deepEqual(send, []);
+  });
+
   test("a trainee is matched whatever the case or spacing", () => {
     const { send } = sandboxRecipients([` ${trainee.toUpperCase()} `]);
     assert.equal(send.length, 1);
