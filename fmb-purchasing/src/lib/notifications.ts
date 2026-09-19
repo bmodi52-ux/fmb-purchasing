@@ -115,11 +115,12 @@ export async function sendEmail({
 
   // The sandbox holds scrubbed data, so every address in it is either invented
   // or somebody who never asked to hear from a training system. Only trainees
-  // are written to, and the subject says where it came from (#1).
+  // and the sandbox's own logins are written to, and the subject says where it
+  // came from (#1).
   if (isSandbox()) {
-    const { send, held } = sandboxRecipients(recipients);
+    const { send, held } = sandboxRecipients(recipients, await sandboxAccountHolders());
     if (held.length > 0) {
-      console.log(`[sandbox] held "${subject}" from ${held.join(", ")} — not a trainee`);
+      console.log(`[sandbox] held "${subject}" from ${held.join(", ")} — not a sandbox login`);
     }
     if (send.length === 0) return false;
     recipients = send;
@@ -157,5 +158,27 @@ export async function sendEmail({
     const { reportError } = await import("@/lib/errors");
     await reportError({ source: "email-send", error: err, detail: `subject: ${subject}` });
     return false;
+  }
+}
+
+/**
+ * The sandbox's logins with an address that can receive. Profiles copied from
+ * live all carry a scrubbed `.invalid` address and a reset removes every login
+ * but the trainees, so what is left here is trainees and people an admin
+ * created in the sandbox. A failed lookup falls back to trainees only.
+ */
+async function sandboxAccountHolders(): Promise<string[]> {
+  try {
+    // Imported lazily so the service-role client stays out of anything that
+    // only wants the email template.
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const { data } = await createAdminClient()
+      .from("profiles")
+      .select("email")
+      .not("email", "ilike", "%.invalid");
+    return (data ?? []).map((p) => p.email as string).filter(Boolean);
+  } catch (err) {
+    console.error("[sandbox] could not read logins; writing to trainees only:", err);
+    return [];
   }
 }

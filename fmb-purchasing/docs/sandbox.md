@@ -26,8 +26,10 @@ Two things follow from that, both decided knowingly:
 
 ## Email
 
-The sandbox sends only to the addresses listed in `src/lib/sandbox-trainees.ts`, and every subject starts with
-`[Sandbox]`. Anything addressed to scrubbed data is held back and logged instead. That keeps invented addresses from
+The sandbox sends only to its own logins — the trainees in `src/lib/sandbox-trainees.ts`, and anyone an admin
+creates in the sandbox — and every subject starts with `[Sandbox]`. Anything addressed to scrubbed data, or to a
+vendor or payee address that isn't a login, is held back and logged instead. An admin-created login does not
+survive a reset; add them to the trainee list if they should. That keeps invented addresses from
 bouncing off the real sending domain, and keeps training mail away from real suppliers.
 
 ## Setting it up, once

@@ -23,18 +23,32 @@ export function sandboxSubject(subject: string): string {
 /**
  * Who an email may actually reach from the sandbox.
  *
- * Everything else in the sandbox is scrubbed, so any other address is either
+ * Everything copied from live is scrubbed, so those addresses are either
  * invented (and would bounce, which costs the real domain its reputation) or,
- * worse, a real person's, who would get mail about training data. Only
- * trainees are written to; the rest are reported so the log says what was held
- * back rather than going quiet.
+ * worse, a real person's, who would get mail about training data. Two kinds of
+ * address are written to: trainees, and `accountHolders` — the sandbox's own
+ * logins, which an admin created there on purpose and expects to reach. The
+ * rest are reported so the log says what was held back rather than going quiet.
  */
-export function sandboxRecipients(to: string[]): { send: string[]; held: string[] } {
-  const allowed = new Set(TRAINEES.map((t) => t.email.trim().toLowerCase()));
+export function sandboxRecipients(
+  to: string[],
+  accountHolders: Iterable<string> = []
+): { send: string[]; held: string[] } {
+  const allowed = new Set([...TRAINEES.map((t) => t.email), ...accountHolders].map(normalize));
   const send: string[] = [];
   const held: string[] = [];
   for (const address of to) {
-    (allowed.has(address.trim().toLowerCase()) ? send : held).push(address);
+    const ok = allowed.has(normalize(address)) && !isScrubbed(address);
+    (ok ? send : held).push(address);
   }
   return { send, held };
+}
+
+function normalize(address: string): string {
+  return address.trim().toLowerCase();
+}
+
+/** The scrub's invented addresses (sandbox-scrub.ts) can never receive. */
+export function isScrubbed(address: string): boolean {
+  return normalize(address).endsWith(".invalid");
 }
