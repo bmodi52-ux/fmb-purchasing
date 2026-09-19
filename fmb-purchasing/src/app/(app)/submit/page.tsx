@@ -14,6 +14,10 @@ import { dismissInboundReceipt } from "./inbound-actions";
 
 export const metadata = { title: "Submit expense" };
 
+// A receipt whose lines fall short of its total is read a second time (#58),
+// and each reading can take a while on a long invoice.
+export const maxDuration = 300;
+
 export default async function SubmitExpensePage({
   searchParams,
 }: {

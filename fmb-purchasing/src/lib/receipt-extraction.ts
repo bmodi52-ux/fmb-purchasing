@@ -12,6 +12,7 @@ import { isEmail, parseEmailReceipt } from "@/lib/email-receipt";
  */
 import { LINE_KINDS, SUBSTANTIVE_KINDS } from "@/lib/line-kinds";
 import type { LineKind, StoredLineKind } from "@/lib/line-kinds";
+import { closerToTotal, linesShortfall } from "@/lib/extraction-completeness";
 
 export { LINE_KINDS, SUBSTANTIVE_KINDS };
 export type { LineKind, StoredLineKind };
@@ -168,7 +169,8 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
             "Receipt date as YYYY-MM-DD. Australian receipts print DD/MM/YYYY, so 02/07/2026 " +
             "is 2 July 2026 and must be returned as 2026-07-02. Convert it; do not transcribe " +
             "what is printed. If the document carries more than one date, use the invoice or " +
-            "purchase date, not a delivery or payment date.",
+            "purchase date, not a delivery or payment date. A statement covering a range of dates " +
+            "('11/08/26 to 15/08/26') takes the first, and the range goes in note.",
         },
         invoiceNumber: { type: ["string", "null"] },
         lineItems: {
@@ -293,6 +295,9 @@ The line items must add up to the total printed on the receipt. When a receipt c
 - rounding — Australian 5c cash rounding, either sign
 - deposit — crate or container deposit, and its refund as a negative
 Do not fold these into a goods line and do not leave them out. A genuine credit or return of goods stays kind "goods" with a negative amount.
+
+RECORD EVERY LINE, TO THE LAST
+Wholesale invoices here are often long and handwritten — a produce supplier's docket can run to twenty rows of pen on a printed form. Record every row, in order, from the first to the last, however many there are and however alike they look ("20kg Onions" can appear twice at different prices; both are lines). Before calling the tool, add up the lines: if they come to less than the total, you have skipped rows — find them. A line whose description you cannot read is still a line: record its amount with the "Unclear" category rather than leaving it out.
 
 OTHER RULES
 - For each goods line, infer the canonical base unit and total quantity from the printed pack description (e.g. "Tomato Sauce Carton — 3x4L" -> normalizedQuantity 12, normalizedUnit "L"; "Chicken 10kg box" -> normalizedQuantity 10, normalizedUnit "kg"). Leave both null when no sensible conversion applies, and on every line that is not goods — a service included.
@@ -431,17 +436,82 @@ export async function extractReceiptDetailed(
   const effort = options?.effort ?? EFFORT;
   const startedAt = Date.now();
   const content = await buildContent(fileBase64, mediaType);
+  const tools = [buildTool(categoryNames)];
 
-  const response = await getClient().messages.create({
-    model,
-    max_tokens: MAX_TOKENS,
-    output_config: { effort },
-    system: SYSTEM_PROMPT,
-    tools: [buildTool(categoryNames)],
-    tool_choice: { type: "tool", name: EXTRACT_TOOL_NAME },
-    messages: [{ role: "user", content }],
-  });
+  const ask = (messages: Anthropic.MessageParam[]) =>
+    getClient().messages.create({
+      model,
+      max_tokens: MAX_TOKENS,
+      output_config: { effort },
+      system: SYSTEM_PROMPT,
+      tools,
+      tool_choice: { type: "tool", name: EXTRACT_TOOL_NAME },
+      messages,
+    });
 
+  const firstMessages: Anthropic.MessageParam[] = [{ role: "user", content }];
+  const first = await ask(firstMessages);
+  const firstRead = readResponse(first);
+  let receipt = firstRead.receipt;
+  let stopReason = first.stop_reason ?? null;
+  const usage = addUsage(emptyUsage(), first.usage);
+
+  // Lines well short of the total mean the reading stopped early (#58). Ask
+  // once more, in the same conversation so the model sees what it returned,
+  // and keep whichever reading comes closer to the total.
+  const shortfall = linesShortfall(receipt);
+  if (shortfall !== null) {
+    const lineSum = Math.round(receipt.lineItems.reduce((s, l) => s + (l.lineTotal ?? 0), 0) * 100) / 100;
+    try {
+      const second = await ask([
+        ...firstMessages,
+        { role: "assistant", content: first.content },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: firstRead.toolUseId,
+              content:
+                `Those ${receipt.lineItems.length} lines add up to $${lineSum.toFixed(2)}, but the receipt's total is ` +
+                `$${receipt.total?.toFixed(2)} — $${shortfall.toFixed(2)} is missing, so lines have been left out. ` +
+                "Go through the receipt again from the first line to the last, including every handwritten row, " +
+                "and call record_receipt once more with the complete list of lines.",
+            },
+          ],
+        },
+      ]);
+      addUsage(usage, second.usage);
+      const secondReceipt = readResponse(second).receipt;
+      if (closerToTotal(receipt, secondReceipt) === secondReceipt) {
+        receipt = secondReceipt;
+        stopReason = second.stop_reason ?? null;
+      }
+    } catch (err) {
+      // The first reading stands; the form shows what is still missing.
+      console.error("[receipt-extraction] second reading failed:", err);
+    }
+  }
+
+  return { receipt, model, effort, stopReason, usage, elapsedMs: Date.now() - startedAt };
+}
+
+type Usage = ExtractDetail["usage"];
+
+function emptyUsage(): Usage {
+  return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+}
+
+function addUsage(total: Usage, u: Anthropic.Usage): Usage {
+  total.inputTokens += u.input_tokens ?? 0;
+  total.outputTokens += u.output_tokens ?? 0;
+  total.cacheReadTokens += u.cache_read_input_tokens ?? 0;
+  total.cacheWriteTokens += u.cache_creation_input_tokens ?? 0;
+  return total;
+}
+
+/** The receipt a response carries, or why it carries none. */
+function readResponse(response: Anthropic.Message): { receipt: ExtractedReceipt; toolUseId: string } {
   // A truncated response can still carry a partial tool_use block, which would
   // parse into a receipt that is quietly missing its last few lines — the one
   // failure mode that produces plausible wrong numbers rather than an error.
@@ -511,17 +581,5 @@ export async function extractReceiptDetailed(
     })),
   };
 
-  return {
-    receipt,
-    model,
-    effort,
-    stopReason: response.stop_reason ?? null,
-    usage: {
-      inputTokens: response.usage.input_tokens ?? 0,
-      outputTokens: response.usage.output_tokens ?? 0,
-      cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
-      cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
-    },
-    elapsedMs: Date.now() - startedAt,
-  };
+  return { receipt, toolUseId: toolUse.id };
 }
