@@ -38,6 +38,8 @@ import { limitsFor } from "@/lib/price-alerts";
 import { loadCheapestRecent } from "@/lib/price-alerts-data";
 import { todayIso } from "@/lib/periods-data";
 import { formatPlainDate } from "@/lib/format";
+import { FormResetBoundary } from "@/components/form-reset-boundary";
+import { TabLink } from "@/components/tab-link";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
   name: "Name",
@@ -83,8 +85,27 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: (data?.name as string | null) ?? "Item" };
 }
 
-export default async function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+type ItemTab = "overview" | "settings" | "history";
+
+/**
+ * One item, in three tabs (#53): Overview is what people come for day to day —
+ * what it costs and who sells it — Settings is the setup that is changed
+ * rarely, and History is the record of changes.
+ *
+ * Seven sections on one page read as cluttered, and the Details form sat on
+ * top of everything although it is the part least often touched. Each tab is
+ * its own address (?tab=settings), as on a vendor's page, so a link can open
+ * the right one.
+ */
+export default async function ItemDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const [{ id }, { tab: tabParam }] = await Promise.all([params, searchParams]);
+  const tab: ItemTab = tabParam === "settings" || tabParam === "history" ? tabParam : "overview";
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "pricelist", "view");
@@ -220,6 +241,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   const vendorNameById = new Map((vendors ?? []).map((v) => [v.id, `${v.vendor_number} — ${v.name}`]));
   const categoryNameById = categoryLabelsById(categories ?? []);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id, u.label]));
+  const canonicalUnitLabel = unitLabelById.get(item.canonical_unit_id) ?? null;
 
   const assignableCategories = leafCategories(sortCategories(categories ?? []));
   const currentCategory = (categories ?? []).find((c) => c.id === item.category_id);
@@ -317,11 +339,35 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             note="Approving confirms this is a real product worth keeping in the catalogue. Rejecting keeps it for the expenses that already name it, but marks it as one nobody should file against."
           />
         )}
+
+        {/* What the Details form holds, read at a glance — the form itself
+            is on Settings. */}
+        <p className="mt-3 text-sm text-ink/70">
+          {item.category_id ? (categoryNameById.get(item.category_id) ?? "Uncategorised") : "Uncategorised"}
+          <span className="text-ink/30"> · </span>
+          Measured in {canonicalUnitLabel ? unitOptionLabel(canonicalUnitLabel) : "—"}
+        </p>
+        {item.comments && <p className="mt-1 whitespace-pre-line text-sm text-ink/55">{item.comments}</p>}
+
+        <nav aria-label="Item sections" className="mt-5 flex gap-1 overflow-x-auto border-b border-ink/10">
+          <TabLink href={`/pricelist/${item.id}`} active={tab === "overview"}>
+            Overview
+          </TabLink>
+          <TabLink href={`/pricelist/${item.id}?tab=settings`} active={tab === "settings"}>
+            Settings
+          </TabLink>
+          <TabLink href={`/pricelist/${item.id}?tab=history`} active={tab === "history"}>
+            History <span className="ml-1 text-xs text-ink/45">{(itemHistory ?? []).length}</span>
+          </TabLink>
+        </nav>
       </div>
 
+      {tab === "settings" && (
+        <>
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-4 section-title text-ink">Details</h2>
         <form action={updateItem} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormResetBoundary>
           <input type="hidden" name="item_id" value={item.id} />
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
             <span className="text-ink/70">Item name</span>
@@ -361,6 +407,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             <span className="text-ink/70">Comments</span>
             <textarea name="comments" defaultValue={item.comments ?? ""} disabled={!canEdit} rows={2} className="input" />
           </label>
+          </FormResetBoundary>
           {canEdit && (
             <SubmitButton className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
               Save changes
@@ -401,7 +448,11 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           )}
         />
       </section>
+        </>
+      )}
 
+      {tab === "overview" && (
+        <>
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-1 section-title text-ink">What we&apos;ve actually paid</h2>
         <p className="mb-4 text-sm text-ink/50">
@@ -694,17 +745,23 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           <form action={addPackSize} className="mt-5 flex flex-col gap-3 border-t border-ink/10 pt-4">
             <input type="hidden" name="item_id" value={item.id} />
             <p className="text-xs font-medium uppercase tracking-wide text-ink/40">Add another pack size</p>
-            <PackFields
-              units={units ?? []}
-              defaults={{ soldAs: "", innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
-            />
+            <FormResetBoundary>
+              <PackFields
+                units={units ?? []}
+                defaults={{ soldAs: "", innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
+              />
+            </FormResetBoundary>
             <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
               + Add pack size
             </SubmitButton>
           </form>
         )}
       </section>
+        </>
+      )}
 
+      {tab === "settings" && (
+        <>
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-1 section-title text-ink">Vendor item descriptions</h2>
         <p className="mb-4 text-sm text-ink/50">
@@ -790,7 +847,10 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           />
         </section>
       )}
+        </>
+      )}
 
+      {tab === "history" && (
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-4 section-title text-ink">Item change history</h2>
         {(itemHistory ?? []).length === 0 ? (
@@ -816,6 +876,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           </ul>
         )}
       </section>
+      )}
     </div>
   );
 }

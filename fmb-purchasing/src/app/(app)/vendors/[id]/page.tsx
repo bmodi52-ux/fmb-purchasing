@@ -2,6 +2,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import { TabLink } from "@/components/tab-link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getUserPermissions, can, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -188,20 +189,6 @@ function registrationTone(v: Vendor): string {
   return v.abn_active === false || v.gst_registered === false ? "text-maroon" : "text-ink/60";
 }
 
-function TabLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={`-mb-px border-b-2 px-4 py-2.5 text-sm transition-colors ${
-        active ? "border-gold-deep font-medium text-ink" : "border-transparent text-ink/60 hover:text-ink"
-      }`}
-    >
-      {children}
-    </Link>
-  );
-}
-
 async function DetailsTab({
   vendor,
   canEdit,
@@ -319,7 +306,7 @@ async function DetailsTab({
         <form action={updateVendorDefaults} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <input type="hidden" name="vendor_id" value={vendor.id} />
           <Field label="Usual category">
-            <select name="default_category_id" defaultValue={vendor.default_category_id ?? ""} disabled={!canEdit} className="input">
+            <select key={vendor.default_category_id ?? ""} name="default_category_id" defaultValue={vendor.default_category_id ?? ""} disabled={!canEdit} className="input">
               <option value="">None</option>
               {defaultCategoryOptions.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -329,7 +316,7 @@ async function DetailsTab({
             </select>
           </Field>
           <Field label="Usually paid to">
-            <select name="default_payee" defaultValue={vendor.default_payee ?? ""} disabled={!canEdit} className="input">
+            <select key={vendor.default_payee ?? ""} name="default_payee" defaultValue={vendor.default_payee ?? ""} disabled={!canEdit} className="input">
               <option value="">Whoever submits chooses</option>
               {(Object.keys(DEFAULT_PAYEE_LABELS) as ("me" | "vendor")[]).map((k) => (
                 <option key={k} value={k}>
@@ -339,7 +326,7 @@ async function DetailsTab({
             </select>
           </Field>
           <Field label="GST">
-            <select name="gst_treatment" defaultValue={vendor.gst_treatment ?? ""} disabled={!canEdit} className="input">
+            <select key={vendor.gst_treatment ?? ""} name="gst_treatment" defaultValue={vendor.gst_treatment ?? ""} disabled={!canEdit} className="input">
               <option value="">As each receipt shows</option>
               {(Object.keys(GST_TREATMENT_LABELS) as ("gst_free" | "taxable")[]).map((k) => (
                 <option key={k} value={k}>

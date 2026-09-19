@@ -33,6 +33,7 @@ export function TeamDefaultSelect({
       <input type="hidden" name="kind" value={kind} />
       <input type="hidden" name="channel" value={channel} />
       <select
+        key={value}
         name="value"
         defaultValue={value}
         aria-label={label}
