@@ -2,35 +2,36 @@
 
 A second copy of the app, at **sandbox.fmbpurchasing.com.au**, where someone can be shown how to submit, approve and
 pay without touching anything real. It runs the same code as the live site — every merge reaches both — over its own
-Supabase project, seeded from a scrubbed copy of the real data.
+Supabase project, seeded from a copy of the real data.
 
-What a trainee sees is the real shape of the work: the same vendors, items, prices and history, under invented names.
-What they cannot see is anyone's bank account, anyone's address, or anyone's email.
+What a trainee sees is the work as it really is: the same vendors, items, prices and history, under their real names.
+What they cannot do is pay anyone: every bank account in the sandbox is fake.
 
-## What is invented, and what is not
+## What is replaced, and what is not
 
 | Replaced | Kept as it is |
 | --- | --- |
-| Vendor names, ABNs and billing addresses | Item names, pack sizes, quantities and prices |
-| People's names and email addresses | Expense amounts, dates, GST, approvals and payments |
-| Bank account names, BSBs and account numbers | Categories, budgets, teams and their permissions |
-| Contact names and phone numbers | Receipt files, exactly as uploaded |
-| FMB's own bank details in the ABA settings | Comments and notes, with names inside them rewritten |
+| Payee BSBs and account numbers | Vendor names, ABNs, addresses and contacts |
+| FMB's own bank details in the ABA settings | Item names, pack sizes, quantities and prices |
+| | Expense amounts, dates, GST, approvals and payments |
+| | Payee names and remittance emails |
+| | Categories, budgets, teams and their permissions |
+| | Comments and notes, exactly as written |
+| | Receipt files, exactly as uploaded |
 
 Two things follow from that, both decided knowingly:
 
-- **Receipt images are not scrubbed.** The vendor, the ABN and sometimes a bank account are printed on the paper, and
-  they stay readable. A trainee can open any receipt in the sandbox and see a real supplier's details.
-- **Real people are not copied at all.** Every expense, approval and payment is re-attributed to a trainee, so a
-  trainee signs in to their own work rather than impersonating a member.
+- **Receipt images carry real bank details.** The vendor, the ABN and sometimes a bank account are printed on the
+  paper, and they stay readable.
+- **Real logins are not copied.** Every expense, approval and payment is re-attributed to a trainee, so a trainee
+  signs in to their own work rather than impersonating a member.
 
 ## Email
 
 The sandbox sends only to its own logins — the trainees in `src/lib/sandbox-trainees.ts`, and anyone an admin
-creates in the sandbox — and every subject starts with `[Sandbox]`. Anything addressed to scrubbed data, or to a
-vendor or payee address that isn't a login, is held back and logged instead. An admin-created login does not
-survive a reset; add them to the trainee list if they should. That keeps invented addresses from
-bouncing off the real sending domain, and keeps training mail away from real suppliers.
+creates in the sandbox — and every subject starts with `[Sandbox]`. Vendor contacts and remittance addresses are real
+but are not logins, so anything addressed to them is held back and logged instead: no supplier hears from a training
+system. An admin-created login does not survive a reset; add them to the trainee list if they should.
 
 ## Setting it up, once
 
@@ -77,7 +78,7 @@ node --import ./scripts/test-setup.mjs scripts/seed-sandbox.mjs
 ```
 
 The dry run reads everything, reports how much there is and which logins would change, and writes nothing. The real
-run empties the sandbox, re-creates the trainee logins, copies the scrubbed data in, and copies the receipt files.
+run empties the sandbox, re-creates the trainee logins, copies the live data in (bank details replaced), and copies the receipt files.
 `--skip-files` leaves the receipts alone, which is much quicker when only the data matters.
 
 It refuses to start if `.env.sandbox` points at the same project as `.env.local`, or if the target database has not

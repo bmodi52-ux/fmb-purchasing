@@ -23,12 +23,12 @@ export function sandboxSubject(subject: string): string {
 /**
  * Who an email may actually reach from the sandbox.
  *
- * Everything copied from live is scrubbed, so those addresses are either
- * invented (and would bounce, which costs the real domain its reputation) or,
- * worse, a real person's, who would get mail about training data. Two kinds of
- * address are written to: trainees, and `accountHolders` — the sandbox's own
- * logins, which an admin created there on purpose and expects to reach. The
- * rest are reported so the log says what was held back rather than going quiet.
+ * The vendor contacts and remittance addresses copied from live are real
+ * suppliers', who must never get mail about training data, and older resets
+ * left invented `.invalid` ones that would only bounce. Two kinds of address
+ * are written to: trainees, and `accountHolders` — the sandbox's own logins,
+ * which an admin created there on purpose and expects to reach. The rest are
+ * reported so the log says what was held back rather than going quiet.
  */
 export function sandboxRecipients(
   to: string[],

@@ -1,5 +1,5 @@
 /**
- * Fills the sandbox with a scrubbed copy of the live data (scratchpad #1).
+ * Fills the sandbox with a copy of the live data (scratchpad #1).
  *
  *   node --import ./scripts/test-setup.mjs scripts/seed-sandbox.mjs --dry-run
  *   node --import ./scripts/test-setup.mjs scripts/seed-sandbox.mjs
@@ -10,30 +10,16 @@
  * (migration 0058) — so the worst a mixed-up key can do is stop.
  *
  * What the sandbox ends up with: every vendor, item, price, expense, budget
- * and notification from live, with vendor names, people, bank details,
- * addresses and email addresses replaced by invented ones that stay the same
- * at every reset. Real people are not copied at all — everything they did is
- * attributed to a trainee, so a trainee opens the app to their own work.
- *
- * Receipt files are copied as they are. Their contents are not scrubbed, which
- * was decided knowingly: the vendor and ABN printed on a receipt stay visible.
+ * and notification from live, names and all. Only bank details are replaced —
+ * BSBs, account numbers and FMB's own ABA settings — so nothing made in the
+ * sandbox can pay a real account. Real logins are not copied: everything a
+ * person did is attributed to a trainee, so a trainee opens the app to their
+ * own work. Receipt files are copied as they are.
  */
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { TRAINEES } from "../src/lib/sandbox-trainees.ts";
-import {
-  buildTextScrubber,
-  scrubDeep,
-  scrubbedAbn,
-  scrubbedAccountNumber,
-  scrubbedAddress,
-  scrubbedBsb,
-  scrubbedEmail,
-  scrubbedPersonName,
-  scrubbedPhone,
-  scrubbedVendorName,
-  withoutGeneratedColumns,
-} from "../src/lib/sandbox-scrub.ts";
+import { scrubbedAccountNumber, scrubbedBsb, withoutGeneratedColumns } from "../src/lib/sandbox-scrub.ts";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const SKIP_FILES = process.argv.includes("--skip-files");
@@ -144,55 +130,20 @@ const missed = (listed.data || []).filter((t) => !TABLE_ORDER.includes(t) && !SK
 if (missed.length > 0) console.log("  note: neither copied nor skipped, so left empty: " + missed.join(", "));
 
 const people = (await allRows(from, "profiles")).rows || [];
-const vendorName = new Map((source.vendors || []).map((v) => [v.id, scrubbedVendorName(v.id)]));
-const personName = new Map(people.map((p) => [p.id, scrubbedPersonName(p.id)]));
 
-// Every real name, so it is rewritten wherever it appears in free text too.
-const replacements = [];
-for (const v of source.vendors || []) if (v.name) replacements.push({ from: v.name, to: vendorName.get(v.id) });
-for (const p of people) {
-  if (p.full_name) replacements.push({ from: p.full_name, to: personName.get(p.id) });
-  if (p.email) replacements.push({ from: p.email, to: scrubbedEmail(p.id, personName.get(p.id)) });
-}
-for (const p of source.payees || []) {
-  if (p.display_name && !p.vendor_id) replacements.push({ from: p.display_name, to: scrubbedPersonName(p.id) });
-}
-const scrubText = buildTextScrubber(replacements);
-
+// Names, ABNs, addresses, contacts and free text are copied exactly as they
+// are on live, so training looks like the job. Only the bank details are
+// replaced: an ABA file made in the sandbox must never be able to pay anyone.
 function scrubRow(table, row, userMap) {
   const out = {};
   for (const [key, value] of Object.entries(row)) {
     const isPerson = isPersonColumn(key) && typeof value === "string" && userMap.has(value);
-    out[key] = isPerson ? userMap.get(value) : scrubDeep(value, scrubText);
+    out[key] = isPerson ? userMap.get(value) : value;
   }
 
-  if (table === "vendors") {
-    out.name = vendorName.get(row.id);
-    if (row.abn) out.abn = scrubbedAbn(row.id);
-    if (row.billing_address) out.billing_address = scrubbedAddress(row.id);
-  }
-  if (table === "vendor_contacts") {
-    out.name = scrubbedPersonName(row.id);
-    if (row.phone) out.phone = scrubbedPhone(row.id);
-  }
-  if (table === "vendor_collection_addresses") {
-    const address = scrubbedAddress(row.id);
-    out.line1 = address.line1;
-    out.line2 = null;
-    out.suburb = address.suburb;
-    out.postcode = address.postcode;
-  }
   if (table === "payees") {
-    const name = (row.vendor_id ? vendorName.get(row.vendor_id) : null) || scrubbedPersonName(row.id);
-    out.display_name = name;
-    if (row.bank_account_name) out.bank_account_name = name.toUpperCase();
     if (row.bank_bsb) out.bank_bsb = scrubbedBsb(row.id);
     if (row.bank_account_number) out.bank_account_number = scrubbedAccountNumber(row.id);
-    if (row.remittance_email) out.remittance_email = scrubbedEmail(row.id, name);
-    out.notes = null;
-  }
-  if (table === "expenses" && row.vendor_id && vendorName.has(row.vendor_id)) {
-    out.vendor_name_raw = vendorName.get(row.vendor_id);
   }
   if (table === "app_settings" && row.key === "aba") {
     out.value = {
