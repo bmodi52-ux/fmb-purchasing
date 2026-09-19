@@ -40,6 +40,8 @@ import { todayIso } from "@/lib/periods-data";
 import { formatPlainDate } from "@/lib/format";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { TabLink } from "@/components/tab-link";
+import { ReceiptViewer } from "@/components/receipt-viewer";
+import { describeSources, type DescriptionSource } from "@/lib/description-sources";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
   name: "Name",
@@ -222,15 +224,76 @@ export default async function ItemDetailPage({
 
   const { data: vendorDescriptions } = await admin
     .from("vendor_item_descriptions")
-    .select("id, vendor_id, description, created_at")
+    .select("id, vendor_id, description, created_at, created_by")
     .eq("item_id", id)
     .order("created_at");
+
+  // Where each description came from (#55): the expense lines filed against
+  // this item that say the same thing. Only Settings shows descriptions.
+  const { data: describedLines } =
+    tab === "settings" && offerIdList.length > 0 && (vendorDescriptions ?? []).length > 0
+      ? await admin
+          .from("expense_line_items")
+          .select("description_raw, expense_id, expenses!inner(expense_number, vendor_id, receipt_date, submitted_at, submitted_by)")
+          .in("pricelist_item_id", offerIdList)
+      : { data: [] };
+  type DescribedExpense = {
+    expense_number: string | null;
+    vendor_id: string | null;
+    receipt_date: string | null;
+    submitted_at: string | null;
+    submitted_by: string;
+  };
+  const expenseByLine = (describedLines ?? []).map((l) => ({
+    line: l,
+    expense: (Array.isArray(l.expenses) ? l.expenses[0] : l.expenses) as DescribedExpense,
+  }));
+  const descriptionSources = describeSources(
+    (vendorDescriptions ?? []).map((d) => ({
+      id: d.id as string,
+      vendorId: (d.vendor_id as string | null) ?? null,
+      description: d.description as string,
+      createdAt: d.created_at as string,
+      createdBy: (d.created_by as string | null) ?? null,
+    })),
+    expenseByLine.map(({ line, expense }) => ({
+      expenseId: line.expense_id as string,
+      expenseNumber: expense.expense_number,
+      vendorId: expense.vendor_id,
+      description: line.description_raw as string,
+      date: expense.receipt_date ?? expense.submitted_at,
+    })),
+    (itemHistory ?? []).flatMap((h) => {
+      const name = (h.changes as Record<string, { old: unknown; new: unknown }>).name;
+      return name ? [{ oldName: String(name.old ?? ""), newName: String(name.new ?? ""), changedAt: h.changed_at as string }] : [];
+    })
+  );
+  // The receipt behind an expense is only for those who may see the expense.
+  const seesAllExpenses =
+    can(permissions, "all_expenses", "view") || can(permissions, "approvals", "approve") || can(permissions, "payments", "mark_paid");
+  const submitterByExpense = new Map(expenseByLine.map(({ line, expense }) => [line.expense_id as string, expense.submitted_by]));
+  const canOpenExpense = (expenseId: string) => seesAllExpenses || submitterByExpense.get(expenseId) === user.id;
+  const sourceExpenseIds = [
+    ...new Set(
+      [...descriptionSources.values()].flatMap((s) => (s.kind === "receipt" && canOpenExpense(s.latest.expenseId) ? [s.latest.expenseId] : []))
+    ),
+  ];
+  const { data: sourceAttachments } = sourceExpenseIds.length
+    ? await admin.from("expense_attachments").select("expense_id").in("expense_id", sourceExpenseIds)
+    : { data: [] };
+  const expensesWithReceipt = new Set((sourceAttachments ?? []).map((a) => a.expense_id as string));
 
   const offerIds = new Set((offers ?? []).map((o) => o.id));
   const offerHistory = (offerHistoryRows ?? []).filter((h) => offerIds.has(h.item_id));
 
   const changedByIds = [
-    ...new Set([...(itemHistory ?? []).map((h) => h.changed_by), ...offerHistory.map((h) => h.changed_by)].filter(Boolean)),
+    ...new Set(
+      [
+        ...(itemHistory ?? []).map((h) => h.changed_by),
+        ...offerHistory.map((h) => h.changed_by),
+        ...(vendorDescriptions ?? []).map((d) => d.created_by),
+      ].filter(Boolean)
+    ),
   ];
   const { data: profiles } =
     changedByIds.length > 0
@@ -784,10 +847,14 @@ export default async function ItemDetailPage({
                 <div className="min-w-0">
                   <p className="break-words text-ink">{d.description}</p>
                   <p className="text-xs text-ink/45">
-                    {d.vendor_id
-                      ? (vendorNameById.get(d.vendor_id) ?? "unknown vendor")
-                      : "Any vendor — carried over from a rename or added by hand"}
+                    {d.vendor_id ? (vendorNameById.get(d.vendor_id) ?? "unknown vendor") : "Any vendor"}
                   </p>
+                  <DescriptionSourceLine
+                    source={descriptionSources.get(d.id)}
+                    canOpenExpense={canOpenExpense}
+                    hasReceipt={(expenseId) => expensesWithReceipt.has(expenseId)}
+                    nameOf={(userId) => (userId ? (profileNameById.get(userId) ?? null) : null)}
+                  />
                 </div>
                 {canEdit && (
                   <form action={removeVendorItemDescription}>
@@ -878,6 +945,64 @@ export default async function ItemDetailPage({
       </section>
       )}
     </div>
+  );
+}
+
+/** "From E-0014 on 15/09/2026 · View receipt", or how it got here otherwise. */
+function DescriptionSourceLine({
+  source,
+  canOpenExpense,
+  hasReceipt,
+  nameOf,
+}: {
+  source: DescriptionSource | undefined;
+  canOpenExpense: (expenseId: string) => boolean;
+  hasReceipt: (expenseId: string) => boolean;
+  nameOf: (userId: string | null) => string | null;
+}) {
+  if (!source) return null;
+
+  if (source.kind === "rename") {
+    return (
+      <p className="mt-0.5 text-xs text-ink/55">
+        Kept from the item&apos;s old name when it was renamed to {source.renamedTo} on {formatDateTime(source.renamedAt)}
+      </p>
+    );
+  }
+
+  if (source.kind === "added") {
+    const who = nameOf(source.createdBy);
+    return (
+      <p className="mt-0.5 text-xs text-ink/55">
+        Added {who ? `by ${who} ` : ""}on {formatDateTime(source.createdAt)} — no receipt filed against this item says it
+      </p>
+    );
+  }
+
+  const { latest, expenseCount } = source;
+  const label = latest.expenseNumber ?? "an expense";
+  const open = canOpenExpense(latest.expenseId);
+  return (
+    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-ink/55">
+      <span>
+        From{" "}
+        {open ? (
+          <Link href={`/expenses/${latest.expenseId}`} className="font-mono underline hover:text-ink">
+            {label}
+          </Link>
+        ) : (
+          <span className="font-mono">{label}</span>
+        )}
+        {latest.date && <> on {formatPlainDate(latest.date.slice(0, 10))}</>}
+        {expenseCount > 1 && <> · on {expenseCount} receipts in all</>}
+      </span>
+      {open && hasReceipt(latest.expenseId) && (
+        <>
+          <span className="text-ink/30">·</span>
+          <ReceiptViewer expenseId={latest.expenseId} label="View receipt" />
+        </>
+      )}
+    </p>
   );
 }
 
