@@ -1,7 +1,10 @@
 "use client";
 
 import { Fragment, useMemo, useState, useTransition } from "react";
-import { saveColumnPreference } from "@/lib/column-prefs-actions";
+import { useRouter } from "next/navigation";
+import { resetColumnPreference, saveColumnPreference } from "@/lib/column-prefs-actions";
+import { mergeColumnOrder, moveColumn } from "@/lib/column-order";
+import { ColumnsMenu } from "./columns-menu";
 import { ExportToolbar } from "./export-toolbar";
 import { useReportPending } from "./pending";
 import { ColumnFilterMenu } from "./column-filter-menu";
@@ -88,7 +91,6 @@ export function ColumnsDataTable<T extends { id: string }>({
   deriveRows?: (rows: T[], visibleColumnKeys: Set<string>) => T[];
 }) {
   const [visible, setVisible] = useState<Set<string>>(new Set(initialVisible));
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -127,19 +129,63 @@ export function ColumnsDataTable<T extends { id: string }>({
     setExpanded(next);
   }
 
+  // The order the person has put the columns in (#56), every column included;
+  // only the visible ones are saved, as visible_columns, in this order.
+  const allKeys = columns.map((c) => c.key);
+  const [order, setOrder] = useState<string[]>(() => mergeColumnOrder(allKeys, initialVisible));
+
+  // Reset to default forgets the saved choice and refreshes the page, which
+  // arrives here as a new initialVisible to start over from.
+  // Null after a reset, so the columns start over even when the page sends
+  // back the same list as before — a reorder never changed the prop.
+  const [seenInitial, setSeenInitial] = useState<string | null>(initialVisible.join("|"));
+  if (seenInitial !== initialVisible.join("|")) {
+    setSeenInitial(initialVisible.join("|"));
+    setVisible(new Set(initialVisible));
+    setOrder(mergeColumnOrder(allKeys, initialVisible));
+  }
+
+  function save(nextOrder: string[], nextVisible: Set<string>) {
+    startTransition(() => {
+      saveColumnPreference(
+        pageKey,
+        nextOrder.filter((k) => nextVisible.has(k))
+      );
+    });
+  }
+
   function toggle(key: string) {
     const next = new Set(visible);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     setVisible(next);
+    save(order, next);
+  }
 
-    const orderedKeys = columns.filter((c) => next.has(c.key)).map((c) => c.key);
-    startTransition(() => {
-      saveColumnPreference(pageKey, orderedKeys);
+  function move(key: string, toIndex: number) {
+    const next = moveColumn(order, key, toIndex);
+    setOrder(next);
+    save(next, visible);
+  }
+
+  const router = useRouter();
+  function resetColumns() {
+    startTransition(async () => {
+      await resetColumnPreference(pageKey);
+      setSeenInitial(null);
+      router.refresh();
     });
   }
 
-  const visibleColumns = columns.filter((c) => visible.has(c.key));
+  // Dragging a heading sideways onto another moves it to that place.
+  const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const [dropKey, setDropKey] = useState<string | null>(null);
+
+  const orderedColumns = useMemo(() => {
+    const columnByKey = new Map(columns.map((c) => [c.key, c]));
+    return order.flatMap((k) => columnByKey.get(k) ?? []);
+  }, [columns, order]);
+  const visibleColumns = useMemo(() => orderedColumns.filter((c) => visible.has(c.key)), [orderedColumns, visible]);
 
   const displayedRows = useMemo(
     () => (deriveRows ? deriveRows(rows, visible) : rows),
@@ -331,28 +377,16 @@ export function ColumnsDataTable<T extends { id: string }>({
           <ExportToolbar
             filenameBase={pageKey}
             title={title}
-            columns={columns.map((c) => ({ key: c.key, label: c.label }))}
+            columns={orderedColumns.map((c) => ({ key: c.key, label: c.label }))}
             rows={exportRows}
           />
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setOpen((o) => !o)}
-              className="rounded-md border border-ink/15 px-3 py-1 text-xs text-ink/70 hover:border-ink/30"
-            >
-              Columns
-            </button>
-            {open && (
-              <div className="absolute top-full right-0 z-10 mt-1 flex max-h-72 w-56 flex-col gap-1 overflow-y-auto rounded-md border border-ink/15 bg-white p-3 text-sm shadow-md">
-                {columns.map((c) => (
-                  <label key={c.key} className="flex items-center gap-2">
-                    <input type="checkbox" checked={visible.has(c.key)} onChange={() => toggle(c.key)} />
-                    {c.label}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+          <ColumnsMenu
+            columns={orderedColumns.map((c) => ({ key: c.key, label: c.label }))}
+            visible={visible}
+            onToggle={toggle}
+            onMove={move}
+            onReset={resetColumns}
+          />
         </div>
       </div>
 
@@ -455,7 +489,36 @@ export function ColumnsDataTable<T extends { id: string }>({
                 {visibleColumns.map((c) => {
                   const sorted = sort?.key === c.key ? sort.direction : null;
                   return (
-                    <th scope="col" key={c.key} className="p-0">
+                    <th
+                      scope="col"
+                      key={c.key}
+                      draggable
+                      title="Drag sideways to move this column"
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", c.key);
+                        setDraggingKey(c.key);
+                      }}
+                      onDragOver={(e) => {
+                        if (!draggingKey || draggingKey === c.key) return;
+                        e.preventDefault();
+                        setDropKey(c.key);
+                      }}
+                      onDragLeave={() => setDropKey((k) => (k === c.key ? null : k))}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggingKey && draggingKey !== c.key) move(draggingKey, order.indexOf(c.key));
+                        setDraggingKey(null);
+                        setDropKey(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggingKey(null);
+                        setDropKey(null);
+                      }}
+                      className={`p-0 ${draggingKey === c.key ? "opacity-40" : ""} ${
+                        dropKey === c.key ? "bg-gold/15 shadow-[inset_2px_0_0_var(--color-gold-deep)]" : ""
+                      }`}
+                    >
                       <div className="flex items-center gap-0.5 pr-1">
                         <button
                           type="button"
