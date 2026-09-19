@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import {
   reconcile,
   sumLines,
   sumLineGst,
   suggestedKindForDifference,
+  totalChangedFromScan,
   round2,
   type MoneyLine,
 } from "@/lib/expense-money";
@@ -64,6 +66,9 @@ export function ReconciliationStrip({
   printedGst,
   onAddCharge,
   autoAddedCount = 0,
+  scannedTotal = null,
+  totalNote = "",
+  onTotalNoteChange,
 }: {
   lines: MoneyLine[];
   receiptTotal: number;
@@ -73,12 +78,24 @@ export function ReconciliationStrip({
   onAddCharge: (kind: StoredLineKind, amount: number) => void;
   /** How many lines the app added itself, so the copy can say so. */
   autoAddedCount?: number;
+  /**
+   * The total as the scan read it (#51). While there is one, the total is
+   * shown locked; changing it opens the field and asks why.
+   */
+  scannedTotal?: number | null;
+  totalNote?: string;
+  onTotalNoteChange?: (v: string) => void;
 }) {
+  const changed = totalChangedFromScan(receiptTotal, scannedTotal);
+  const [editingTotal, setEditingTotal] = useState(false);
+  const locked = scannedTotal != null && !editingTotal && !changed;
   // Services sit with goods, not with charges. Reading "Charges and discounts
   // ×1 · $450.00" on a cleaning invoice would suggest the app had misread the
   // whole thing.
-  const purchases = lines.filter((l) => (SUBSTANTIVE_KINDS as readonly string[]).includes(l.kind));
-  const charges = lines.filter((l) => !(SUBSTANTIVE_KINDS as readonly string[]).includes(l.kind));
+  const onReceipt = lines.filter((l) => !l.notOnReceipt);
+  const offReceipt = lines.filter((l) => l.notOnReceipt);
+  const purchases = onReceipt.filter((l) => (SUBSTANTIVE_KINDS as readonly string[]).includes(l.kind));
+  const charges = onReceipt.filter((l) => !(SUBSTANTIVE_KINDS as readonly string[]).includes(l.kind));
   const balance = reconcile(lines, receiptTotal);
   const computedGst = sumLineGst(lines);
   const gstGap = printedGst == null ? null : round2(printedGst - computedGst);
@@ -97,15 +114,63 @@ export function ReconciliationStrip({
             Receipt total
             <span className="ml-1.5 text-xs text-ink/45">as printed</span>
           </label>
-          <input
-            id="receipt-total"
-            type="number"
-            step="0.01"
-            value={receiptTotal}
-            onChange={(e) => onReceiptTotalChange(Number(e.target.value))}
-            className="w-32 rounded border border-ink/20 bg-white px-2 py-1 text-right text-base font-semibold tabular-figures"
-          />
+          {locked ? (
+            <span className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingTotal(true)}
+                className="font-sans text-xs text-ink/50 underline hover:text-ink"
+              >
+                Change
+              </button>
+              <span id="receipt-total" className="w-32 px-2 py-1 text-right text-base font-semibold tabular-figures">
+                {money(receiptTotal)}
+              </span>
+            </span>
+          ) : (
+            <input
+              id="receipt-total"
+              type="number"
+              step="0.01"
+              value={receiptTotal}
+              onChange={(e) => onReceiptTotalChange(Number(e.target.value))}
+              className="w-32 rounded border border-ink/20 bg-white px-2 py-1 text-right text-base font-semibold tabular-figures"
+            />
+          )}
         </div>
+        {scannedTotal != null && (editingTotal || changed) && (
+          <div className="flex flex-col gap-1 font-sans text-xs text-ink/60">
+            <span>
+              Read from the receipt as <span className="font-medium text-ink/80">{money(scannedTotal)}</span>.
+              {changed ? " The approver will see both, with your reason." : " Only change it if the scan misread it."}
+              {changed && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onReceiptTotalChange(scannedTotal);
+                    onTotalNoteChange?.("");
+                    setEditingTotal(false);
+                  }}
+                  className="ml-2 underline hover:text-ink"
+                >
+                  Put back
+                </button>
+              )}
+            </span>
+            {changed && (
+              <input
+                value={totalNote}
+                onChange={(e) => onTotalNoteChange?.(e.target.value)}
+                placeholder="Why it's different — e.g. the scan misread 8 as 3"
+                aria-label="Why the receipt total was changed"
+                className="w-full rounded border border-ink/20 bg-white px-2 py-1 text-sm text-ink"
+              />
+            )}
+          </div>
+        )}
+        {offReceipt.length > 0 && (
+          <Row label="Claimed on top, not on this receipt" value={sumLines(offReceipt)} count={offReceipt.length} />
+        )}
 
         <div
           className={`-mx-4 -mb-4 mt-2 flex flex-wrap items-center justify-between gap-3 rounded-b-lg px-4 py-2.5 ${
@@ -122,6 +187,13 @@ export function ReconciliationStrip({
                     automatically to match the receipt total — worth a glance.
                   </span>
                 </>
+              ) : offReceipt.length > 0 ? (
+                <>
+                  Everything on the receipt is accounted for.{" "}
+                  <span className="text-ink/55">
+                    {money(sumLines(offReceipt))} more is claimed that isn&rsquo;t on it — the approver will see why.
+                  </span>
+                </>
               ) : (
                 <>Everything on the receipt is accounted for.</>
               )
@@ -134,7 +206,10 @@ export function ReconciliationStrip({
               <>
                 The lines come to{" "}
                 <span className="font-semibold text-ink">{money(-balance.difference)}</span> more
-                than the receipt total.
+                than the receipt total.{" "}
+                <span className="text-ink/55">
+                  If a line isn&rsquo;t on this receipt, tick &ldquo;Not on this receipt&rdquo; on it and say why.
+                </span>
               </>
             )}
           </span>

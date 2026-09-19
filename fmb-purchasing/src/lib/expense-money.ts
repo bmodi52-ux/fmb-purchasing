@@ -46,6 +46,11 @@ export type MoneyLine = {
   /** GST-inclusive amount for this line, as printed. Negative for a discount. */
   lineTotal: number;
   gstApplicable: boolean;
+  /**
+   * Claimed, but not on the receipt (#51) — a charge added by hand. Left out
+   * when the lines are compared with the receipt total.
+   */
+  notOnReceipt?: boolean;
 };
 
 export function round2(n: number): number {
@@ -88,16 +93,23 @@ export function sumLineGst(lines: MoneyLine[]): number {
 export const RECONCILE_TOLERANCE = 0.01;
 
 export type Reconciliation = {
+  /** The lines that are on the receipt; those marked not on it are left out. */
   lineSum: number;
-  /** What the receipt says, which is what will be paid. */
+  /** What the receipt says. */
   receiptTotal: number;
   /** receiptTotal - lineSum. Positive means something is not yet on a line. */
   difference: number;
   balanced: boolean;
 };
 
+/**
+ * Whether the lines on the receipt account for its total.
+ *
+ * Lines marked not on the receipt are left out: they are claimed on top of
+ * it, so comparing them with its total would be comparing different things.
+ */
 export function reconcile(lines: MoneyLine[], receiptTotal: number): Reconciliation {
-  const lineSum = sumLines(lines);
+  const lineSum = sumLines(lines.filter((l) => !l.notOnReceipt));
   const difference = round2(receiptTotal - lineSum);
   return {
     lineSum,
@@ -105,6 +117,38 @@ export function reconcile(lines: MoneyLine[], receiptTotal: number): Reconciliat
     difference,
     balanced: Math.abs(difference) <= RECONCILE_TOLERANCE,
   };
+}
+
+/**
+ * How a claim stands against its receipt (#51), for the submitter and approver.
+ *
+ * The claim is every line; the receipt accounts for the lines on it. What the
+ * lines marked not on the receipt add up to is claimed without a receipt, and
+ * whatever still separates the receipt total from the lines on it is
+ * unexplained — both shown to the approver rather than refused.
+ */
+export type ClaimVsReceipt = {
+  claimTotal: number;
+  offReceiptTotal: number;
+  offReceiptCount: number;
+  /** Receipt total minus the lines on it; 0 when they agree. */
+  unexplained: number;
+};
+
+export function claimVsReceipt(lines: MoneyLine[], receiptTotal: number): ClaimVsReceipt {
+  const off = lines.filter((l) => l.notOnReceipt);
+  const balance = reconcile(lines, receiptTotal);
+  return {
+    claimTotal: sumLines(lines),
+    offReceiptTotal: sumLines(off),
+    offReceiptCount: off.length,
+    unexplained: balance.balanced ? 0 : balance.difference,
+  };
+}
+
+/** Whether a total differs from what the scan read (#51) — changing it needs a reason. */
+export function totalChangedFromScan(total: number, scanned: number | null | undefined): boolean {
+  return scanned != null && Math.abs(round2(total - scanned)) > RECONCILE_TOLERANCE;
 }
 
 /**

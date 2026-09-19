@@ -103,7 +103,7 @@ describe("create_expense_with_lines", () => {
         { description_raw: "Penne Pasta 500g", line_total: 13.35 },
         { description_raw: "PeaCarrCorn 1kg", line_total: 86.16 }
       )),
-      /Line items total .* but the receipt total is/
+      /Line items total .* but the expense total is/
     );
   });
 
@@ -312,5 +312,75 @@ describe("charge lines and per-unit costing", () => {
       "staying out of the catalogue must not mean staying out of the reports"
     );
     assert.equal(Number(row.rows[0]!.line_total), 450);
+  });
+});
+
+describe("receipt total and lines not on the receipt (0060, #51)", () => {
+  // Fresh Poultry: $990 of chicken on the invoice, and a $150 cleaning and
+  // cutting charge added by hand that the invoice doesn't show. The claim is
+  // $1,140; the receipt still says $990.
+  test("keeps the receipt total apart from the claim, and the line's reason", async () => {
+    const claim = JSON.parse(lines(
+      { description_raw: "Chicken Whole", line_total: 990 },
+      { description_raw: "Clean and cut", line_total: 150, kind: "service" }
+    ));
+    claim[1].not_on_receipt = true;
+    claim[1].not_on_receipt_note = "cutting charge, paid in cash";
+
+    const result = await db.query<{ id: string }>(
+      `select * from create_expense_with_lines(
+         $1, $2, 'Fresh Poultry', '10', '2026-09-15'::date,
+         1140, 0, 1140, null, null, 1448, $3::jsonb, '[]'::jsonb, null,
+         990, 990, null)`,
+      [ids.profile, ids.vendor, JSON.stringify(claim)]
+    );
+    const id = result.rows[0]!.id;
+
+    const expense = await db.query<{ total: string; receipt_total: string; receipt_total_scanned: string }>(
+      "select total, receipt_total, receipt_total_scanned from expenses where id = $1",
+      [id]
+    );
+    assert.equal(Number(expense.rows[0]!.total), 1140);
+    assert.equal(Number(expense.rows[0]!.receipt_total), 990);
+    assert.equal(Number(expense.rows[0]!.receipt_total_scanned), 990);
+
+    const off = await db.query<{ description_raw: string; not_on_receipt_note: string }>(
+      "select description_raw, not_on_receipt_note from expense_line_items where expense_id = $1 and not_on_receipt",
+      [id]
+    );
+    assert.deepEqual(off.rows, [{ description_raw: "Clean and cut", not_on_receipt_note: "cutting charge, paid in cash" }]);
+  });
+
+  test("the old call, without the new arguments, still works and marks nothing", async () => {
+    const result = await create(20, lines({ description_raw: "Milk", line_total: 20 }));
+    const id = result.rows[0]!.id;
+    assert.equal(await scalar<boolean>(db, "select bool_or(not_on_receipt) from expense_line_items where expense_id = $1", [id]), false);
+    assert.equal(await scalar<string | null>(db, "select receipt_total from expenses where id = $1", [id]), null);
+  });
+
+  test("an edit carries them too", async () => {
+    const created = await create(50, lines({ description_raw: "Onions", line_total: 50 }));
+    const id = created.rows[0]!.id;
+    const edited = JSON.parse(lines(
+      { description_raw: "Onions", line_total: 50 },
+      { description_raw: "Delivery", line_total: 10, kind: "delivery" }
+    ));
+    edited[1].not_on_receipt = true;
+    edited[1].not_on_receipt_note = "driver charged separately";
+    await db.query(
+      `select update_expense_with_lines(
+         $1, $2, $3, 'Write Vendor', 'INV-1', '2026-07-02'::date,
+         60, 0, 60, null, null, 1448, $4::jsonb, '[]'::jsonb, null,
+         55, 50, 'the 5 was hard to read')`,
+      [id, ids.profile, ids.vendor, JSON.stringify(edited)]
+    );
+    const row = await db.query<{ total: string; receipt_total: string; receipt_total_note: string }>(
+      "select total, receipt_total, receipt_total_note from expenses where id = $1",
+      [id]
+    );
+    assert.equal(Number(row.rows[0]!.total), 60);
+    assert.equal(Number(row.rows[0]!.receipt_total), 55);
+    assert.equal(row.rows[0]!.receipt_total_note, "the 5 was hard to read");
+    assert.equal(await scalar<number>(db, "select count(*) from expense_line_items where expense_id = $1 and not_on_receipt", [id]), 1);
   });
 });

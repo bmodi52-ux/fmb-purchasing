@@ -16,6 +16,7 @@ import { todayIso } from "@/lib/periods-data";
 import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
 import { loadReportRawData, withinRange } from "../reports/data";
 import { loadPriceFlags, loadSpendFlags } from "@/lib/price-alerts-data";
+import { receiptFlags } from "@/lib/receipt-flags";
 import { describePriceFlag, describeUnusualSpend, isSeriousPriceFlag } from "@/lib/price-alerts";
 
 type VendorFlagRow = {
@@ -47,7 +48,7 @@ export default async function ApprovalsPage() {
     admin
       .from("expenses")
       .select(
-        "id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, submitted_by, submitter_comment, payee_id, created_at"
+        "id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, submitted_by, submitter_comment, payee_id, created_at, receipt_total, receipt_total_scanned, receipt_total_note"
       )
       .eq("status", "submitted")
       .order("created_at"),
@@ -80,7 +81,7 @@ export default async function ApprovalsPage() {
       admin.from("profiles").select("id, full_name, email").in("id", submitterIds),
       admin
         .from("expense_line_items")
-        .select("expense_id, description_raw, quantity, unit_price, line_total, gst_applicable, category_id, pricelist_item_id")
+        .select("expense_id, description_raw, quantity, unit_price, line_total, gst_applicable, category_id, pricelist_item_id, not_on_receipt, not_on_receipt_note")
         .in("expense_id", expenseIds)
         .order("sort_order"),
       admin.from("categories").select("id, name, parent_category_id"),
@@ -194,6 +195,17 @@ export default async function ApprovalsPage() {
         duplicateOf: duplicates.get(e.id) ?? [],
         prices: (priceFlags.get(e.id) ?? []).map((f) => ({ label: describePriceFlag(f), serious: isSeriousPriceFlag(f) })),
         unusualSpend: spendFlags.has(e.id) ? describeUnusualSpend(spendFlags.get(e.id)!) : null,
+        receipt: receiptFlags({
+          receiptTotal: e.receipt_total == null ? null : Number(e.receipt_total),
+          receiptTotalScanned: e.receipt_total_scanned == null ? null : Number(e.receipt_total_scanned),
+          receiptTotalNote: e.receipt_total_note ?? null,
+          lines: lines.map((l) => ({
+            description: l.description_raw as string,
+            lineTotal: Number(l.line_total),
+            notOnReceipt: l.not_on_receipt === true,
+            notOnReceiptNote: (l.not_on_receipt_note as string | null) ?? null,
+          })),
+        }),
         gstConcerns: [
           ...gstConcerns(e.vendor_id ? (vendorById.get(e.vendor_id) ?? null) : null, Number(e.gst_amount)).map(
             (c) => GST_CONCERN_LABEL[c]
