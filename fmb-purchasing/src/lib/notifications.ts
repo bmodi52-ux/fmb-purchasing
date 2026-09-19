@@ -113,8 +113,8 @@ export async function sendEmail({
   const apiKey = process.env.RESEND_API_KEY;
   let recipients = Array.isArray(to) ? to : [to];
 
-  // The sandbox holds scrubbed data, so every address in it is either invented
-  // or somebody who never asked to hear from a training system. Only trainees
+  // The sandbox holds a copy of live, so most addresses in it belong to
+  // somebody who never asked to hear from a training system. Only trainees
   // and the sandbox's own logins are written to, and the subject says where it
   // came from (#1).
   if (isSandbox()) {
@@ -162,10 +162,10 @@ export async function sendEmail({
 }
 
 /**
- * The sandbox's logins with an address that can receive. Profiles copied from
- * live all carry a scrubbed `.invalid` address and a reset removes every login
- * but the trainees, so what is left here is trainees and people an admin
- * created in the sandbox. A failed lookup falls back to trainees only.
+ * The sandbox's logins with an address that can receive. A reset copies no
+ * logins from live and removes every one but the trainees, so what is left
+ * here is trainees and people an admin created in the sandbox. A failed lookup
+ * falls back to trainees only.
  */
 async function sandboxAccountHolders(): Promise<string[]> {
   try {
