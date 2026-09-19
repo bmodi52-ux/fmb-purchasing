@@ -1793,8 +1793,7 @@ function ReviewForm(props: {
               </tr>
               {item.notOnReceipt && (
                 <tr className="bg-gold/5">
-                  <td />
-                  <td colSpan={10} className="px-1 pb-2">
+                  <td colSpan={11} className="px-1 pb-2">
                     <NotOnReceiptNote
                       value={item.notOnReceiptNote ?? ""}
                       onChange={(v) => updateItem(item.key, { notOnReceiptNote: v })}

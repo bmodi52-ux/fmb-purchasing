@@ -234,14 +234,14 @@ export default async function ItemDetailPage({
     tab === "settings" && offerIdList.length > 0 && (vendorDescriptions ?? []).length > 0
       ? await admin
           .from("expense_line_items")
-          .select("description_raw, expense_id, expenses!inner(expense_number, vendor_id, receipt_date, submitted_at, submitted_by)")
+          .select("description_raw, expense_id, expenses!inner(expense_number, vendor_id, receipt_date, created_at, submitted_by)")
           .in("pricelist_item_id", offerIdList)
       : { data: [] };
   type DescribedExpense = {
     expense_number: string | null;
     vendor_id: string | null;
     receipt_date: string | null;
-    submitted_at: string | null;
+    created_at: string | null;
     submitted_by: string;
   };
   const expenseByLine = (describedLines ?? []).map((l) => ({
@@ -261,7 +261,7 @@ export default async function ItemDetailPage({
       expenseNumber: expense.expense_number,
       vendorId: expense.vendor_id,
       description: line.description_raw as string,
-      date: expense.receipt_date ?? expense.submitted_at,
+      date: expense.receipt_date ?? expense.created_at,
     })),
     (itemHistory ?? []).flatMap((h) => {
       const name = (h.changes as Record<string, { old: unknown; new: unknown }>).name;
@@ -412,7 +412,7 @@ export default async function ItemDetailPage({
         </p>
         {item.comments && <p className="mt-1 whitespace-pre-line text-sm text-ink/55">{item.comments}</p>}
 
-        <nav aria-label="Item sections" className="mt-5 flex gap-1 overflow-x-auto border-b border-ink/10">
+        <nav aria-label="Item sections" className="mt-5 flex gap-1 border-b border-ink/10">
           <TabLink href={`/pricelist/${item.id}`} active={tab === "overview"}>
             Overview
           </TabLink>
@@ -983,7 +983,7 @@ function DescriptionSourceLine({
   const label = latest.expenseNumber ?? "an expense";
   const open = canOpenExpense(latest.expenseId);
   return (
-    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-ink/55">
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-ink/55">
       <span>
         From{" "}
         {open ? (
@@ -1002,7 +1002,7 @@ function DescriptionSourceLine({
           <ReceiptViewer expenseId={latest.expenseId} label="View receipt" />
         </>
       )}
-    </p>
+    </div>
   );
 }
 
