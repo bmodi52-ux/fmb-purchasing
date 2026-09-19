@@ -9,6 +9,7 @@ import Link from "next/link";
 import { SubmitButton } from "@/components/submit-button";
 import { formatDateTime } from "@/lib/format";
 import type { StoredFile } from "@/lib/receipt-storage";
+import type { VendorOption } from "@/lib/vendor-options";
 import { dismissInboundReceipt } from "./inbound-actions";
 
 export const metadata = { title: "Submit expense" };
@@ -27,13 +28,29 @@ export default async function SubmitExpensePage({
   const resubmitFrom = !editExpense && resubmit ? await getExpenseForResubmit(resubmit) : null;
 
   const admin = createAdminClient();
-  const [{ data: categories }, { data: vendors }] = await Promise.all([
+  const [{ data: categories }, { data: vendors }, { data: myRecent }] = await Promise.all([
     admin
       .from("categories")
       .select("id, name, parent_category_id, applies_to")
       .order("name"),
-    admin.from("vendors").select("id, name").eq("status", "approved").order("name"),
+    admin.from("vendors").select("id, name, vendor_number").eq("status", "approved").order("name"),
+    // Who this person has submitted for lately, offered first in the vendor
+    // pickers (#59).
+    admin
+      .from("expenses")
+      .select("vendor_id")
+      .eq("submitted_by", user.id)
+      .not("vendor_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(40),
   ]);
+  const recentVendorIds = new Set([...new Set((myRecent ?? []).map((e) => e.vendor_id as string))].slice(0, 5));
+  const vendorOptions: VendorOption[] = (vendors ?? []).map((v) => ({
+    id: v.id as string,
+    name: v.name as string,
+    vendorNumber: (v.vendor_number as string | null) ?? null,
+    recent: recentVendorIds.has(v.id as string),
+  }));
 
   // Receipts this person emailed in (#49): the one chosen, read as the page
   // opens, or the list of those still waiting.
@@ -129,7 +146,7 @@ export default async function SubmitExpensePage({
         key={inbound?.sha256 ?? "new"}
         inbound={inbound}
         categories={categoryOptions}
-        vendorNames={(vendors ?? []).map((v) => v.name)}
+        vendors={vendorOptions}
         myName={user.fullName || user.email}
         editExpense={editExpense}
         resubmitFrom={resubmitFrom}

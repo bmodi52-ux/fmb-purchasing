@@ -33,7 +33,6 @@ import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
 import { leafCategories } from "@/lib/categories";
 import { packTitle } from "@/lib/pack-description";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
-import { ilikeContains, orFilter } from "@/lib/pgrst-filter";
 import { reportError } from "@/lib/errors";
 import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { getSetting } from "@/lib/app-settings";
@@ -348,28 +347,6 @@ export async function reportOversizeReceiptAction(input: {
       `way to proceed. Repeated occurrences are the signal to upload direct to storage via a signed URL.`,
     userId: user.id,
   });
-}
-
-export type VendorLookupSuggestion = { id: string; vendorNumber: string | null; name: string };
-
-/** Vendor #/name typeahead for manual entry (§ user feedback). */
-export async function searchVendorsAction(query: string): Promise<VendorLookupSuggestion[]> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  await requirePermission(user, "submit_expense", "submit");
-
-  const trimmed = query.trim();
-  if (trimmed.length < 1) return [];
-
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("vendors")
-    .select("id, vendor_number, name")
-    .or(orFilter(ilikeContains("vendor_number", trimmed), ilikeContains("name", trimmed)))
-    .eq("status", "approved")
-    .limit(8);
-
-  return (data ?? []).map((v) => ({ id: v.id, vendorNumber: v.vendor_number, name: v.name }));
 }
 
 export type ResolvedVendor = {

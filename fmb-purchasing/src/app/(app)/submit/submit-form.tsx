@@ -29,6 +29,7 @@ import type { ExtractedReceipt } from "@/lib/receipt-extraction";
 import type { StoredLineKind } from "@/lib/line-kinds";
 import type { PayeeChoice } from "@/lib/payees";
 import { VendorLookupFields } from "./vendor-lookup-fields";
+import type { VendorOption } from "@/lib/vendor-options";
 import { ItemLookupCells } from "./item-lookup-cells";
 import { LineMatchRow } from "./line-match";
 import { PayeePicker } from "./payee-picker";
@@ -244,7 +245,7 @@ function withBookedResidual(items: ReviewItem[], receiptTotal: number): ReviewIt
 
 export function SubmitForm({
   categories,
-  vendorNames,
+  vendors,
   myName,
   editExpense,
   resubmitFrom,
@@ -252,7 +253,7 @@ export function SubmitForm({
 }: {
   /** Leaf categories, sorted, each tagged with the line kinds it suits. */
   categories: PickableCategory[];
-  vendorNames: string[];
+  vendors: VendorOption[];
   myName: string;
   editExpense?: ExpenseForEdit | null;
   /** A declined expense to start a corrected, new submission from. */
@@ -881,7 +882,7 @@ export function SubmitForm({
   return (
     <ReviewForm
       categories={categories}
-      vendorNames={vendorNames}
+      vendors={vendors}
       myName={myName}
       vendorName={vendorName}
       setVendorName={setVendorName}
@@ -921,7 +922,7 @@ export function SubmitForm({
 function ReviewForm(props: {
   /** Leaf categories, sorted, each tagged with the line kinds it suits. */
   categories: PickableCategory[];
-  vendorNames: string[];
+  vendors: VendorOption[];
   myName: string;
   vendorName: string;
   setVendorName: (v: string) => void;
@@ -1360,6 +1361,7 @@ function ReviewForm(props: {
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
         <VendorLookupFields
+          vendors={props.vendors}
           vendorName={props.vendorName}
           setVendorName={props.setVendorName}
           vendorNumber={props.vendorNumber}
