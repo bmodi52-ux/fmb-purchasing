@@ -34,20 +34,6 @@ built and deployed but have only been exercised in testing:
 
 Nothing to build unless one of them misbehaves.
 
-### 65. The old Tokyo Supabase project is still there
-
-Raised 2026-09-20, from the notes on the move to Sydney. Project
-`bxjpxipmmvzqwefhbgrc` (Tokyo) still exists, holding the pre-migration test
-data, kept deliberately as the rollback. Live is `xcfvckicyyhveyzwogny`
-(Sydney).
-
-It is also a standing hazard: on 2026-07-29 a migration was run against Tokyo
-by mistake, because the two dashboards are identical apart from the project
-ref. It failed loudly that time. One that happened to succeed there would
-have silently done nothing to the live database.
-
-To decide: delete it, now that Sydney has months of real use behind it.
-
 ### 66. A PDF receipt over 3.5MB can't be submitted
 
 Raised 2026-09-20, from the notes on receipt uploads. Server actions cap what

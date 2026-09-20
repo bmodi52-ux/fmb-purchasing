@@ -6,6 +6,13 @@ across both files — see scratchpad.md.
 
 ## Delivered
 
+### 65. The old Tokyo Supabase project is gone
+
+Deleted 2026-09-20. It had been kept as the rollback since the move to Sydney
+and held only pre-migration test data. With it goes the standing hazard of
+running a migration against the wrong dashboard: there is now one project,
+`xcfvckicyyhveyzwogny` (Sydney), beside the sandbox.
+
 ### 61. A voucher or discount below the total is taken off
 
 Fixed 2026-09-20. A Campbells invoice printed "TOTAL 1498.31", "Customer
