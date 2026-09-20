@@ -235,10 +235,59 @@ one count for the day, and the menu needs to hold parts that are not dishes
 with recipes. Cost per thaali then becomes the cost of a full thaali against
 the cost of what was actually made — which is the more useful figure anyway.
 
-Worth settling before this is built: where the per-dish counts come from
-while the RSVP tool is still outside the app (#70 assumed a planned count
-confirmed about two days out), and whether "1 or 2 boxes" is a choice
-recorded per dish per day or a ratio applied to the count.
+**How a menu is set up** (answered 2026-09-21). The menu itself states the
+box, so the counts come from setting it up rather than from anywhere else:
+
+> **Menu A**
+> Chicken biryani — 2 × 1 L box (people take 1 or 2)
+> Raita — 1 × 60 ml box
+>
+> **Menu B**
+> Gosht — 1 × 650 ml box
+> Daal — 1 × 1 L box
+> Rice — 1 × 1 L box
+> Roti — yes/no
+
+So a line on a menu is a dish, a box size, and how many of that box the
+thaali offers. Somebody taking Menu B might take only daal and rice; somebody
+else only gosht and roti. What has to be bought therefore turns on how many
+people take each line, not on the day's count.
+
+**Roti is all or nothing.** How much roti a thaali gets is set when the menu
+is set up — 1, or 0.5, or 0.25. Whoever takes roti takes that amount; they
+cannot ask for half of it. So the only number that varies is how many people
+say yes.
+
+(60 ml is a guess, which is exactly why box sizes are a list somebody can
+edit — that part is done and on live.)
+
+Still to settle: where the per-line take-up comes from while the RSVP tool is
+outside the app. #70 assumed one planned count confirmed about two days out;
+this needs a number per line, so either the RSVP export grows a column per
+dish or a menu line carries an expected share until it does.
+
+### 77. A simple mode that is just the sheet, typed
+
+Raised 2026-09-21, and deliberately a step back from #70 and #76: the team
+may not be ready to work the advanced way, and the app should not be the
+thing holding up the move off the sheet.
+
+Wanted: a day can be set up plainly. The menu is typed as text — no dishes,
+no recipes, no box sizes — and under it the meat, fresh produce and dry goods
+are listed with their quantities, typed directly, without saying which dish
+they are for. That is what the Google Sheet holds today, and typing it into
+the app should be enough on its own.
+
+The point is that everything after it still works. A typed quantity is the
+same requirement as a calculated one, so release, the section lists, who buys
+what, ordered and delivered, the receipts allocated back — all of it should
+run off a simple day exactly as it runs off a costed one. What a simple day
+gives up is only the part that was derived: cost per thaali from recipes, and
+quantities that move when the count does.
+
+Which mode a day uses should be a toggle, so one day can be typed and the
+next worked out, and a day can move from one to the other as the kitchen is
+ready. Worth deciding whether the toggle sits on the day or on the kitchen.
 
 ### 73. Procurement dates should open on this week
 
