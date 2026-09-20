@@ -5,6 +5,7 @@ import { ExportToolbar } from "./export-toolbar";
 import { useReportPending } from "./pending";
 import type { ExportColumn } from "@/lib/export";
 import { describeSelection, sumAmounts } from "@/lib/selection-summary";
+import { ColumnFilterBar, useColumnFilters, type FilterColumn } from "./column-filter-bar";
 
 export type SelectionApi = {
   isSelected: (id: string) => boolean;
@@ -51,6 +52,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
   getRowId,
   bulkActions,
   amountOf,
+  filterValue,
   sortOptions,
   children,
 }: {
@@ -64,6 +66,19 @@ export function FilterableSection<T extends Record<string, unknown>>({
   bulkActions?: BulkAction<T>[];
   /** What one row adds to the selection's total (#69); left out where there is no money. */
   amountOf?: (row: T) => number | null;
+  /**
+   * What each column holds, so it can be filtered on (#68).
+   *
+   * These lists own their own table markup — a payment row carries an account
+   * status and a Mark paid button that no generic table would render — so the
+   * filters cannot sit in the headings the way ColumnsDataTable puts them.
+   * They sit above the table instead, one menu per column, and the rows that
+   * come out are the rows the page draws.
+   *
+   * Falls back to reading the column's key off the row, which is what the
+   * exports already do, so a list gets filters by saying nothing at all.
+   */
+  filterValue?: (row: T, columnKey: string) => string | number | null | undefined;
   sortOptions?: SortOption<T>[];
   children: (filtered: T[], selection: SelectionApi) => React.ReactNode;
 }) {
@@ -73,6 +88,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
   // Bulk actions run through onClick rather than a form, so useFormStatus
   // can't see them — report their own busy flag instead.
   useReportPending(busyAction !== null);
+
   const [sortKey, setSortKey] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const rowId = useMemo(
@@ -80,9 +96,24 @@ export function FilterableSection<T extends Record<string, unknown>>({
     [getRowId]
   );
 
+  const filterColumns: FilterColumn<T>[] = useMemo(
+    () =>
+      columns.map((column) => ({
+        key: column.key,
+        label: column.label,
+        value: (row: T) =>
+          filterValue
+            ? filterValue(row, column.key)
+            : ((row as Record<string, unknown>)[column.key] as string | number | null | undefined),
+      })),
+    [columns, filterValue]
+  );
+  const { filters, setFilters, filtered: byColumn, text: cellText } = useColumnFilters(rows, filterColumns);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let result = q ? rows.filter((r) => searchText(r).toLowerCase().includes(q)) : rows;
+    let result = q ? byColumn.filter((r) => searchText(r).toLowerCase().includes(q)) : byColumn;
+
 
     const option = (sortOptions ?? []).find((o) => o.key === sortKey);
     if (option) {
@@ -95,7 +126,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
 
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, query, sortKey, sortDir]);
+  }, [byColumn, query, sortKey, sortDir]);
 
   const selectedRows = useMemo(() => rows.filter((r) => selected.has(rowId(r))), [rows, selected, rowId]);
   const exportSourceRows = selected.size > 0 ? selectedRows : filtered;
@@ -190,6 +221,14 @@ export function FilterableSection<T extends Record<string, unknown>>({
         </div>
         <ExportToolbar filenameBase={filenameBase} title={title} columns={columns} rows={exportSourceRows} />
       </div>
+
+      <ColumnFilterBar
+        rows={rows}
+        columns={filterColumns}
+        filters={filters}
+        setFilters={setFilters}
+        text={cellText}
+      />
 
       {selected.size > 0 && bulkActions && bulkActions.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-gold/30 bg-gold/10 px-3 py-2 text-sm">

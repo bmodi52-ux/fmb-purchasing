@@ -3,7 +3,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SubmitButton } from "@/components/submit-button";
-import { formatDateTime, formatPlainDate } from "@/lib/format";
+import { formatPlainDate } from "@/lib/format";
+import { BackupRunsTable } from "./backup-runs-table";
 import { todayIso } from "@/lib/periods-data";
 import { loadRecordsState, recordsAttention } from "@/lib/records";
 import { recordRestoreRehearsal } from "./actions";
@@ -15,12 +16,6 @@ const WHAT_LABELS: Record<string, string> = {
   receipt_files: "Receipt files",
   both: "The database and receipt files",
 };
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  return `${Math.round(bytes / 1024)} KB`;
-}
 
 /**
  * Whether FMB could get its records back (#45): when each kind of backup last
@@ -38,7 +33,7 @@ export default async function RecordsPage() {
       .from("backup_runs")
       .select("id, kind, started_at, finished_at, item_count, new_count, bytes, problems, destination")
       .order("finished_at", { ascending: false })
-      .limit(10),
+      .limit(200),
     admin
       .from("restore_rehearsals")
       .select("id, rehearsed_on, what, succeeded, notes, recorded_by")
@@ -89,33 +84,18 @@ export default async function RecordsPage() {
         {(runs ?? []).length === 0 ? (
           <p className="text-sm text-ink/50">None recorded yet.</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-ink/10 bg-white/60">
-            <table className="min-w-full text-sm">
-              <thead className="text-left text-xs text-ink/55">
-                <tr>
-                  <th scope="col" className="px-4 py-2 font-medium">Finished</th>
-                  <th scope="col" className="px-4 py-2 font-medium">What</th>
-                  <th scope="col" className="px-4 py-2 font-medium">Saved</th>
-                  <th scope="col" className="px-4 py-2 font-medium">Where</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(runs ?? []).map((r) => (
-                  <tr key={r.id as string} className="border-t border-ink/5">
-                    <td className="whitespace-nowrap px-4 py-2">{formatDateTime(r.finished_at as string)}</td>
-                    <td className="px-4 py-2">{r.kind === "database" ? "Database" : "Receipt files"}</td>
-                    <td className="px-4 py-2 tabular-nums">
-                      {r.kind === "database"
-                        ? `${Number(r.item_count).toLocaleString("en-AU")} rows`
-                        : `${Number(r.item_count).toLocaleString("en-AU")} files, ${Number(r.new_count).toLocaleString("en-AU")} new · ${formatBytes(Number(r.bytes))}`}
-                      {Number(r.problems) > 0 && <span className="ml-2 text-maroon">{r.problems} problems</span>}
-                    </td>
-                    <td className="px-4 py-2 font-mono text-xs text-ink/60">{(r.destination as string | null) ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <BackupRunsTable
+            runs={(runs ?? []).map((r) => ({
+              id: r.id as string,
+              kind: r.kind as "database" | "receipt_files",
+              finishedAt: r.finished_at as string,
+              itemCount: Number(r.item_count),
+              newCount: Number(r.new_count),
+              bytes: Number(r.bytes),
+              problems: Number(r.problems),
+              destination: (r.destination as string | null) ?? null,
+            }))}
+          />
         )}
       </section>
 
