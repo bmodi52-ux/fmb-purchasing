@@ -12,7 +12,14 @@ import { round2 } from "@/lib/expense-money";
  * reason: it is the part someone will check against a spreadsheet.
  */
 
-export type RecipeBasis = "batch" | "thaali";
+export type RecipeBasis = "batch" | "box";
+
+/** The box sizes a dish is portioned into, in millilitres. */
+export const PORTION_SIZES_ML = [1000, 650, 600, 400, 250, 100] as const;
+
+export function portionLabel(ml: number): string {
+  return ml >= 1000 && ml % 1000 === 0 ? `${ml / 1000} L box` : `${ml} ml box`;
+}
 
 export type RecipeLine = {
   itemId: string;
@@ -29,30 +36,34 @@ export type MenuDish = {
   dishId: string;
   dishName: string;
   basis: RecipeBasis;
-  /** How many thaalis one batch feeds. Null on a per-thaali recipe. */
-  batchThaalis: number | null;
+  /** The box this dish is portioned into, in millilitres. */
+  portionMl: number;
+  /** How many boxes one batch fills. Null on a per-box recipe. */
+  batchBoxes: number | null;
   ingredients: RecipeLine[];
 };
 
 /**
  * How many times a recipe is made for a given number of thaalis.
  *
- * A batch recipe cannot be made in fractions — half a pot of bhuna gosht is
- * not a thing anyone cooks — so it rounds up, and what the rounding adds is
- * worth showing rather than hiding: 250 thaalis on a 200-thaali batch is two
- * batches, and the day feeds 400.
+ * One box of the dish goes in each thaali, so the boxes to fill are the
+ * thaalis. A per-box recipe scales exactly to them. A batch recipe cannot be
+ * made in fractions — half a pot of bhuna gosht is not a thing anyone cooks —
+ * so it rounds up, and what the rounding adds is worth showing rather than
+ * hiding: 250 boxes from a batch that fills 200 is two batches, and the
+ * kitchen fills 400.
  */
-export function batchesFor(dish: Pick<MenuDish, "basis" | "batchThaalis">, thaalis: number): number {
+export function batchesFor(dish: Pick<MenuDish, "basis" | "batchBoxes">, thaalis: number): number {
   if (thaalis <= 0) return 0;
-  if (dish.basis === "thaali") return thaalis;
-  const size = dish.batchThaalis ?? 0;
+  if (dish.basis === "box") return thaalis;
+  const size = dish.batchBoxes ?? 0;
   if (size <= 0) return 0;
   return Math.ceil(thaalis / size);
 }
 
-/** Thaalis a batch recipe actually makes at that scale, which may exceed the count. */
-export function thaalisMade(dish: Pick<MenuDish, "basis" | "batchThaalis">, thaalis: number): number {
-  return dish.basis === "thaali" ? thaalis : batchesFor(dish, thaalis) * (dish.batchThaalis ?? 0);
+/** Boxes a batch recipe actually fills at that scale, which may exceed the count. */
+export function boxesFilled(dish: Pick<MenuDish, "basis" | "batchBoxes">, thaalis: number): number {
+  return dish.basis === "box" ? thaalis : batchesFor(dish, thaalis) * (dish.batchBoxes ?? 0);
 }
 
 export type RequirementLine = {
@@ -170,7 +181,7 @@ export function costMenuDay(
     total,
     unpriced: lines.filter((l) => l.cost == null).length,
     // Divided by what is being served, not by what the batches happen to
-    // make: the question is what a thaali costs, and the extra from rounding
+    // fill: the question is what a thaali costs, and the extra from rounding
     // a batch up is part of that cost.
     perThaali: thaalis > 0 ? round2(total / thaalis) : null,
   };

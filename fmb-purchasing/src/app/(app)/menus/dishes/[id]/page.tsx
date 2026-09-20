@@ -7,8 +7,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { formatPlainDate } from "@/lib/format";
 import { unitOptionLabel } from "@/lib/pack-description";
-import { costMenuDay, type MenuDish } from "@/lib/menu-costing";
-import { loadDishes, loadItemPrices } from "../../menus/data";
+import { costMenuDay, PORTION_SIZES_ML, portionLabel, type MenuDish } from "@/lib/menu-costing";
+import { loadDishes, loadItemPrices } from "../../data";
 import { addIngredient, removeIngredient, updateDish, updateIngredient } from "../actions";
 
 export const metadata = { title: "Dish" };
@@ -52,7 +52,7 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
   const [recipe] = await loadDishes(admin, [id]);
   const prices = await loadItemPrices(admin, (recipe?.ingredients ?? []).map((i) => i.itemId));
   // Costed at the scale the recipe is written for: one batch, or one thaali.
-  const scale = dish.recipe_basis === "batch" ? Number(dish.batch_thaalis ?? 0) : 1;
+  const scale = dish.recipe_basis === "batch" ? Number(dish.batch_boxes ?? 0) : 1;
   const cost = recipe ? costMenuDay([recipe as MenuDish], scale, prices) : null;
 
   const served = (servedRows ?? [])
@@ -65,14 +65,14 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Link href="/dishes" className="text-sm text-ink/50 hover:text-ink">
-          ← Dishes
+        <Link href="/menus/dishes" className="text-sm text-ink/50 hover:text-ink">
+          ← Menus · Dishes
         </Link>
         <h1 className="page-title mt-1 text-ink">{dish.name}</h1>
         <p className="mt-1 text-sm text-ink/60">
           {dish.recipe_basis === "batch"
-            ? `Written per batch of ${dish.batch_thaalis} thaalis`
-            : "Written per thaali"}
+            ? `Written per batch of ${dish.batch_boxes} × ${portionLabel(dish.portion_ml)}`
+            : `Written per ${portionLabel(dish.portion_ml)}`}
           {!dish.active && <span className="ml-2 text-ink/45">· retired</span>}
         </p>
       </div>
@@ -88,21 +88,25 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
                 <input name="name" defaultValue={dish.name} required className="input" />
               </label>
               <label className="flex flex-col gap-1 text-sm">
-                <span className="text-ink/70">Recipe is written</span>
-                <select key={dish.recipe_basis} name="recipe_basis" defaultValue={dish.recipe_basis} className="input">
-                  <option value="batch">per batch</option>
-                  <option value="thaali">per thaali</option>
+                <span className="text-ink/70">Goes in a</span>
+                <select key={dish.portion_ml} name="portion_ml" defaultValue={dish.portion_ml} className="input">
+                  {PORTION_SIZES_ML.map((ml) => (
+                    <option key={ml} value={ml}>
+                      {portionLabel(ml)}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-sm">
-                <span className="text-ink/70">Thaalis per batch</span>
-                <input
-                  name="batch_thaalis"
-                  type="number"
-                  min="1"
-                  defaultValue={dish.batch_thaalis ?? ""}
-                  className="input"
-                />
+                <span className="text-ink/70">Recipe is written</span>
+                <select key={dish.recipe_basis} name="recipe_basis" defaultValue={dish.recipe_basis} className="input">
+                  <option value="batch">per batch</option>
+                  <option value="box">per box</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-ink/70">Boxes per batch</span>
+                <input name="batch_boxes" type="number" min="1" defaultValue={dish.batch_boxes ?? ""} className="input" />
               </label>
               <label className="flex items-center gap-2 self-end text-sm">
                 <input type="checkbox" name="active" defaultChecked={dish.active} />
@@ -124,8 +128,8 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
         <h2 className="mb-1 section-title text-ink">What goes in</h2>
         <p className="mb-4 text-sm text-ink/55">
           {dish.recipe_basis === "batch"
-            ? `Quantities for one batch — ${dish.batch_thaalis} thaalis.`
-            : "Quantities for one thaali."}{" "}
+            ? `Quantities for one batch — ${dish.batch_boxes} × ${portionLabel(dish.portion_ml)}.`
+            : `Quantities for one ${portionLabel(dish.portion_ml)}.`}{" "}
           Each ingredient is a Pricelist item, which is what carries its price.
         </p>
 
@@ -259,13 +263,16 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
         <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
           <h2 className="mb-1 section-title text-ink">What it costs</h2>
           <p className="mb-3 text-sm text-ink/55">
-            At today&apos;s prices, for {dish.recipe_basis === "batch" ? `one batch (${scale} thaalis)` : "one thaali"}.
+            At today&apos;s prices, for{" "}
+            {dish.recipe_basis === "batch"
+              ? `one batch — ${scale} × ${portionLabel(dish.portion_ml)}`
+              : `one ${portionLabel(dish.portion_ml)}`}.
             Prices come from what was actually paid where there is any, and from a vendor&apos;s quote otherwise.
           </p>
           <p className="font-mono text-lg text-ink">
             {money(cost.total)}
             {cost.perThaali != null && (
-              <span className="ml-2 text-sm text-ink/60">· {money(cost.perThaali)} a thaali</span>
+              <span className="ml-2 text-sm text-ink/60">· {money(cost.perThaali)} a box</span>
             )}
           </p>
           {cost.unpriced > 0 && (

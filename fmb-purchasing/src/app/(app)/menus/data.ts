@@ -19,8 +19,9 @@ export async function loadKitchens(admin: SupabaseClient): Promise<Kitchen[]> {
 type DishRow = {
   id: string;
   name: string;
-  recipe_basis: "batch" | "thaali";
-  batch_thaalis: number | null;
+  recipe_basis: "batch" | "box";
+  batch_boxes: number | null;
+  portion_ml: number;
 };
 
 /** Every dish named, with its recipe converted into what the costing takes. */
@@ -28,7 +29,7 @@ export async function loadDishes(admin: SupabaseClient, dishIds: string[]): Prom
   if (dishIds.length === 0) return [];
 
   const [{ data: dishes }, { data: ingredients }] = await Promise.all([
-    admin.from("dishes").select("id, name, recipe_basis, batch_thaalis").in("id", dishIds),
+    admin.from("dishes").select("id, name, recipe_basis, batch_boxes, portion_ml").in("id", dishIds),
     admin
       .from("dish_ingredients")
       .select("dish_id, item_id, quantity, sort_order, items ( name ), units ( code, to_base_factor, base_unit_code )")
@@ -42,7 +43,8 @@ export async function loadDishes(admin: SupabaseClient, dishIds: string[]): Prom
       dishId: d.id,
       dishName: d.name,
       basis: d.recipe_basis,
-      batchThaalis: d.batch_thaalis,
+      portionMl: d.portion_ml,
+      batchBoxes: d.batch_boxes,
       ingredients: [],
     });
   }

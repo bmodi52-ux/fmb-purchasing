@@ -32,26 +32,37 @@ after(async () => {
 });
 
 describe("dishes", () => {
+  test("a dish says what size box it fills (0062)", async () => {
+    await db.query(
+      "insert into dishes (name, recipe_basis, batch_boxes, portion_ml) values ('Mug pulao 650', 'batch', 250, 650)"
+    );
+    assert.equal(await scalar<number>(db, "select portion_ml from dishes where name = 'Mug pulao 650'"), 650);
+    await assert.rejects(
+      () => db.query("insert into dishes (name, recipe_basis, portion_ml) values ('No box', 'box', 0)"),
+      /portion_ml_positive|check constraint/i
+    );
+  });
+
   test("two kitchens are there to plan for", async () => {
     assert.equal(await scalar<number>(db, "select count(*)::int as n from kitchens"), 2);
   });
 
-  test("a batch recipe must say how many thaalis a batch makes", async () => {
+  test("a batch recipe must say how many boxes a batch fills", async () => {
     await assert.rejects(
-      () => db.query("insert into dishes (name, recipe_basis) values ('Bhuna gosht', 'batch')"),
+      () => db.query("insert into dishes (name, recipe_basis, portion_ml) values ('Bhuna gosht', 'batch', 1000)"),
       /dishes_batch_size_required|check constraint/i
     );
   });
 
-  test("a per-thaali recipe needs no batch size", async () => {
-    await db.query("insert into dishes (name, recipe_basis) values ('Kadhi', 'thaali')");
-    assert.equal(await scalar<string | null>(db, "select batch_thaalis from dishes where name = 'Kadhi'"), null);
+  test("a per-box recipe needs no batch size", async () => {
+    await db.query("insert into dishes (name, recipe_basis, portion_ml) values ('Kadhi', 'box', 650)");
+    assert.equal(await scalar<string | null>(db, "select batch_boxes from dishes where name = 'Kadhi'"), null);
   });
 
   test("the same dish cannot be written twice, whatever the capitals", async () => {
-    await db.query("insert into dishes (name, recipe_basis, batch_thaalis) values ('Mug Pulao', 'batch', 200)");
+    await db.query("insert into dishes (name, recipe_basis, batch_boxes, portion_ml) values ('Mug Pulao', 'batch', 200, 1000)");
     await assert.rejects(
-      () => db.query("insert into dishes (name, recipe_basis, batch_thaalis) values ('mug pulao', 'batch', 100)"),
+      () => db.query("insert into dishes (name, recipe_basis, batch_boxes, portion_ml) values ('mug pulao', 'batch', 100, 1000)"),
       /duplicate key|unique/i
     );
   });
@@ -59,7 +70,7 @@ describe("dishes", () => {
   test("an ingredient goes with its dish when the dish goes", async () => {
     const dishId = await scalar<string>(
       db,
-      "insert into dishes (name, recipe_basis, batch_thaalis) values ('Test dish', 'batch', 200) returning id"
+      "insert into dishes (name, recipe_basis, batch_boxes, portion_ml) values ('Test dish', 'batch', 200, 1000) returning id"
     );
     await db.query(
       "insert into dish_ingredients (dish_id, item_id, quantity, unit_id) values ($1, $2, 120, $3)",
@@ -100,7 +111,7 @@ describe("menu days", () => {
     );
     const dishId = await scalar<string>(
       db,
-      "insert into dishes (name, recipe_basis, batch_thaalis) values ('Guvar aloo', 'batch', 200) returning id"
+      "insert into dishes (name, recipe_basis, batch_boxes, portion_ml) values ('Guvar aloo', 'batch', 200, 1000) returning id"
     );
     await db.query("insert into menu_day_dishes (menu_day_id, dish_id) values ($1, $2)", [dayId, dishId]);
     await assert.rejects(

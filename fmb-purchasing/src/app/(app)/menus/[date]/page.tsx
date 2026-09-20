@@ -7,7 +7,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { formatPlainDate } from "@/lib/format";
 import { formatHijri, gregorianToHijri } from "@/lib/hijri/hijri";
-import { batchesFor, costMenuDay, PRICE_BASIS_LABEL, thaalisMade } from "@/lib/menu-costing";
+import { batchesFor, boxesFilled, costMenuDay, portionLabel, PRICE_BASIS_LABEL } from "@/lib/menu-costing";
 import { loadDishes, loadItemPrices, loadKitchens } from "../data";
 import { addDishToDay, copyMenuFromDay, removeDishFromDay, setDayCounts } from "../actions";
 
@@ -79,7 +79,7 @@ export default async function MenuDayPage({
     <div className="flex flex-col gap-6">
       <div>
         <Link href={`/menus?kitchen=${kitchen.id}`} className="text-sm text-ink/50 hover:text-ink">
-          ← Menu calendar
+          ← Menus · Calendar
         </Link>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="page-title text-ink">{formatPlainDate(date)}</h1>
@@ -171,20 +171,20 @@ export default async function MenuDayPage({
             {dishes.map((dish) => {
               const row = onDay.find((d) => d.dish_id === dish.dishId);
               const batches = batchesFor(dish, thaalis);
-              const made = thaalisMade(dish, thaalis);
+              const filled = boxesFilled(dish, thaalis);
               return (
                 <li
                   key={dish.dishId}
                   className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-md border border-ink/10 bg-white p-3 text-sm"
                 >
-                  <Link href={`/dishes/${dish.dishId}`} className="text-ink underline-offset-2 hover:underline">
+                  <Link href={`/menus/dishes/${dish.dishId}`} className="text-ink underline-offset-2 hover:underline">
                     {dish.dishName}
                   </Link>
                   <span className="text-ink/55">
                     {dish.basis === "batch"
-                      ? `${batches} ${batches === 1 ? "batch" : "batches"} of ${dish.batchThaalis}`
-                      : `${thaalis} thaalis`}
-                    {made > thaalis && <span className="text-alert"> · makes {made}</span>}
+                      ? `${batches} ${batches === 1 ? "batch" : "batches"} of ${dish.batchBoxes} × ${portionLabel(dish.portionMl)}`
+                      : `${thaalis} × ${portionLabel(dish.portionMl)}`}
+                    {filled > thaalis && <span className="text-alert"> · fills {filled} boxes</span>}
                   </span>
                   {canManage && row && (
                     <form action={removeDishFromDay}>

@@ -22,14 +22,20 @@ async function requireDishEditor() {
 
 export type DishFormState = { error: string | null; dishId?: string };
 
-function basisFrom(formData: FormData): { recipe_basis: "batch" | "thaali"; batch_thaalis: number | null } | string {
-  const basis = String(formData.get("recipe_basis") ?? "batch");
-  if (basis !== "batch" && basis !== "thaali") return "Choose whether the recipe is per batch or per thaali.";
-  if (basis === "thaali") return { recipe_basis: "thaali", batch_thaalis: null };
+type DishShape = { recipe_basis: "batch" | "box"; batch_boxes: number | null; portion_ml: number };
 
-  const size = Math.round(Number(formData.get("batch_thaalis") ?? 0));
-  if (!Number.isFinite(size) || size <= 0) return "Say how many thaalis one batch makes.";
-  return { recipe_basis: "batch", batch_thaalis: size };
+/** The box a dish fills, and whether its quantities are for one or for a batch. */
+function shapeFrom(formData: FormData): DishShape | string {
+  const portion = Math.round(Number(formData.get("portion_ml") ?? 0));
+  if (!Number.isFinite(portion) || portion <= 0) return "Say what size box this dish fills.";
+
+  const basis = String(formData.get("recipe_basis") ?? "batch");
+  if (basis !== "batch" && basis !== "box") return "Choose whether the recipe is per box or per batch.";
+  if (basis === "box") return { recipe_basis: "box", batch_boxes: null, portion_ml: portion };
+
+  const size = Math.round(Number(formData.get("batch_boxes") ?? 0));
+  if (!Number.isFinite(size) || size <= 0) return "Say how many boxes one batch fills.";
+  return { recipe_basis: "batch", batch_boxes: size, portion_ml: portion };
 }
 
 export async function createDish(_prev: DishFormState, formData: FormData): Promise<DishFormState> {
@@ -38,14 +44,14 @@ export async function createDish(_prev: DishFormState, formData: FormData): Prom
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "A dish needs a name." };
 
-  const basis = basisFrom(formData);
-  if (typeof basis === "string") return { error: basis };
+  const shape = shapeFrom(formData);
+  if (typeof shape === "string") return { error: shape };
 
   const { data, error } = await createAdminClient()
     .from("dishes")
     .insert({
       name,
-      ...basis,
+      ...shape,
       notes: String(formData.get("notes") ?? "").trim() || null,
       created_by: user.id,
       updated_by: user.id,
@@ -69,14 +75,14 @@ export async function updateDish(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!dishId || !name) return;
 
-  const basis = basisFrom(formData);
-  if (typeof basis === "string") return;
+  const shape = shapeFrom(formData);
+  if (typeof shape === "string") return;
 
   await createAdminClient()
     .from("dishes")
     .update({
       name,
-      ...basis,
+      ...shape,
       notes: String(formData.get("notes") ?? "").trim() || null,
       active: formData.get("active") === "on",
       updated_by: user.id,

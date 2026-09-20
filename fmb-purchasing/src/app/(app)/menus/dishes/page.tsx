@@ -5,6 +5,8 @@ import { can, getUserPermissions, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatPlainDate } from "@/lib/format";
 import { NewDishForm } from "./new-dish-form";
+import { MenuTabs } from "../tabs";
+import { portionLabel } from "@/lib/menu-costing";
 
 export const metadata = { title: "Dishes" };
 
@@ -25,7 +27,7 @@ export default async function DishesPage() {
   const admin = createAdminClient();
 
   const [{ data: dishes }, { data: ingredientCounts }, { data: served }] = await Promise.all([
-    admin.from("dishes").select("id, name, recipe_basis, batch_thaalis, active").order("name"),
+    admin.from("dishes").select("id, name, recipe_basis, batch_boxes, portion_ml, active").order("name"),
     admin.from("dish_ingredients").select("dish_id"),
     // When each dish was last cooked, which is the history the sheet keeps
     // only by scrolling sideways through old columns.
@@ -54,12 +56,14 @@ export default async function DishesPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="page-title text-ink">Dishes</h1>
+        <h1 className="page-title text-ink">Menus</h1>
         <p className="page-description mt-1 max-w-2xl">
           What each dish takes to make. A recipe is written once — per batch, as the kitchen cooks, or per thaali — and
           every day that serves the dish works out its own quantities from the number of thaalis expected.
         </p>
       </div>
+
+      <MenuTabs active="dishes" />
 
       {canManage && <NewDishForm />}
 
@@ -71,11 +75,13 @@ export default async function DishesPage() {
             {live.map((d) => (
               <li key={d.id} className="rounded-lg border border-ink/10 bg-white/60 p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                  <Link href={`/dishes/${d.id}`} className="font-medium text-ink underline-offset-2 hover:underline">
+                  <Link href={`/menus/dishes/${d.id}`} className="font-medium text-ink underline-offset-2 hover:underline">
                     {d.name}
                   </Link>
                   <span className="text-sm text-ink/55">
-                    {d.recipe_basis === "batch" ? `per batch of ${d.batch_thaalis}` : "per thaali"}
+                    {d.recipe_basis === "batch"
+                      ? `per batch of ${d.batch_boxes} × ${portionLabel(d.portion_ml)}`
+                      : `per ${portionLabel(d.portion_ml)}`}
                     <span className="text-ink/30"> · </span>
                     {ingredientsByDish.get(d.id) ?? 0}{" "}
                     {(ingredientsByDish.get(d.id) ?? 0) === 1 ? "ingredient" : "ingredients"}
@@ -99,7 +105,7 @@ export default async function DishesPage() {
             <ul className="mt-2 flex flex-col gap-1">
               {retired.map((d) => (
                 <li key={d.id}>
-                  <Link href={`/dishes/${d.id}`} className="text-ink/60 underline-offset-2 hover:underline">
+                  <Link href={`/menus/dishes/${d.id}`} className="text-ink/60 underline-offset-2 hover:underline">
                     {d.name}
                   </Link>
                 </li>
