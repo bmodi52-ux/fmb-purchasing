@@ -5,8 +5,7 @@ import { ExportToolbar } from "./export-toolbar";
 import { useReportPending } from "./pending";
 import type { ExportColumn } from "@/lib/export";
 import { describeSelection, sumAmounts } from "@/lib/selection-summary";
-import { ColumnFilterMenu } from "./column-filter-menu";
-import { activeCount, isActive, matchesFilter, type ColumnFilters } from "./column-filter";
+import { ColumnFilterBar, useColumnFilters, type FilterColumn } from "./column-filter-bar";
 
 export type SelectionApi = {
   isSelected: (id: string) => boolean;
@@ -89,7 +88,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
   // Bulk actions run through onClick rather than a form, so useFormStatus
   // can't see them — report their own busy flag instead.
   useReportPending(busyAction !== null);
-  const [filters, setFilters] = useState<ColumnFilters>({});
+
   const [sortKey, setSortKey] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const rowId = useMemo(
@@ -97,22 +96,24 @@ export function FilterableSection<T extends Record<string, unknown>>({
     [getRowId]
   );
 
-  const cellText = useMemo(() => {
-    const read = filterValue ?? ((row: T, key: string) => (row as Record<string, unknown>)[key] as string | number);
-    return (row: T, key: string) => {
-      const value = read(row, key);
-      return value == null ? "" : String(value);
-    };
-  }, [filterValue]);
+  const filterColumns: FilterColumn<T>[] = useMemo(
+    () =>
+      columns.map((column) => ({
+        key: column.key,
+        label: column.label,
+        value: (row: T) =>
+          filterValue
+            ? filterValue(row, column.key)
+            : ((row as Record<string, unknown>)[column.key] as string | number | null | undefined),
+      })),
+    [columns, filterValue]
+  );
+  const { filters, setFilters, filtered: byColumn, text: cellText } = useColumnFilters(rows, filterColumns);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let result = q ? rows.filter((r) => searchText(r).toLowerCase().includes(q)) : rows;
+    let result = q ? byColumn.filter((r) => searchText(r).toLowerCase().includes(q)) : byColumn;
 
-    for (const [key, filter] of Object.entries(filters)) {
-      if (!isActive(filter)) continue;
-      result = result.filter((r) => matchesFilter(cellText(r, key), filter));
-    }
 
     const option = (sortOptions ?? []).find((o) => o.key === sortKey);
     if (option) {
@@ -125,7 +126,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
 
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, query, filters, sortKey, sortDir, cellText]);
+  }, [byColumn, query, sortKey, sortDir]);
 
   const selectedRows = useMemo(() => rows.filter((r) => selected.has(rowId(r))), [rows, selected, rowId]);
   const exportSourceRows = selected.size > 0 ? selectedRows : filtered;
@@ -221,45 +222,13 @@ export function FilterableSection<T extends Record<string, unknown>>({
         <ExportToolbar filenameBase={filenameBase} title={title} columns={columns} rows={exportSourceRows} />
       </div>
 
-      {columns.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-ink/60">
-          <span className="mr-1 text-ink/45">Filter:</span>
-          {columns.map((column) => (
-            <span
-              key={column.key}
-              className={`flex items-center gap-0.5 rounded-md border px-2 py-1 ${
-                isActive(filters[column.key])
-                  ? "border-gold-deep bg-gold/10 text-ink"
-                  : "border-ink/10 text-ink/55"
-              }`}
-            >
-              {column.label}
-              <ColumnFilterMenu
-                label={column.label}
-                values={rows.map((r) => cellText(r, column.key))}
-                filter={filters[column.key]}
-                onChange={(next) =>
-                  setFilters((current) => {
-                    const updated = { ...current };
-                    if (next) updated[column.key] = next;
-                    else delete updated[column.key];
-                    return updated;
-                  })
-                }
-              />
-            </span>
-          ))}
-          {activeCount(filters) > 0 && (
-            <button
-              type="button"
-              onClick={() => setFilters({})}
-              className="ml-1 rounded-md border border-ink/15 px-2 py-1 hover:border-ink/30"
-            >
-              Clear {activeCount(filters)} {activeCount(filters) === 1 ? "filter" : "filters"}
-            </button>
-          )}
-        </div>
-      )}
+      <ColumnFilterBar
+        rows={rows}
+        columns={filterColumns}
+        filters={filters}
+        setFilters={setFilters}
+        text={cellText}
+      />
 
       {selected.size > 0 && bulkActions && bulkActions.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-gold/30 bg-gold/10 px-3 py-2 text-sm">
