@@ -19,6 +19,162 @@ None outstanding.
 
 <!-- Existing things that should work better. -->
 
+### 70. Thaali costing: menus, requirements, procurement
+
+Raised 2026-09-20, with the Google Sheet it would replace: a column per thaali
+day, holding the menu and three sections — Meat, Fresh produce (Veggies),
+Groceries (Rashan) — each listing quantities ("Goat 120kg", "Tomato 60kg",
+"Yoghurt 80 kg"). Supersedes #43, which sketched the same ground before there
+was a sheet to look at.
+
+**What was asked for**
+
+1. A menu against a date, on a calendar that reads in both Gregorian and
+   Hijri.
+2. Each dish says what goes into it; each day says how many thaalis are
+   expected; from those two, the quantity of every ingredient, the cost of
+   each dish and the cost of a thaali that day.
+3. Ingredients grouped into Meat, Fresh produce and Dry goods, with the total
+   per item for the day; lists printable per section, per day, and for several
+   days at once.
+4. When a day's menu is finalised and released, what it needs becomes work
+   assigned to whoever procures that section, who marks each item ordered and
+   then delivered.
+5. The purchasing head can move a section, or single items within one, to
+   somebody else.
+6. A costing basis — see below.
+7. The procurement list arranged by vendor, defaulting to the cheapest, with
+   the vendor changeable.
+8. Permissions for every new page.
+
+**6. What price to cost at**
+
+Three prices exist in the app already and they answer different questions:
+
+- `item_unit_costs.latest_cost_per_base_unit` — what was last actually paid
+  per kg or per litre, from submitted receipts.
+- `loadCheapestRecent` — the cheapest actually paid in the last N days
+  (90 by default), with the vendor it came from. This is what Buying shows.
+- The vendor offers on the Pricelist — quoted prices, which may be stale.
+
+Proposed: **cost at the most recent price actually paid per base unit**,
+falling back to the cheapest recent, then to the preferred vendor's offer,
+then to nothing — and say per line which of the four was used, so a figure
+nobody can explain is impossible. Quoted prices are the last resort because
+what was paid is a fact and a quote is an intention.
+
+For the shopping list (7) the question is different — it is about what this
+purchase will cost, not what past ones did — so there the cheapest recent
+price and its vendor is the right default.
+
+Two things that matter more than the choice:
+
+- **Freeze it on release.** Store the price used against each line when the
+  menu is released, so a day's cost doesn't quietly change months later when
+  the price of onions does.
+- **Then compare with what was really spent.** Expense lines already carry
+  the item and the date; matching them back to the day gives planned against
+  actual per day, per dish and per section. That comparison is the whole
+  reason for costing at all, and it is the part the spreadsheet cannot do.
+
+**9. What else it needs**
+
+- **Which days are thaali days.** The calendar needs the schedule itself, and
+  days with no thaali, before it can hold menus.
+- **Recipes that scale, and yields.** A recipe per dish in base units for a
+  stated number of thaalis, scaled by the day's count. Yield matters
+  separately: 20 kg of garlic bought is not 20 kg of garlic peeled, and a
+  bone-in shoulder is not all meat.
+- **Pack sizes, when buying.** 36 litres of tomato purée is nine 4 L boxes.
+  The app knows pack sizes, so the list should round to what is actually
+  sold and say what the rounding costs.
+- **What is already in the store.** The sheet assumes everything is bought
+  fresh. Subtracting what is on hand is what stops the same 20 kg of rice
+  being bought twice — and needs the monthly count #43 described.
+- **Changing counts.** Thaali numbers move after a menu is released. What
+  happens to lists already assigned, and to items already ordered, has to be
+  decided rather than discovered.
+- **Copying a menu.** Most menus repeat. Copying last week's, or a saved
+  template, is what makes this quicker than the sheet rather than slower.
+- **Ordering deadlines.** A vendor needs a day's notice; a released menu that
+  arrives too late to order is no use. Worth an order-by date per vendor and
+  a nudge before it.
+- **Back to the receipt.** When the expense for an order is submitted, it
+  should be linkable to the day and section it was for. Without that, planned
+  against actual is guesswork.
+- **Who is told, and when.** Assignments, released menus and late orders
+  should use the notifications already built (#27, #28), including the
+  reminders and escalation.
+- **A record of changes.** Who changed a released menu, and when, as item and
+  vendor history already do.
+- **On a phone, in a shop.** The list has to be usable with one hand in a
+  market: tick as bought, see the quantity, call the vendor.
+- **Reporting.** Cost per thaali over time, by dish, by section; the monthly
+  committee pack (#40) would carry it.
+
+**Shape of the work**
+
+Roughly four pieces, each useful on its own:
+
+1. Calendar, menus, dishes, recipes, thaali count, cost per thaali (planned).
+2. Requirements by section for a day or a range, with lists to print or
+   download.
+3. Release, assignment, ordered/delivered, reassignment by the purchasing
+   head, permissions for all of it.
+4. Vendor choice and pack rounding on the list, then planned against actual
+   once receipts are in.
+
+**To decide before any of it is built**
+
+- Are the three sections fixed, or a grouping of the existing categories that
+  can be changed in App settings? (Grouping is the flexible answer: Meat &
+  Poultry → Meat, Produce → Fresh produce, Groceries and Daals → Dry goods.)
+- Are dishes reused across days with one recipe each, or is a menu typed
+  fresh every time? The sheet implies reuse ("Thaali- Bhuna gosht with roti").
+- Is a recipe written per thaali, or per batch of a stated size? Cooks think
+  in batches; the arithmetic prefers per thaali.
+- Is there one kitchen, or several to plan separately?
+- Does the count of thaalis come from the RSVP tool eventually, or stay typed
+  in? #43 assumed typed, and the RSVP tool stays separate.
+
+Not to be started until asked.
+
+### 68. Filter on any column, on every list
+
+Raised 2026-09-20 on Payments, which offers one search box ("Filter by
+vendor, submitter, invoice") and a Sort by list, and nothing per column.
+
+Expenses, Line items, Pricelist, Vendors and Users already have this: they
+are built on `ColumnsDataTable`, so every heading carries a filter menu,
+columns can be shown, hidden and reordered (#56), and the rows export as CSV,
+Excel, PDF or JSON. The lists that have none of it are Payments, Approvals,
+My submissions, Needs attention, Budgets, Accounting, Notifications,
+Stand-ins, Teams & permissions, and Backups & records.
+
+Wanted: the same filtering everywhere. Moving each list onto
+`ColumnsDataTable` brings the column chooser, the saved order and the
+exports with it, which is the point — one way of working on every page.
+
+Not a single change: each list has its own row shape, its own actions
+(Mark paid, Approve, Withdraw) and its own expanded rows, and some are cards
+on a phone. Payments first, since it is where the money goes out and where it
+was raised; then Approvals and My submissions; the admin lists last. Worth
+checking as each moves that the bulk actions still work and that nothing
+slows down on a long list.
+
+### 69. Show the total of what's selected
+
+Raised 2026-09-20 on Payments. Selecting three expenses says "3 selected"
+beside Mark paid and Download bank file, but not what they come to — which is
+the figure that matters before a bank transfer, and it has to be added up by
+hand.
+
+Wanted: the amount beside the count, wherever rows are selected for something
+— "3 selected · $6,327.15". Payments first. The same applies to any list
+whose rows carry money and offer a bulk action, so it belongs in
+`ColumnsDataTable` (which shows the same "N selected") as well as in the
+Payments table, ideally as one thing both use.
+
 ### 64. Check on live what has never been seen working
 
 Raised 2026-09-20, after the run of work finished that day. Three things are
@@ -119,7 +275,8 @@ A report emailed automatically each month to the committee.
 
 ### 43. Stock, recipes and menu costing
 
-**When:** later.
+**When:** later. Menus, recipes and costing are now specified in #70, which
+this predates; what stays here is the stock count and the shopping list.
 
 - A thaali count per day, entered by hand (the RSVP tool stays separate), giving
   cost per thaali.
