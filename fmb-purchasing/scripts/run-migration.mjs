@@ -26,7 +26,7 @@
  * host is IPv6-only and does not resolve from this machine.
  */
 
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -62,6 +62,13 @@ function projectRef(url) {
   return user.includes(".") ? user.split(".").slice(1).join(".") : user;
 }
 
+function withPassword(url, password) {
+  if (!password) return url;
+  const parsed = new URL(url);
+  parsed.password = encodeURIComponent(password);
+  return parsed.toString();
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const env = loadEnv(args.env);
@@ -75,8 +82,13 @@ async function main() {
     process.exit(1);
   }
 
+  // A password given on its own line wins over whatever is in the URI: a
+  // database password routinely contains characters a URL treats specially,
+  // and encoding them by hand is exactly the fiddle worth removing.
+  const connectionString = withPassword(url, env.SUPABASE_DB_PASSWORD);
+
   const ref = projectRef(url);
-  const client = new pg.Client({ connectionString: url });
+  const client = new pg.Client({ connectionString });
   await client.connect();
 
   try {
@@ -100,12 +112,18 @@ async function main() {
     if (!/^\d{4}_.*\.sql$/.test(file)) {
       throw new Error(`"${file}" is not a migration filename.`);
     }
-    const sql = readFileSync(path.join(MIGRATIONS, file), "utf8");
-
+    // The ledger first: a migration already applied here needs no file on
+    // this branch, and saying so beats a missing-file error.
     if (applied.has(file)) {
       console.log(`${file} has already been run here. Nothing to do.`);
       return;
     }
+
+    const filePath = path.join(MIGRATIONS, file);
+    if (!existsSync(filePath)) {
+      throw new Error(`No migration called ${file} in supabase/migrations.`);
+    }
+    const sql = readFileSync(filePath, "utf8");
     if (kind === "live" && !args.live) {
       throw new Error(`${ref} says it is live. Re-run with --live if that is what you mean.`);
     }

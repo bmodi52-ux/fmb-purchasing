@@ -11,6 +11,10 @@ For each project, copy its **session pooler** connection string from the
 Supabase dashboard (Connect → Session pooler), put the database password into
 it, and add it to that project's env file:
 
+The password can go in the URI, or — easier, since database passwords are
+full of characters a URL treats specially — on its own line as
+`SUPABASE_DB_PASSWORD`, which wins over whatever the URI holds.
+
 ```
 # fmb-purchasing/.env.sandbox  — the FMB Sandbox project
 SUPABASE_DB_URL=postgresql://postgres.vnlhzndfycelmqamqtkl:<password>@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres
