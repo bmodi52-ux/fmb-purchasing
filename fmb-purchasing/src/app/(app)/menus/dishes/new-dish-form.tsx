@@ -4,13 +4,14 @@ import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
-import { PORTION_SIZES_ML, portionLabel } from "@/lib/menu-costing";
+import { boxSizeOptions, portionLabel } from "@/lib/menu-costing";
 import { createDish, type DishFormState } from "./actions";
 
 const initial: DishFormState = { error: null };
 
 /** Names a dish and says how its recipe is written; the recipe itself follows. */
-export function NewDishForm() {
+export function NewDishForm({ boxSizes }: { boxSizes: number[] }) {
+  const sizes = boxSizeOptions(boxSizes);
   const [state, action] = useActionState(createDish, initial);
   const router = useRouter();
 
@@ -31,8 +32,8 @@ export function NewDishForm() {
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-ink/70">Goes in a</span>
-            <select name="portion_ml" defaultValue="1000" className="input">
-              {PORTION_SIZES_ML.map((ml) => (
+            <select name="portion_ml" defaultValue={sizes[0]} className="input">
+              {sizes.map((ml) => (
                 <option key={ml} value={ml}>
                   {portionLabel(ml)}
                 </option>

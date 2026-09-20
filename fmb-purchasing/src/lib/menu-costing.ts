@@ -14,8 +14,21 @@ import { round2 } from "@/lib/expense-money";
 
 export type RecipeBasis = "batch" | "box";
 
-/** The box sizes a dish is portioned into, in millilitres. */
-export const PORTION_SIZES_ML = [1000, 650, 600, 400, 250, 100] as const;
+/**
+ * The sizes to offer when a dish says what it is portioned into.
+ *
+ * Which sizes the kitchen fills is the kitchen's business and changes, so the
+ * list is held in `box_sizes` rather than here. A dish keeps whatever size it
+ * was given even after that size is taken off the list, which is why the one
+ * in hand is always among the options: editing a dish must never quietly
+ * repackage it.
+ */
+export function boxSizeOptions(offered: readonly number[], current?: number | null): number[] {
+  const sizes = new Set(offered.filter((ml) => ml > 0));
+  if (current != null && current > 0) sizes.add(current);
+  if (sizes.size === 0) sizes.add(1000);
+  return [...sizes].sort((a, b) => b - a);
+}
 
 export function portionLabel(ml: number): string {
   return ml >= 1000 && ml % 1000 === 0 ? `${ml / 1000} L box` : `${ml} ml box`;

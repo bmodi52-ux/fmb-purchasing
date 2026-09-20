@@ -17,6 +17,12 @@ export async function loadKitchens(admin: SupabaseClient): Promise<Kitchen[]> {
   return (data ?? []).map((k) => ({ id: k.id as string, name: k.name as string }));
 }
 
+/** The box sizes on offer, largest first. Empty until somebody adds one. */
+export async function loadBoxSizes(admin: SupabaseClient): Promise<number[]> {
+  const { data } = await admin.from("box_sizes").select("ml").eq("active", true).order("ml", { ascending: false });
+  return (data ?? []).map((row) => Number(row.ml));
+}
+
 type DishRow = {
   id: string;
   name: string;

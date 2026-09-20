@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   batchesFor,
+  boxSizeOptions,
   portionLabel,
   costMenuDay,
   priceFor,
@@ -146,6 +147,24 @@ describe("costMenuDay", () => {
 
   test("no thaalis, no cost per thaali", () => {
     assert.equal(costMenuDay([bhunaGosht], 0, prices).perThaali, null);
+  });
+});
+
+describe("boxSizeOptions", () => {
+  test("largest box first, however the list came out of the table", () => {
+    assert.deepEqual(boxSizeOptions([650, 1000]), [1000, 650]);
+  });
+
+  test("the size a dish already uses is offered even once it is off the list", () => {
+    assert.deepEqual(boxSizeOptions([1000, 650], 400), [1000, 650, 400]);
+  });
+
+  test("no duplicate when the dish uses a size still on the list", () => {
+    assert.deepEqual(boxSizeOptions([1000, 650], 650), [1000, 650]);
+  });
+
+  test("an empty list still offers a litre, so a dish can always be written", () => {
+    assert.deepEqual(boxSizeOptions([]), [1000]);
   });
 });
 
