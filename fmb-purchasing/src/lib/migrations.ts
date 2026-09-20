@@ -33,6 +33,7 @@ export const LEDGERED_MIGRATIONS = [
   "0058_sandbox.sql",
   "0059_sandbox_reset_privileges.sql",
   "0060_receipt_total_and_off_receipt_lines.sql",
+  "0061_menus_and_dishes.sql",
 ] as const;
 
 export type MigrationStatus =
