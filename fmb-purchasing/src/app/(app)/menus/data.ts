@@ -3,6 +3,7 @@ import { getSetting } from "@/lib/app-settings";
 import { loadCheapestRecent } from "@/lib/price-alerts-data";
 import { todayIso } from "@/lib/periods-data";
 import type { ItemPrices, MenuDish } from "@/lib/menu-costing";
+import { resolveSection, type SectionKey } from "@/lib/menu-sections";
 
 /**
  * What the menu pages read: the dishes on a day with their recipes, and the
@@ -104,6 +105,37 @@ export async function loadItemPrices(admin: SupabaseClient, itemIds: string[]): 
   }
 
   return prices;
+}
+
+/**
+ * Which procurement list each item belongs on (#70): what the item says, else
+ * its category, else its category's parent, else the category name read.
+ */
+export async function loadSections(admin: SupabaseClient, itemIds: string[]): Promise<Map<string, SectionKey>> {
+  const sections = new Map<string, SectionKey>();
+  if (itemIds.length === 0) return sections;
+
+  const [{ data: items }, { data: categories }] = await Promise.all([
+    admin.from("items").select("id, category_id, menu_section").in("id", itemIds),
+    admin.from("categories").select("id, name, parent_category_id, menu_section"),
+  ]);
+
+  const byId = new Map((categories ?? []).map((c) => [c.id as string, c]));
+  for (const item of items ?? []) {
+    const own = item.category_id ? byId.get(item.category_id as string) : undefined;
+    const parent = own?.parent_category_id ? byId.get(own.parent_category_id as string) : undefined;
+    sections.set(
+      item.id as string,
+      resolveSection({
+        itemSection: item.menu_section as string | null,
+        categorySection: own?.menu_section as string | null,
+        parentSection: parent?.menu_section as string | null,
+        categoryName: own?.name as string | undefined,
+        parentName: parent?.name as string | undefined,
+      })
+    );
+  }
+  return sections;
 }
 
 /** PostgREST gives an embedded row as an object or a one-element array. */

@@ -13,7 +13,21 @@ so this file stays to what is still open. Numbers are unique across both.
 
 <!-- What happened, where, and what you expected instead. -->
 
-None outstanding.
+### 71. A wrong pack size makes "last paid" ten times too high
+
+Found 2026-09-20 on the sandbox while checking menu costing. Ginger's last
+paid price reads $100.00/kg, dated 15/09/2026. The receipt behind it says
+"Ginger Box 2x10kg", $200 — ten dollars a kilo.
+
+The offer it was matched to has no real pack behind it: one loose unit of 1.
+Two of those is 2 kg, not 20, so the $200 divides by ten times too little.
+The figure then travels: the 18/09 menu was planned at $625 for 6.25 kg of
+ginger, and the receipt that covered it came to $62.50.
+
+Nothing in the arithmetic is wrong — the pack is. But a price this far out
+should not pass silently into a menu's planned cost. Worth deciding between
+flagging a pack whose receipts disagree with it by an order of magnitude,
+refusing to price from an unconfirmed pack at all, or both.
 
 ## Improvements
 

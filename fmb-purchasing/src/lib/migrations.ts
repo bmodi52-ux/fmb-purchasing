@@ -35,6 +35,7 @@ export const LEDGERED_MIGRATIONS = [
   "0060_receipt_total_and_off_receipt_lines.sql",
   "0061_menus_and_dishes.sql",
   "0062_dish_box_sizes.sql",
+  "0063_menu_procurement.sql",
 ] as const;
 
 export type MigrationStatus =

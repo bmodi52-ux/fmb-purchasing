@@ -60,6 +60,7 @@ import {
   type StoredFile,
 } from "@/lib/receipt-storage";
 import { checkExtractionThrottle } from "@/lib/extraction-throttle";
+import { allocateExpenseToMenus } from "@/lib/allocate-expense";
 
 export type ExtractState = {
   data: ExtractedReceipt | null;
@@ -1088,6 +1089,18 @@ export async function createExpense(
   // A receipt emailed in leaves the waiting list once it is submitted (#49).
   await markInboundReceiptsUsed(admin, user.id, input.attachments.map((a) => a.sha256), created.id);
 
+  // Tie what was bought back to the days it was bought for (#70). Never fatal:
+  // an expense is a fact whether or not it lines up with a plan.
+  try {
+    await allocateExpenseToMenus(admin, {
+      expenseId: created.id,
+      receiptDate: input.receiptDate,
+      userId: user.id,
+    });
+  } catch (err) {
+    await reportError({ source: "menu-allocation", error: err, userId: user.id, expenseId: created.id });
+  }
+
   await notifyExpenseSubmitted({
     id: created.id,
     expense_number: created.expense_number,
@@ -1331,8 +1344,15 @@ export async function updateExpense(
     return { error: error.message };
   }
 
+  try {
+    await allocateExpenseToMenus(admin, { expenseId, receiptDate: input.receiptDate, userId: user.id });
+  } catch (err) {
+    await reportError({ source: "menu-allocation", error: err, userId: user.id, expenseId });
+  }
+
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
+  revalidatePath("/procurement");
   revalidateReports();
   return { expenseId };
 }

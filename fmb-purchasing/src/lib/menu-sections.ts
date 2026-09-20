@@ -30,6 +30,30 @@ const PRODUCE = /\b(produce|fruit|vegetable|vegetables|veg|herbs?)\b/;
  * Which list an item belongs on, from its category and that category's
  * parent — "Meat & Poultry › Lamb" is meat whichever of the two is read.
  */
+export function isSection(value: unknown): value is SectionKey {
+  return typeof value === "string" && (SECTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * The section for one item: what the item says, else what its category says,
+ * else what the names suggest.
+ *
+ * Stated beats guessed — an item moved to another list stays there — and the
+ * guess is the default so that nothing has to be set up before this works.
+ */
+export function resolveSection(input: {
+  itemSection?: string | null;
+  categorySection?: string | null;
+  parentSection?: string | null;
+  categoryName?: string | null;
+  parentName?: string | null;
+}): SectionKey {
+  if (isSection(input.itemSection)) return input.itemSection;
+  if (isSection(input.categorySection)) return input.categorySection;
+  if (isSection(input.parentSection)) return input.parentSection;
+  return sectionFor([input.parentName, input.categoryName]);
+}
+
 export function sectionFor(categoryNames: (string | null | undefined)[]): SectionKey {
   const text = categoryNames.filter(Boolean).join(" ").toLowerCase();
   if (MEAT.test(text)) return "meat";
