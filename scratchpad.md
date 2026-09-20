@@ -88,17 +88,16 @@ Two things that matter more than the choice:
 - **Pack sizes, when buying.** 36 litres of tomato purée is nine 4 L boxes.
   The app knows pack sizes, so the list should round to what is actually
   sold and say what the rounding costs.
-- **What is already in the store.** The sheet assumes everything is bought
-  fresh. Subtracting what is on hand is what stops the same 20 kg of rice
-  being bought twice — and needs the monthly count #43 described.
+- **What is already in the store.** Deferred 2026-09-20: everything is
+  treated as bought for the day. The monthly count in #43 is what would
+  change that.
 - **Changing counts.** Thaali numbers move after a menu is released. What
   happens to lists already assigned, and to items already ordered, has to be
   decided rather than discovered.
 - **Copying a menu.** Most menus repeat. Copying last week's, or a saved
   template, is what makes this quicker than the sheet rather than slower.
-- **Ordering deadlines.** A vendor needs a day's notice; a released menu that
-  arrives too late to order is no use. Worth an order-by date per vendor and
-  a nudge before it.
+- **Ordering deadlines.** Deferred 2026-09-20: an order-by date per vendor,
+  and a nudge before it, comes later.
 - **Back to the receipt.** When the expense for an order is submitted, it
   should be linkable to the day and section it was for. Without that, planned
   against actual is guesswork.
@@ -124,18 +123,67 @@ Roughly four pieces, each useful on its own:
 4. Vendor choice and pack rounding on the list, then planned against actual
    once receipts are in.
 
-**To decide before any of it is built**
+**Decided 2026-09-20**
 
-- Are the three sections fixed, or a grouping of the existing categories that
-  can be changed in App settings? (Grouping is the flexible answer: Meat &
-  Poultry → Meat, Produce → Fresh produce, Groceries and Daals → Dry goods.)
-- Are dishes reused across days with one recipe each, or is a menu typed
-  fresh every time? The sheet implies reuse ("Thaali- Bhuna gosht with roti").
-- Is a recipe written per thaali, or per batch of a stated size? Cooks think
-  in batches; the arithmetic prefers per thaali.
-- Is there one kitchen, or several to plan separately?
-- Does the count of thaalis come from the RSVP tool eventually, or stay typed
-  in? #43 assumed typed, and the RSVP tool stays separate.
+- **Sections.** Meat and Fresh produce are fixed. Dry goods is a grouping of
+  the remaining categories, edited in App settings, and a single item can be
+  moved to another section as an override.
+- **Dishes are a library.** A dish is saved once with its recipe, reused on
+  any day, and keeps a history of the days it was made.
+- **Recipes take either basis.** A recipe is written per batch of a stated
+  number of thaalis (how it is done now) or per thaali, and says which. On a
+  batch recipe the day's count rounds up to whole batches, and what the
+  rounding adds is shown.
+- **Two kitchens.** Menus, counts and costs are per kitchen. A shopping list
+  can combine both — one person buys for both — while the cost stays split by
+  each kitchen's planned share.
+- **Copying a menu.** Any past day's menu can be copied onto any day, not
+  only the most recent.
+- **Thaali counts, and the RSVP tool.** A day carries a planned count, which
+  is what buying is based on, and later a confirmed count. The RSVP tool is
+  outside the site today and may be brought in; when it is, confirmation lands
+  about two days before the day itself, so the planned count has to stand on
+  its own. When the confirmed count arrives and differs, the day shows the
+  difference as a top-up or a reduction against what was already ordered,
+  rather than silently restating the requirement.
+- **Stock on hand:** ignored for now, as asked. Everything is treated as
+  bought for the day.
+- **Order-by dates and vendor lead times:** later.
+
+**Tying receipts back to days**
+
+The hard part, because a receipt can arrive days late, be bought a day early,
+or cover several days at once — so a receipt does not belong to a day, its
+*lines* belong to *requirements*.
+
+What makes this tractable is that a released menu has already said what is
+needed, per item, per day, per section. So:
+
+- **Allocation is a record of its own**, not a guess made at display time:
+  expense line → menu day → quantity and amount. One line can point at
+  several days; one day is fed by many lines. It is stored, so it can be
+  corrected and audited, and it is what planned-against-actual reads.
+- **The app proposes, on submission.** When an expense is submitted by
+  somebody holding open procurement for a section, its goods lines are matched
+  against the outstanding requirements for that section — the same item,
+  oldest first, within a window of about a week either side. 120 kg of goat
+  against a day needing 120 kg allocates cleanly; 200 kg across two days
+  needing 120 and 80 splits by those quantities.
+- **The submitter confirms in one place.** The submit form shows "this
+  receipt covers: Friday 18 Sep — Meat" with the days ticked, and the ticks
+  can be changed. It is one glance when the app has it right, which it will
+  have most of the time, because the list was generated from the menu.
+- **What doesn't match stays visible.** More bought than any day needs, an
+  item on no list, or a receipt from someone holding no assignment, all land
+  as unallocated purchases on a screen for exactly that, alongside days whose
+  requirements nothing has been bought against yet. Unallocated spend still
+  counts in the period totals — it is only the per-day figure it is missing
+  from, and the screen says so.
+- **Cost per thaali is therefore two figures**, and both are worth having:
+  planned, from the prices frozen at release, and actual, from what has been
+  allocated so far. The gap between them is the interesting number, and the
+  day says how much of its requirement is still unbought so the actual figure
+  is never mistaken for final.
 
 Not to be started until asked.
 
