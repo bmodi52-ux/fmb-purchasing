@@ -95,8 +95,10 @@ export async function loadProcurement(
     ]);
   }
 
+  // Loose packs are left out: something sold by weight needs no rounding, and
+  // "150 × loose" is not an instruction anybody can follow.
   const packsBy = new Map<string, PackOption[]>();
-  for (const p of packs ?? []) {
+  for (const p of (packs ?? []).filter((p) => !p.sold_loose)) {
     const key = p.item_id as string;
     packsBy.set(key, [
       ...(packsBy.get(key) ?? []),
