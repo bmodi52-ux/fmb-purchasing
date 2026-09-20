@@ -84,6 +84,55 @@ describe("previousPurchase", () => {
   });
 });
 
+describe("a line whose pack disagrees with its receipt", () => {
+  // #71: "Ginger Box 2x10kg, $200" against a pack of one loose kilo reads
+  // $100/kg for ginger that cost ten dollars a kilo.
+  const disputed = point({
+    costPerUnit: 100,
+    baseQuantity: 2,
+    receiptQuantity: 20,
+    packDisagrees: true,
+  });
+
+  test("is flagged, and nothing else is said about its price", () => {
+    const flags = priceFlagsFor(disputed, null, limitsFor(pricelist, noLimits, noRange), "Ginger");
+    assert.equal(flags.length, 1);
+    assert.equal(flags[0].kind, "pack_mismatch");
+  });
+
+  test("says what the two numbers are, since one of them has to be corrected", () => {
+    const [flag] = priceFlagsFor(disputed, null, limitsFor(pricelist, noLimits, noRange), "Ginger");
+    const said = describePriceFlag(flag);
+    assert.match(said, /20 kg/);
+    assert.match(said, /2 kg/);
+    assert.match(said, /sets no price/);
+  });
+
+  test("a price ten times out is not also reported as a rise", () => {
+    const previous = point({ lineId: "l0", expenseId: "e0", costPerUnit: 10, date: "2026-08-01" });
+    const flags = priceFlagsFor(disputed, previous, limitsFor(pricelist, noLimits, noRange), "Ginger");
+    assert.deepEqual(
+      flags.map((f) => f.kind),
+      ["pack_mismatch"],
+      "one problem, stated once"
+    );
+  });
+
+  test("it never becomes the cheapest price either", () => {
+    const good = point({ lineId: "l2", itemId: "ginger", costPerUnit: 12 });
+    const cheap = point({ lineId: "l3", itemId: "ginger", costPerUnit: 2, packDisagrees: true });
+    const best = cheapestRecent([good, cheap], "2026-01-01");
+    assert.equal(best.get("ginger")?.costPerUnit, 12);
+  });
+
+  test("nor the purchase a later one is compared against", () => {
+    const disputedEarlier = point({ lineId: "l4", expenseId: "e4", date: "2026-08-20", costPerUnit: 100, packDisagrees: true });
+    const goodEarlier = point({ lineId: "l5", expenseId: "e5", date: "2026-08-01", costPerUnit: 10 });
+    const now = point({ lineId: "l6", expenseId: "e6", date: "2026-09-01", costPerUnit: 11 });
+    assert.equal(previousPurchase(now, [disputedEarlier, goodEarlier])?.lineId, "l5");
+  });
+});
+
 describe("priceFlagsFor", () => {
   const limits = limitsFor(pricelist, noLimits, noRange);
 

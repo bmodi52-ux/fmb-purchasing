@@ -76,6 +76,12 @@ export type PricePoint = {
   costPerUnit: number;
   unit: string;
   confirmed: boolean;
+  /** What the pack makes of the line, in base units. */
+  baseQuantity?: number;
+  /** What the receipt itself appeared to say, in the same unit — when it did. */
+  receiptQuantity?: number | null;
+  /** True when those two are an order of magnitude apart. */
+  packDisagrees?: boolean;
 };
 
 /**
@@ -87,7 +93,7 @@ export function previousPurchase(point: PricePoint, history: PricePoint[]): Pric
   let best: PricePoint | null = null;
   for (const h of history) {
     if (h.itemId !== point.itemId || h.expenseId === point.expenseId) continue;
-    if (!h.confirmed || h.unit !== point.unit) continue;
+    if (!h.confirmed || h.packDisagrees || h.unit !== point.unit) continue;
     const earlier = h.date < point.date || (h.date === point.date && h.submittedAt < point.submittedAt);
     if (!earlier) continue;
     if (!best || h.date > best.date || (h.date === best.date && h.submittedAt > best.submittedAt)) best = h;
@@ -111,6 +117,16 @@ export type PriceFlag =
       previousVendorId: string | null;
     }
   | {
+      kind: "pack_mismatch";
+      lineId: string;
+      itemId: string;
+      itemName: string;
+      /** What the receipt read, and what the pack makes of the same line. */
+      receiptQuantity: number;
+      packQuantity: number;
+      unit: string;
+    }
+  | {
       kind: "above_range" | "below_range";
       lineId: string;
       itemId: string;
@@ -128,6 +144,23 @@ export function priceFlagsFor(
   limits: PriceLimits,
   itemName: string
 ): PriceFlag[] {
+  // A line whose pack disagrees with its own receipt has no price to judge:
+  // one of the two numbers is wrong, and saying which is not this function's
+  // business. It says so and stops, rather than measuring a figure it does not
+  // believe against the limits.
+  if (point.packDisagrees && point.receiptQuantity != null && point.baseQuantity != null) {
+    return [
+      {
+        kind: "pack_mismatch",
+        lineId: point.lineId,
+        itemId: point.itemId,
+        itemName,
+        receiptQuantity: point.receiptQuantity,
+        packQuantity: point.baseQuantity,
+        unit: point.unit,
+      },
+    ];
+  }
   if (!point.confirmed || !(point.costPerUnit > 0)) return [];
   const flags: PriceFlag[] = [];
   const base = { lineId: point.lineId, itemId: point.itemId, itemName, to: point.costPerUnit, unit: point.unit };
@@ -164,6 +197,12 @@ const perUnit = (n: number, unit: string) => formatUnitCost(n, unit, { decimals:
 
 /** "Chicken Thigh up 18% on the last purchase: $7.20/kg → $8.50/kg". */
 export function describePriceFlag(flag: PriceFlag): string {
+  if (flag.kind === "pack_mismatch") {
+    return (
+      `${flag.itemName}: the receipt reads ${flag.receiptQuantity} ${flag.unit}, but the pack it is matched to makes it ${flag.packQuantity} ${flag.unit}. ` +
+      "One of the two is wrong, so this line sets no price until the pack is corrected."
+    );
+  }
   if (!("rangeMax" in flag)) {
     return `${flag.itemName} ${flag.kind === "rise" ? "up" : "down"} ${flag.percent}% on the last purchase: ${perUnit(flag.from, flag.unit)} → ${perUnit(flag.to, flag.unit)}`;
   }
@@ -178,7 +217,7 @@ export function describePriceFlag(flag: PriceFlag): string {
 
 /** A rise, or a price above what is expected, is worth stopping for; a fall is worth knowing. */
 export function isSeriousPriceFlag(flag: PriceFlag): boolean {
-  return flag.kind === "rise" || flag.kind === "above_range";
+  return flag.kind === "rise" || flag.kind === "above_range" || flag.kind === "pack_mismatch";
 }
 
 export type UnusualSpend = {
@@ -260,7 +299,7 @@ export type CheapestSource = { costPerUnit: number; unit: string; vendorId: stri
 export function cheapestRecent(points: PricePoint[], since: string): Map<string, CheapestSource> {
   const best = new Map<string, CheapestSource>();
   for (const p of points) {
-    if (!p.confirmed || p.date < since || !(p.costPerUnit > 0)) continue;
+    if (!p.confirmed || p.packDisagrees || p.date < since || !(p.costPerUnit > 0)) continue;
     const current = best.get(p.itemId);
     if (current && current.unit !== p.unit) continue;
     if (!current || p.costPerUnit < current.costPerUnit || (p.costPerUnit === current.costPerUnit && p.date > current.date)) {

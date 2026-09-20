@@ -103,6 +103,27 @@ async function seedItem(opts: {
   return { itemId, packSizeId, offerId };
 }
 
+/** Another pack size and offer against an item that already exists. */
+async function seedItemAgainst(
+  itemId: string,
+  opts: { innerQuantity: number; innerUnit: string; soldLoose?: boolean }
+): Promise<{ packSizeId: string; offerId: string }> {
+  const packSizeId = await scalar<string>(
+    db,
+    `insert into item_pack_sizes
+       (item_id, inner_quantity, inner_unit_id, pack_count, label, sold_loose, contents_confirmed)
+     values ($1, $2, $3, 1, 'second pack', $4, true) returning id`,
+    [itemId, opts.innerQuantity, ids.units[opts.innerUnit], opts.soldLoose ?? false]
+  );
+  const offerId = await scalar<string>(
+    db,
+    `insert into pricelist_items (pack_size_id, vendor_id, pack_price, status)
+     values ($1, $2, null, 'approved') returning id`,
+    [packSizeId, ids.vendor]
+  );
+  return { packSizeId, offerId };
+}
+
 /** One purchased line against an offer. */
 async function seedPurchase(opts: {
   offerId: string;
@@ -110,6 +131,8 @@ async function seedPurchase(opts: {
   lineTotal: number;
   receiptDate?: string;
   status?: string;
+  /** What the receipt itself appeared to say, if anything. */
+  readsAs?: { quantity: number; unit: string };
 }): Promise<string> {
   const expenseId = await scalar<string>(
     db,
@@ -119,9 +142,17 @@ async function seedPurchase(opts: {
   );
 
   await db.query(
-    `insert into expense_line_items (expense_id, pricelist_item_id, description_raw, quantity, line_total)
-     values ($1, $2, 'test line', $3, $4)`,
-    [expenseId, opts.offerId, opts.quantity, opts.lineTotal]
+    `insert into expense_line_items
+       (expense_id, pricelist_item_id, description_raw, quantity, line_total, normalized_quantity, normalized_unit)
+     values ($1, $2, 'test line', $3, $4, $5, $6)`,
+    [
+      expenseId,
+      opts.offerId,
+      opts.quantity,
+      opts.lineTotal,
+      opts.readsAs?.quantity ?? null,
+      opts.readsAs?.unit ?? null,
+    ]
   );
 
   return expenseId;
@@ -360,5 +391,121 @@ describe("item_unit_costs", () => {
       [itemId]
     );
     assert.equal(confirmed, false);
+  });
+});
+
+describe("a pack that disagrees with its own receipt", () => {
+  // The ginger case (#71): "Ginger Box 2x10kg, $200" matched to an offer whose
+  // pack is a single loose unit. Two of those is 2 kg rather than 20, so the
+  // division reads $100 a kilo for ginger that cost ten dollars a kilo.
+  test("is marked, and left out of what the item costs", async () => {
+    const { itemId, offerId } = await seedItem({
+      name: "Ginger",
+      canonicalUnit: "kg",
+      innerQuantity: 1,
+      innerUnit: "kg",
+      soldLoose: true,
+    });
+    await seedPurchase({ offerId, quantity: 2, lineTotal: 200, readsAs: { quantity: 20, unit: "kg" } });
+
+    const line = await db.query<{ cost_per_base_unit: string; pack_disagrees: boolean }>(
+      "select cost_per_base_unit, pack_disagrees from item_paid_unit_costs where item_id = $1",
+      [itemId]
+    );
+    assert.equal(Number(line.rows[0].cost_per_base_unit), 100, "the arithmetic is still reported");
+    assert.equal(line.rows[0].pack_disagrees, true, "and marked as resting on a pack nobody believes");
+
+    const rows = await db.query("select * from item_unit_costs where item_id = $1", [itemId]);
+    assert.equal(rows.rows.length, 0, "an item with nothing but disputed purchases costs nothing known");
+  });
+
+  test("a good purchase still prices the item, and the disputed one does not", async () => {
+    const { itemId, offerId } = await seedItem({
+      name: "Ginger, sold properly",
+      canonicalUnit: "kg",
+      innerQuantity: 10,
+      innerUnit: "kg",
+    });
+    await seedPurchase({
+      offerId,
+      quantity: 2,
+      lineTotal: 200,
+      receiptDate: "2026-08-01",
+      readsAs: { quantity: 20, unit: "kg" },
+    });
+
+    const { offerId: looseOffer } = await seedItemAgainst(itemId, { innerQuantity: 1, innerUnit: "kg", soldLoose: true });
+    await seedPurchase({
+      offerId: looseOffer,
+      quantity: 2,
+      lineTotal: 200,
+      receiptDate: "2026-08-20",
+      readsAs: { quantity: 20, unit: "kg" },
+    });
+
+    const latest = await scalar<string>(
+      db,
+      "select latest_cost_per_base_unit from item_unit_costs where item_id = $1",
+      [itemId]
+    );
+    assert.equal(Number(latest), 10, "the later, disputed line does not become the price");
+
+    const count = await scalar<string>(db, "select purchase_count from item_unit_costs where item_id = $1", [itemId]);
+    assert.equal(Number(count), 1);
+  });
+
+  test("a reading in another unit is no evidence either way", async () => {
+    // 500 g of saffron against a 0.5 kg pack: a hundredfold apart as numbers,
+    // the same thing in fact. Comparing them would be comparing nothing.
+    const { itemId, offerId } = await seedItem({
+      name: "Saffron",
+      canonicalUnit: "kg",
+      innerQuantity: 0.5,
+      innerUnit: "kg",
+    });
+    await seedPurchase({ offerId, quantity: 1, lineTotal: 100, readsAs: { quantity: 500, unit: "g" } });
+
+    const disagrees = await scalar<boolean>(
+      db,
+      "select pack_disagrees from item_paid_unit_costs where item_id = $1",
+      [itemId]
+    );
+    assert.equal(disagrees, false);
+  });
+
+  test("a receipt that says nothing about quantity is left alone", async () => {
+    const { itemId, offerId } = await seedItem({
+      name: "Unreadable",
+      canonicalUnit: "kg",
+      innerQuantity: 1,
+      innerUnit: "kg",
+    });
+    await seedPurchase({ offerId, quantity: 4, lineTotal: 40 });
+
+    const disagrees = await scalar<boolean>(
+      db,
+      "select pack_disagrees from item_paid_unit_costs where item_id = $1",
+      [itemId]
+    );
+    assert.equal(disagrees, false);
+  });
+
+  test("a difference short of an order of magnitude is somebody rounding, not a wrong pack", async () => {
+    const { itemId, offerId } = await seedItem({
+      name: "Potatoes",
+      canonicalUnit: "kg",
+      innerQuantity: 15,
+      innerUnit: "kg",
+    });
+    // The receipt says 60 kg; four 15 kg bags is 60. A reading of 70 is somebody
+    // writing down what they thought they saw, not a pack ten times out.
+    await seedPurchase({ offerId, quantity: 4, lineTotal: 180, readsAs: { quantity: 70, unit: "kg" } });
+
+    const disagrees = await scalar<boolean>(
+      db,
+      "select pack_disagrees from item_paid_unit_costs where item_id = $1",
+      [itemId]
+    );
+    assert.equal(disagrees, false);
   });
 });

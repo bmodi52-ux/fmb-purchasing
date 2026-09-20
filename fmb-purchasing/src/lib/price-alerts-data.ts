@@ -43,10 +43,13 @@ type PaidCostRow = {
   cost_per_base_unit: number | string;
   base_unit_code: string;
   contents_confirmed: boolean;
+  base_quantity: number | string | null;
+  receipt_quantity: number | string | null;
+  pack_disagrees: boolean;
 };
 
 const PAID_COST_COLUMNS =
-  "line_item_id, expense_id, item_id, vendor_id, receipt_date, submitted_at, cost_per_base_unit, base_unit_code, contents_confirmed";
+  "line_item_id, expense_id, item_id, vendor_id, receipt_date, submitted_at, cost_per_base_unit, base_unit_code, contents_confirmed, base_quantity, receipt_quantity, pack_disagrees";
 
 function toPoint(r: PaidCostRow): PricePoint {
   return {
@@ -59,6 +62,9 @@ function toPoint(r: PaidCostRow): PricePoint {
     costPerUnit: Number(r.cost_per_base_unit),
     unit: r.base_unit_code,
     confirmed: r.contents_confirmed,
+    baseQuantity: r.base_quantity == null ? undefined : Number(r.base_quantity),
+    receiptQuantity: r.receipt_quantity == null ? null : Number(r.receipt_quantity),
+    packDisagrees: r.pack_disagrees,
   };
 }
 
