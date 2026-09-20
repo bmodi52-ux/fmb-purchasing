@@ -19,7 +19,7 @@ type DayEntry = {
   cost: MenuDayCost | null;
 };
 
-export const metadata = { title: "Menu calendar" };
+export const metadata = { title: "Thaali menu" };
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 const MONTHS = "January February March April May June July August September October November December".split(" ");
@@ -129,7 +129,7 @@ export default async function MenuCalendarPage({
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h1 className="page-title text-ink">Menu calendar</h1>
+        <h1 className="page-title text-ink">Thaali menu</h1>
         <p className="page-description mt-1 max-w-2xl">
           What is being cooked, for how many, and what that costs a thaali. A day&apos;s quantities come from its
           dishes and its thaali count, so changing either works the rest out.
@@ -259,6 +259,14 @@ export default async function MenuCalendarPage({
                           <span className="text-[0.65rem] text-ink/45">{formatHijri(cell.hijri)}</span>
                         </Link>
                         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-1">
+                          {entries.length === 0 && cell.inCurrentMonth && (
+                            <Link
+                              href={dayHref(date)}
+                              className="flex flex-1 items-center justify-center rounded border border-dashed border-ink/15 text-ink/35 hover:border-gold-deep hover:text-ink"
+                            >
+                              + Set a menu
+                            </Link>
+                          )}
                           {entries.map((entry) => (
                             <Link
                               key={entry.kitchenId}

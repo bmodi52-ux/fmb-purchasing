@@ -7,17 +7,15 @@ import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { formatPlainDate } from "@/lib/format";
 import { SECTIONS, SECTION_LABEL, type SectionKey } from "@/lib/menu-sections";
+import { isoDate, rangeFromParams } from "@/lib/buying-week";
 import { loadProcurement, type ProcurementLine } from "./data";
+import { WeekPicker } from "./week-picker";
 import { reassign, setRequirementNote, setRequirementStatus, setRequirementVendor } from "./actions";
 import { ProcurementTabs } from "./tabs";
 
 export const metadata = { title: "Procurement" };
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
-
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 const STATUS_LABEL: Record<ProcurementLine["status"], string> = {
   to_order: "To order",
@@ -46,13 +44,8 @@ export default async function ProcurementPage({
   const canManage = can(permissions, "procurement", "manage");
 
   const { from: fromParam, to: toParam, who, status: statusParam } = await searchParams;
-  const today = new Date();
-  const from = /^\d{4}-\d{2}-\d{2}$/.test(fromParam ?? "")
-    ? fromParam!
-    : isoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 3));
-  const to = /^\d{4}-\d{2}-\d{2}$/.test(toParam ?? "")
-    ? toParam!
-    : isoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14));
+  const today = isoDate(new Date());
+  const { from, to } = rangeFromParams({ from: fromParam, to: toParam }, today);
 
   // Mine by default: the page is mostly opened by whoever has the buying to
   // do, and "everyone's" is a click away for whoever runs it.
@@ -91,18 +84,13 @@ export default async function ProcurementPage({
 
       <ProcurementTabs active="buy" canManage={canManage} />
 
-      <form action="/procurement" className="flex flex-wrap items-end gap-3 text-sm">
-        <label className="flex flex-col gap-1">
-          <span className="text-ink/70">From</span>
-          <input type="date" name="from" defaultValue={from} className="input" />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-ink/70">To</span>
-          <input type="date" name="to" defaultValue={to} className="input" />
-        </label>
-        <input type="hidden" name="who" value={onlyMine ? "mine" : "all"} />
-        {statusParam && <input type="hidden" name="status" value={statusParam} />}
-        <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 hover:border-ink/30">Show</SubmitButton>
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 text-sm">
+        <WeekPicker
+          action="/procurement"
+          range={{ from, to }}
+          today={today}
+          hidden={{ who: onlyMine ? "mine" : "all", status: statusParam }}
+        />
         <div className="flex items-center gap-2">
           <Link
             href={href({ who: "mine" })}
@@ -125,7 +113,7 @@ export default async function ProcurementPage({
             Still to buy
           </Link>
         </div>
-      </form>
+      </div>
 
       {byDay.size === 0 ? (
         <p className="text-sm text-ink/55">
