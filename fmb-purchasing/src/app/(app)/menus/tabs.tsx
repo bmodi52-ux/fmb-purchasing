@@ -10,7 +10,7 @@ import { TabLink } from "@/components/tab-link";
  */
 export function MenuTabs({ active }: { active: "calendar" | "sheet" | "dishes" }) {
   return (
-    <nav aria-label="Menus sections" className="flex gap-1 border-b border-ink/10">
+    <nav aria-label="Thaali menu sections" className="flex gap-1 border-b border-ink/10">
       <TabLink href="/menus" active={active === "calendar"}>
         Calendar
       </TabLink>

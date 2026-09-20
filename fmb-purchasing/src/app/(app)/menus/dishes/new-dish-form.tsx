@@ -6,6 +6,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { boxSizeOptions, portionLabel } from "@/lib/menu-costing";
 import { createDish, type DishFormState } from "./actions";
+import { RecipeBasisFields } from "./recipe-basis-fields";
 
 const initial: DishFormState = { error: null };
 
@@ -25,7 +26,7 @@ export function NewDishForm({ boxSizes }: { boxSizes: number[] }) {
     <form action={action} className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 p-4">
       <h2 className="section-title text-ink">Add a dish</h2>
       <FormResetBoundary>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr]">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-ink/70">Name</span>
             <input name="name" required placeholder="e.g. Bhuna gosht" className="input" />
@@ -40,19 +41,7 @@ export function NewDishForm({ boxSizes }: { boxSizes: number[] }) {
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-ink/70">Recipe is written</span>
-            <select name="recipe_basis" defaultValue="batch" className="input">
-              <option value="batch">per batch</option>
-              <option value="box">per box</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-ink/70">
-              Boxes per batch <span className="text-ink/40">(if per batch)</span>
-            </span>
-            <input name="batch_boxes" type="number" min="1" defaultValue="200" className="input" />
-          </label>
+          <RecipeBasisFields basis="batch" batchBoxes={200} />
         </div>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-ink/70">

@@ -4,15 +4,13 @@ import { can, getUserPermissions, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatPlainDate } from "@/lib/format";
 import { SECTIONS, SECTION_LABEL } from "@/lib/menu-sections";
+import { isoDate, rangeFromParams } from "@/lib/buying-week";
 import { loadProcurement } from "../data";
+import { WeekPicker } from "../week-picker";
 import { ProcurementTabs } from "../tabs";
 import { ShoppingLists } from "./shopping-lists";
 
 export const metadata = { title: "Shopping lists" };
-
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 /**
  * The list you take shopping (#70, piece two).
@@ -33,11 +31,8 @@ export default async function ShoppingListsPage({
   const canManage = can(await getUserPermissions(user), "procurement", "manage");
 
   const { from: fromParam, to: toParam } = await searchParams;
-  const today = new Date();
-  const from = /^\d{4}-\d{2}-\d{2}$/.test(fromParam ?? "") ? fromParam! : isoDate(today);
-  const to = /^\d{4}-\d{2}-\d{2}$/.test(toParam ?? "")
-    ? toParam!
-    : isoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14));
+  const today = isoDate(new Date());
+  const { from, to } = rangeFromParams({ from: fromParam, to: toParam }, today);
 
   const admin = createAdminClient();
   const lines = await loadProcurement(admin, { from, to });
@@ -62,19 +57,7 @@ export default async function ShoppingListsPage({
 
       <ProcurementTabs active="lists" canManage={canManage} />
 
-      <form action="/procurement/lists" className="flex flex-wrap items-end gap-3 text-sm">
-        <label className="flex flex-col gap-1">
-          <span className="text-ink/70">From</span>
-          <input type="date" name="from" defaultValue={from} className="input" />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-ink/70">To</span>
-          <input type="date" name="to" defaultValue={to} className="input" />
-        </label>
-        <button type="submit" className="rounded-md border border-ink/15 px-4 py-2 hover:border-ink/30">
-          Show
-        </button>
-      </form>
+      <WeekPicker action="/procurement/lists" range={{ from, to }} today={today} />
 
       {lines.length === 0 ? (
         <p className="text-sm text-ink/55">

@@ -10,6 +10,7 @@ import { unitOptionLabel } from "@/lib/pack-description";
 import { boxSizeOptions, costMenuDay, portionLabel, type MenuDish } from "@/lib/menu-costing";
 import { loadBoxSizes, loadDishes, loadItemPrices } from "../../data";
 import { addIngredient, removeIngredient, updateDish, updateIngredient } from "../actions";
+import { RecipeBasisFields } from "../recipe-basis-fields";
 
 export const metadata = { title: "Dish" };
 
@@ -67,7 +68,7 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
     <div className="flex flex-col gap-6">
       <div>
         <Link href="/menus/dishes" className="text-sm text-ink/50 hover:text-ink">
-          ← Menus · Dishes
+          ← Thaali menu · Dishes
         </Link>
         <h1 className="page-title mt-1 text-ink">{dish.name}</h1>
         <p className="mt-1 text-sm text-ink/60">
@@ -98,17 +99,7 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
                   ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-ink/70">Recipe is written</span>
-                <select key={dish.recipe_basis} name="recipe_basis" defaultValue={dish.recipe_basis} className="input">
-                  <option value="batch">per batch</option>
-                  <option value="box">per box</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-ink/70">Boxes per batch</span>
-                <input name="batch_boxes" type="number" min="1" defaultValue={dish.batch_boxes ?? ""} className="input" />
-              </label>
+              <RecipeBasisFields basis={dish.recipe_basis} batchBoxes={dish.batch_boxes} />
               <label className="flex items-center gap-2 self-end text-sm">
                 <input type="checkbox" name="active" defaultChecked={dish.active} />
                 In use

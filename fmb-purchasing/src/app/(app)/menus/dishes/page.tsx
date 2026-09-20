@@ -59,7 +59,7 @@ export default async function DishesPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="page-title text-ink">Menus</h1>
+        <h1 className="page-title text-ink">Thaali menu</h1>
         <p className="page-description mt-1 max-w-2xl">
           What each dish takes to make. A recipe is written once — per batch, as the kitchen cooks, or per thaali — and
           every day that serves the dish works out its own quantities from the number of thaalis expected.
