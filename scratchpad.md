@@ -261,10 +261,17 @@ say yes.
 (60 ml is a guess, which is exactly why box sizes are a list somebody can
 edit — that part is done and on live.)
 
-Still to settle: where the per-line take-up comes from while the RSVP tool is
-outside the app. #70 assumed one planned count confirmed about two days out;
-this needs a number per line, so either the RSVP export grows a column per
-dish or a menu line carries an expected share until it does.
+**Where the per-line count comes from** (settled 2026-09-21). Buying needs a
+number against every line, not one number for the day: 250 thaalis might be
+180 gosht, 240 daal, 250 rice and 120 roti, and biryani offered as 2 × 1 L
+might come to 380 boxes across 250 people. The RSVP tool is outside the app
+and only says how many thaalis, so the number is typed when the menu is set
+up — a count beside each line, defaulting to the day's thaali count, changed
+where somebody knows better ("roti, about half").
+
+Chosen over buying for everyone on every line, which over-buys, and over
+waiting for RSVP to collect per-dish choices. When RSVP does collect them,
+its figures replace the typed ones and nothing else about this changes.
 
 ### 77. A simple mode that is just the sheet, typed
 
