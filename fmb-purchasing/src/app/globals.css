@@ -8,6 +8,10 @@
   --color-palm: #009c48;
   --color-cream: #fbf6ec;
   --color-ink: #2b211c;
+  /* Maroon is nearly brown at chip size, and reads as decoration. This is for
+     the few things an approver must not skim past: money the receipt doesn't
+     account for, a total somebody changed (#63). */
+  --color-alert: #c0362c;
 }
 
 @theme inline {
@@ -17,6 +21,7 @@
   --color-palm: var(--color-palm);
   --color-cream: var(--color-cream);
   --color-ink: var(--color-ink);
+  --color-alert: var(--color-alert);
 
   --font-sans: var(--font-inter);
   --font-serif: var(--font-fraunces);
@@ -309,17 +314,72 @@ input[type="radio"] {
 .page-loading {
   display: flex;
   min-height: 40vh;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  text-align: center;
 }
 
 /* Held back so a fast page never flashes a word at you; only a wait long
-   enough to wonder about gets one. */
+   enough to wonder about gets one.
+
+   What a longer wait then says is held back the same way, in CSS, because a
+   loading screen that re-renders stops React committing the page behind it —
+   see page-loading.tsx. Each stage fades in at its moment and the one before
+   it fades out, so nothing is on screen twice. */
 .page-loading-label {
   font-size: 0.875rem;
   color: color-mix(in srgb, var(--color-ink) 45%, transparent);
   opacity: 0;
-  animation: fmb-fade-in 200ms ease 450ms forwards;
+  animation:
+    fmb-fade-in 200ms ease 450ms forwards,
+    fmb-fade-out 200ms ease 8s forwards;
+}
+
+.page-loading-slow,
+.page-loading-stuck {
+  position: absolute;
+  display: flex;
+  max-width: 24rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding-inline: 1rem;
+  font-size: 0.875rem;
+  color: color-mix(in srgb, var(--color-ink) 70%, transparent);
+  visibility: hidden;
+  opacity: 0;
+}
+
+.page-loading-slow {
+  animation:
+    fmb-reveal 200ms ease 8s forwards,
+    fmb-fade-out 200ms ease 20s forwards;
+}
+
+.page-loading-stuck {
+  animation: fmb-reveal 200ms ease 20s forwards;
+}
+
+@keyframes fmb-reveal {
+  from {
+    visibility: visible;
+    opacity: 0;
+  }
+  to {
+    visibility: visible;
+    opacity: 1;
+  }
+}
+
+@keyframes fmb-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    visibility: hidden;
+    opacity: 0;
+  }
 }
 
 @keyframes fmb-fade-in {
@@ -358,8 +418,18 @@ input[type="radio"] {
 
 @media (prefers-reduced-motion: reduce) {
   .page-loading-label {
-    animation: none;
+    animation: fmb-fade-out 1ms linear 8s forwards;
     opacity: 1;
+  }
+
+  .page-loading-slow {
+    animation:
+      fmb-reveal 1ms linear 8s forwards,
+      fmb-fade-out 1ms linear 20s forwards;
+  }
+
+  .page-loading-stuck {
+    animation: fmb-reveal 1ms linear 20s forwards;
   }
   .inline-progress::after {
     animation: none;

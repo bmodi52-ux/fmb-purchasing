@@ -1385,7 +1385,10 @@ function ReviewForm(props: {
     }
     // Which pack decides what the quantity means — sixteen boxes or sixteen
     // kilos — so it is never guessed on the way in.
-    const packless = goods.find((it) => it.itemId && !it.packSizeId && (it.match?.packs.length ?? 0) > 1);
+    // Describing a pack the item doesn't have counts as choosing one (#60).
+    const packless = goods.find(
+      (it) => it.itemId && !it.packSizeId && !it.newPackFields && (it.match?.packs.length ?? 0) > 1
+    );
     if (packless) {
       setError(`Choose which pack of ${packless.match?.itemName ?? "the item"} "${packless.description}" is.`);
       return;

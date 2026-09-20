@@ -208,10 +208,11 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
     showSubmitter ? e.submittedByName : null,
   ].filter(Boolean);
 
-  const flags: { label: string; serious?: boolean }[] = [];
+  const flags: { label: string; serious?: boolean; alert?: boolean }[] = [];
   if (e.flags.duplicateOf.length > 0) flags.push({ label: duplicateLabel(e.flags.duplicateOf), serious: true });
   for (const concern of e.flags.gstConcerns) flags.push({ label: concern, serious: true });
-  for (const r of e.flags.receipt) flags.push(r);
+  // Red, not maroon: these are about the money itself (#63).
+  for (const r of e.flags.receipt) flags.push({ ...r, alert: true });
   if (e.flags.unconfirmedAccount) flags.push({ label: "Bank account not confirmed", serious: true });
   if (e.flags.unusualSpend) flags.push({ label: e.flags.unusualSpend, serious: true });
   for (const price of e.flags.prices) flags.push(price);
@@ -241,7 +242,11 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
             <span
               key={f.label}
               className={`rounded-full px-2 py-0.5 text-xs ${
-                f.serious ? "bg-maroon/10 text-maroon" : "bg-gold/15 text-gold-deep"
+                f.alert
+                  ? "bg-alert/10 font-medium text-alert"
+                  : f.serious
+                    ? "bg-maroon/10 text-maroon"
+                    : "bg-gold/15 text-gold-deep"
               }`}
             >
               {f.label}
