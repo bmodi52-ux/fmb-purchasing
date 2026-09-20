@@ -10,37 +10,7 @@ renumbers a list and would show #12 as 10.
 
 <!-- What happened, where, and what you expected instead. -->
 
-### 61. A voucher or discount below the total isn't taken off
-
-Raised 2026-09-20. Campbells Northmead invoice 17113, 05/09/2026
-(`213831873#213844918.pdf`). The receipt prints:
-
-```
-TOTAL             1498.31
-Customer Voucher 5   74.51
-VISA EFT          1423.80
-```
-
-The scan read the lines correctly, including the $92.12 return on line 13
-cancelling line 12, and it noticed the voucher — the note it left says
-"$1423.80 (total 1498.31 less $74.51 customer voucher)". But the voucher is
-only in that note: no discount line was added, and the receipt total was taken
-as $1498.31, the figure before it. The lines add up to $1498.31, so the form
-looks balanced and says nothing is wrong, while the card was charged $1423.80.
-Submitted as it stands, the claim is $74.51 too much.
-
-What it should do: a voucher, credit or discount printed under the total is a
-discount line of its own (negative), and the receipt total is what was
-actually charged — the EFT or card line where the receipt shows one. The
-prompt already insists every dollar of the total appears on a line, but only
-looks above the total for it.
-
-To check as well: whether any expense already submitted has this — a receipt
-whose total is the pre-voucher figure.
-
-Also on this receipt, worth a look while in there: line 15 is "5%" at $0.00,
-which is a promotional marker rather than a line, and the scan left it out —
-correctly, but it is the same wording a percentage discount would use.
+None outstanding.
 
 ## Improvements
 
@@ -49,72 +19,6 @@ correctly, but it is the same wording a percentage discount would use.
 Items 18–50 came from the systems review of 2026-09-11, each with the timing
 decided for it. Everything marked "now" is in Done; what remains here was
 marked "later".
-
-### 63. Put the money flags beside the money, and make them red
-
-Raised 2026-09-20 on E-0036, where "Receipt total read as $1,498.31, changed
-to $1,423.80 — Mis read the total" sits in the row of chips under the expense
-title, several inches above the Total it is about, next to an unrelated price
-alert.
-
-Wanted:
-
-- The flags about the total — a changed receipt total, an unexplained
-  difference, money not on the receipt (#51) — shown beside Total in the
-  details block, where an approver is already looking, as well as (or instead
-  of) the chip row.
-- Red rather than the current maroon. `--color-maroon` is #4a160a, nearly
-  brown at small sizes, and it is used for both serious and ordinary chips.
-  Proposed: a red for anything that means "check this before approving", used
-  the same way on the expense page and in Approvals, with the quieter chips
-  left as they are so the red still stands out.
-
-Not to be started until asked.
-
-### 62. A discount can be entered as a percentage
-
-Raised 2026-09-20, with #61. When adding a discount by hand on Submit, allow a
-percentage as well as an amount: type 5% and the app works out the amount from
-the lines it applies to and keeps it up to date as they change.
-
-- The amount stays what is stored; the percentage is how it was entered.
-- Off what? The goods and service lines before charges, which is how a
-  supplier's "5% discount" reads. Show the sum it was taken off, so the figure
-  can be checked against the receipt.
-- Round to the cent, and show the amount beside the percentage so the receipt
-  can be compared at a glance.
-- Rounding won't always match the supplier's to the cent, so the amount must
-  stay editable afterwards.
-
-Not to be started until asked.
-
-### 60. Submit: same item, a pack size the Pricelist doesn't have yet
-
-Raised 2026-09-20 submitting "Urid Gota", 8 × $11.50 = $92, 24 kg. It is the
-same product as "Urid Gota Whole" (DAL-0005) on the Pricelist, but in a pack
-size that item doesn't have.
-
-Choosing the existing item leaves nowhere to say so. The pack dropdown on the
-line (`line-match.tsx`) lists only the packs that item already has:
-
-- With two or more packs, submitting is blocked until one of them is picked,
-  so the only ways through are to pick a pack that is wrong or to let the line
-  create a duplicate item.
-- With exactly one pack, the line is filed against it silently
-  (`chosenItem` in `expense-matching.ts`), so an 8 × 3 kg purchase can be
-  recorded against the 10 kg pack and the cost per kg comes out wrong.
-
-Wanted: "+ a pack size this item doesn't have yet" in that dropdown, opening
-the same fields as the item page (comes as, how much it holds, smaller packs
-inside), filled in from the line's quantity and unit where they can be. The
-new pack is created with the item's offer when the expense is submitted, and
-is marked as needing review like any other new master data.
-
-Also worth checking while in there: what the pack picker offers when the line
-quantity clearly doesn't fit any existing pack, and whether a warning is due
-in the one-pack case above.
-
-Not to be started until asked.
 
 ### 18. Keep submitting, approving and paying with different people
 
@@ -211,6 +115,43 @@ No-ABN withholding may apply when a contractor doesn't quote an ABN. Confirm
 with FMB's accountant whether it does.
 
 ## Done
+
+### 61. A voucher or discount below the total is taken off
+
+Fixed 2026-09-20. A Campbells invoice printed "TOTAL 1498.31", "Customer
+Voucher 5 74.51", "VISA EFT 1423.80"; the reading kept 1498.31 and left the
+voucher in its note, so the claim was $74.51 more than the card was charged.
+The model now reports what was actually paid and what the deduction was
+called, and the app turns the difference into a GST-free discount line. On the
+real invoice: 17 lines adding to $1,423.80, twice in a row. Saying it in prose
+instead was tried first and made the model unreliable at reading lines at all.
+
+### 62. A discount can be entered as a percentage
+
+Done 2026-09-20. A discount line takes a % in place of its quantity, works the
+amount out from the goods and service lines before charges, and follows them
+as they change. The amount is still what is stored and stays editable; typing
+over it drops the percentage.
+
+### 60. Submit: a pack size the item doesn't have yet
+
+Done 2026-09-20. The pack dropdown shows whenever an item is known — including
+when it has only one pack, which used to be filed against silently — and
+offers a new pack size, filled in from the line (8 at 24 kg is 3 kg each). The
+pack and the vendor's offer are created on submit, contents confirmed, and an
+identical pack is reused rather than doubled.
+
+### 63. The money flags sit beside the Total, in red
+
+Done 2026-09-20. Money not on the receipt, a changed total and an unexplained
+difference now sit under the Total rather than in the chip row above, and are
+red (`--color-alert`) on the expense page, in Approvals and on the line.
+
+Found and fixed while checking it: the loading screen from #57 counted its
+wait with a one-second timer, which re-rendered the Suspense fallback
+continuously and stopped React committing the page behind it — any navigation
+could hang on "Loading…" until a reload. It is now revealed entirely by CSS
+and never sets state.
 
 ### 54. Item Details: "Measured in" shows the old unit after saving
 

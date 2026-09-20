@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordVendorChange } from "@/lib/vendor-history";
 import { canonicalUnitCode } from "@/lib/units";
 import { packShapeFromDescription, type PackShape } from "@/lib/pack-shape";
-import { packagingFromText } from "@/lib/pack-description";
+import { isPackaging, packagingFromText } from "@/lib/pack-description";
 
 function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -887,4 +887,67 @@ export async function matchOrCreateOffer(
 
   const offer = await offerForPack(admin, { vendorId, packSizeId, packPrice, userId });
   return { ...offer, categoryId: item.categoryId };
+}
+
+/**
+ * A pack size the submitter described on the line, because the item is the
+ * right one but the Pricelist has never held this pack (#60).
+ *
+ * The alternative was picking a pack that is wrong — filing 8 × 3 kg against
+ * the 10 kg box, which puts the cost per kilo out by a factor of three — or
+ * letting the line create a second item for the same product.
+ *
+ * Contents are confirmed by definition: a person has just typed what is in
+ * it. An identical pack already on the item is reused rather than doubled.
+ */
+export async function createChosenPackSize(
+  admin: SupabaseClient,
+  {
+    itemId,
+    soldAs,
+    innerQuantity,
+    innerUnitId,
+    packCount,
+    userId,
+  }: {
+    itemId: string;
+    /** "loose", or what it comes in — box, bag, carton. */
+    soldAs: string;
+    innerQuantity: number;
+    innerUnitId: string;
+    packCount: number;
+    userId: string | null;
+  }
+): Promise<string | null> {
+  const loose = soldAs === "loose";
+  const quantity = loose ? 1 : innerQuantity;
+  const count = loose ? 1 : packCount;
+  if (!innerUnitId || !(quantity > 0) || !(count > 0)) return null;
+
+  const { data: existing } = await admin
+    .from("item_pack_sizes")
+    .select("id")
+    .eq("item_id", itemId)
+    .eq("inner_quantity", quantity)
+    .eq("inner_unit_id", innerUnitId)
+    .eq("pack_count", count)
+    .maybeSingle();
+  if (existing) return existing.id as string;
+
+  const { data: created, error } = await admin
+    .from("item_pack_sizes")
+    .insert({
+      item_id: itemId,
+      inner_quantity: quantity,
+      inner_unit_id: innerUnitId,
+      pack_count: count,
+      sold_loose: loose,
+      packaging: loose ? null : isPackaging(soldAs) ? soldAs : null,
+      contents_confirmed: true,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return created.id as string;
 }

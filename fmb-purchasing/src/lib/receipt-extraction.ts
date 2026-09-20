@@ -13,6 +13,7 @@ import { isEmail, parseEmailReceipt } from "@/lib/email-receipt";
 import { LINE_KINDS, SUBSTANTIVE_KINDS } from "@/lib/line-kinds";
 import type { LineKind, StoredLineKind } from "@/lib/line-kinds";
 import { closerToTotal, linesShortfall } from "@/lib/extraction-completeness";
+import { applyDeduction } from "@/lib/receipt-deduction";
 
 export { LINE_KINDS, SUBSTANTIVE_KINDS };
 export type { LineKind, StoredLineKind };
@@ -225,7 +226,20 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
         },
         subtotal: { type: ["number", "null"], description: "Total excluding GST." },
         gstAmount: { type: ["number", "null"] },
-        total: { type: ["number", "null"], description: "Total including GST." },
+        total: { type: ["number", "null"], description: "Total including GST, as the receipt prints it." },
+        amountCharged: {
+          type: ["number", "null"],
+          description:
+            "What was actually paid, when the receipt shows a smaller figure below the total because something " +
+            "was taken off it — a voucher, store credit, loyalty redemption, rebate or 'less discount' — followed " +
+            "by a card, EFT or cash line. Null when nothing was taken off, which is the usual case. A surcharge " +
+            "added after the total does not belong here. Do not change the line items for this: the app turns the " +
+            "difference into a discount line itself.",
+        },
+        deductionDescription: {
+          type: ["string", "null"],
+          description: "What the receipt calls that deduction, e.g. 'Customer Voucher 5'. Null when there is none.",
+        },
         payee: {
           type: ["object", "null"],
           additionalProperties: false,
@@ -255,6 +269,8 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
         "subtotal",
         "gstAmount",
         "total",
+        "amountCharged",
+        "deductionDescription",
         "payee",
         "note",
       ],
@@ -581,5 +597,10 @@ function readResponse(response: Anthropic.Message): { receipt: ExtractedReceipt;
     })),
   };
 
-  return { receipt, toolUseId: toolUse.id };
+  // A voucher or credit taken off below the total becomes a discount line,
+  // and the total becomes what was actually charged (#61).
+  return {
+    receipt: applyDeduction(receipt, num(raw.amountCharged), str(raw.deductionDescription)),
+    toolUseId: toolUse.id,
+  };
 }

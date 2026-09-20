@@ -42,6 +42,10 @@ import {
 import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image-resize";
 import { normalizeReceiptDate } from "@/lib/format";
 import { round2, sumLines, residualFor, claimVsReceipt, totalChangedFromScan } from "@/lib/expense-money";
+import { discountAmount, discountBase } from "@/lib/discount-percent";
+import { packDefaultsForLine, packFromFields } from "@/lib/new-pack";
+import type { PackFieldValues } from "../pricelist/pack-fields";
+import type { PackUnit } from "./line-match";
 import { categoriesForLineGroup, lineGroupFor } from "@/lib/categories";
 import { BLURRY_BELOW, measureSharpness } from "@/lib/image-quality";
 import { applyLineDefaults, hasDefaults } from "@/lib/supplier-defaults";
@@ -58,6 +62,17 @@ type ReviewItem = LineItemInput & {
   itemNumber: string;
   /** Added by the app to account for the receipt total, not read from the receipt. */
   autoAdded?: boolean;
+  /**
+   * A discount entered as a percentage (#62). Kept on the form only: the
+   * amount is what is stored, and this is how it was arrived at, so it keeps
+   * the amount current as the lines it comes off change.
+   */
+  discountPercent?: number | null;
+  /**
+   * A pack size this item doesn't have yet, as the submitter is describing it
+   * (#60). Turned into newPack on the way to the server.
+   */
+  newPackFields?: PackFieldValues | null;
   /**
    * The Pricelist item and pack this line is filed against, as the form shows
    * it. Undefined until it has been looked for; null where there is nothing to
@@ -167,6 +182,16 @@ function toReviewItems(items: ExtractedReceipt["lineItems"]): ReviewItem[] {
   }));
 }
 
+/** The lines as the money helpers take them. */
+function asMoneyLines(items: ReviewItem[]) {
+  return items.map((it) => ({
+    kind: it.kind,
+    lineTotal: it.lineTotal,
+    gstApplicable: it.gstApplicable,
+    notOnReceipt: it.notOnReceipt === true,
+  }));
+}
+
 function blankItem(kind: StoredLineKind = "goods", lineTotal = 0): ReviewItem {
   const isCharge = kind !== "goods" && kind !== "service";
   return {
@@ -250,6 +275,7 @@ function withBookedResidual(items: ReviewItem[], receiptTotal: number): ReviewIt
 export function SubmitForm({
   categories,
   vendors,
+  units,
   myName,
   editExpense,
   resubmitFrom,
@@ -258,6 +284,8 @@ export function SubmitForm({
   /** Leaf categories, sorted, each tagged with the line kinds it suits. */
   categories: PickableCategory[];
   vendors: VendorOption[];
+  /** Units, for describing a pack size on a line (#60). */
+  units: PackUnit[];
   myName: string;
   editExpense?: ExpenseForEdit | null;
   /** A declined expense to start a corrected, new submission from. */
@@ -897,6 +925,7 @@ export function SubmitForm({
     <ReviewForm
       categories={categories}
       vendors={vendors}
+      units={units}
       myName={myName}
       vendorName={vendorName}
       setVendorName={setVendorName}
@@ -940,6 +969,7 @@ function ReviewForm(props: {
   /** Leaf categories, sorted, each tagged with the line kinds it suits. */
   categories: PickableCategory[];
   vendors: VendorOption[];
+  units: PackUnit[];
   myName: string;
   vendorName: string;
   setVendorName: (v: string) => void;
@@ -1208,6 +1238,53 @@ function ReviewForm(props: {
    * Mark a line as claimed but not on the receipt (#51). GST goes off with it:
    * without a tax invoice showing the line there is no GST credit to claim.
    */
+  // A discount entered as a percentage follows the lines it comes off (#62):
+  // add an item, and 5% off is 5% off the larger figure. An effect, because
+  // the lines are state this has to write back to.
+  const percentBase = discountBase(asMoneyLines(props.items));
+  useEffect(() => {
+    props.setItems((prev) => {
+      let changed = false;
+      const next = prev.map((it) => {
+        if (it.kind !== "discount" || it.discountPercent == null) return it;
+        const amount = discountAmount(asMoneyLines(prev), it.discountPercent);
+        if (amount == null || amount === it.lineTotal) return it;
+        changed = true;
+        return { ...it, lineTotal: amount };
+      });
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [percentBase]);
+
+  /** Typing a percentage sets the amount; clearing it leaves the amount as it is. */
+  function setDiscountPercent(key: string, typed: string) {
+    const percent = typed.trim() === "" ? null : Number(typed);
+    props.setItems((prev) =>
+      prev.map((it) => {
+        if (it.key !== key) return it;
+        const amount = discountAmount(asMoneyLines(prev), percent);
+        return { ...it, discountPercent: percent, ...(amount == null ? {} : { lineTotal: amount }) };
+      })
+    );
+  }
+
+  /**
+   * Describe a pack the item doesn't have (#60), or stop describing one.
+   *
+   * Opens on what the line already says — eight cases of something at 24 kg
+   * is 3 kg a case — so the usual answer is to glance at it and carry on.
+   */
+  function setNewPack(key: string, on: boolean) {
+    props.setItems((prev) =>
+      prev.map((it) => {
+        if (it.key !== key) return it;
+        if (!on) return { ...it, newPackFields: null };
+        return { ...it, packSizeId: null, newPackFields: packDefaultsForLine(it, props.units) };
+      })
+    );
+  }
+
   function setNotOnReceipt(key: string, on: boolean) {
     props.setItems((prev) =>
       prev.map((it) =>
@@ -1279,12 +1356,7 @@ function ReviewForm(props: {
     });
   }
 
-  const moneyLines = props.items.map((it) => ({
-    kind: it.kind,
-    lineTotal: it.lineTotal,
-    gstApplicable: it.gstApplicable,
-    notOnReceipt: it.notOnReceipt === true,
-  }));
+  const moneyLines = asMoneyLines(props.items);
   const comparison = claimVsReceipt(moneyLines, props.total);
   // Only worth a warning when it is a real part of the receipt, not pennies.
   const unitemised = props.items.find(
@@ -1313,9 +1385,17 @@ function ReviewForm(props: {
     }
     // Which pack decides what the quantity means — sixteen boxes or sixteen
     // kilos — so it is never guessed on the way in.
-    const packless = goods.find((it) => it.itemId && !it.packSizeId && (it.match?.packs.length ?? 0) > 1);
+    // Describing a pack the item doesn't have counts as choosing one (#60).
+    const packless = goods.find(
+      (it) => it.itemId && !it.packSizeId && !it.newPackFields && (it.match?.packs.length ?? 0) > 1
+    );
     if (packless) {
       setError(`Choose which pack of ${packless.match?.itemName ?? "the item"} "${packless.description}" is.`);
+      return;
+    }
+    const halfDescribed = props.items.find((it) => it.newPackFields && !packFromFields(it.newPackFields));
+    if (halfDescribed) {
+      setError(`Say how much one pack of "${halfDescribed.description}" holds, and in what unit.`);
       return;
     }
     const offWithoutNote = props.items.find(
@@ -1348,8 +1428,14 @@ function ReviewForm(props: {
         payee: props.payee,
         lineItems: props.items
           .filter((it) => it.description.trim())
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          .map(({ key: _key, itemNumber: _itemNumber, match: _match, autoAdded: _autoAdded, ...rest }) => rest),
+          .map(
+            ({
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              key: _key, itemNumber: _itemNumber, match: _match, autoAdded: _autoAdded, discountPercent: _pct,
+              newPackFields,
+              ...rest
+            }) => ({ ...rest, newPack: packFromFields(newPackFields) })
+          ),
       };
       const result = props.editExpenseId
         ? await updateExpense(props.editExpenseId, payload)
@@ -1556,6 +1642,10 @@ function ReviewForm(props: {
                 onReject={() => rejectMatch(item.key)}
                 onChoosePack={(packSizeId) => choosePack(item.key, packSizeId)}
                 onChooseItem={(itemId) => chooseItem(item.key, itemId)}
+                units={props.units}
+                newPack={item.newPackFields ?? null}
+                onNewPack={(on) => setNewPack(item.key, on)}
+                onNewPackChange={(values) => updateItem(item.key, { newPackFields: values })}
               />
             )}
 
@@ -1568,17 +1658,30 @@ function ReviewForm(props: {
 
             <div className="grid grid-cols-3 gap-2">
               <label className="flex flex-col gap-0.5 text-xs text-ink/55">
-                Qty
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={item.quantity ?? ""}
-                  disabled={item.kind !== "goods"}
-                  onChange={(e) =>
-                    updateItem(item.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })
-                  }
-                  className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink disabled:bg-ink/5"
-                />
+                {item.kind === "discount" ? "% off" : "Qty"}
+                {item.kind === "discount" ? (
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={item.discountPercent ?? ""}
+                    onChange={(e) => setDiscountPercent(item.key, e.target.value)}
+                    placeholder="%"
+                    className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink"
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={item.quantity ?? ""}
+                    disabled={item.kind !== "goods"}
+                    onChange={(e) =>
+                      updateItem(item.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })
+                    }
+                    className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink disabled:bg-ink/5"
+                  />
+                )}
               </label>
               <label className="flex flex-col gap-0.5 text-xs text-ink/55">
                 Unit price
@@ -1600,7 +1703,7 @@ function ReviewForm(props: {
                   inputMode="decimal"
                   step="0.01"
                   value={item.lineTotal}
-                  onChange={(e) => updateItem(item.key, { lineTotal: Number(e.target.value) })}
+                  onChange={(e) => updateItem(item.key, { lineTotal: Number(e.target.value), discountPercent: null })}
                   className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink"
                 />
               </label>
@@ -1728,16 +1831,33 @@ function ReviewForm(props: {
                   />
                 </td>
                 <td className="p-1">
-                  <input
-                    type="number"
-                    value={item.quantity ?? ""}
-                    disabled={item.kind !== "goods"}
-                    onChange={(e) =>
-                      updateItem(item.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })
-                    }
-                    className="w-16 rounded border border-ink/10 bg-white px-2 py-1 font-mono disabled:bg-ink/5"
-                    aria-label="Quantity"
-                  />
+                  {item.kind === "discount" ? (
+                    <div className="flex items-center gap-0.5">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.discountPercent ?? ""}
+                        onChange={(e) => setDiscountPercent(item.key, e.target.value)}
+                        placeholder="%"
+                        title={"Percentage off " + formatMoney(percentBase) + " of goods and services"}
+                        className="w-14 rounded border border-ink/10 bg-white px-2 py-1 font-mono"
+                        aria-label="Discount percentage"
+                      />
+                      <span className="text-xs text-ink/40">%</span>
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      value={item.quantity ?? ""}
+                      disabled={item.kind !== "goods"}
+                      onChange={(e) =>
+                        updateItem(item.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })
+                      }
+                      className="w-16 rounded border border-ink/10 bg-white px-2 py-1 font-mono disabled:bg-ink/5"
+                      aria-label="Quantity"
+                    />
+                  )}
                 </td>
                 <td className="p-1">
                   <input
@@ -1756,7 +1876,7 @@ function ReviewForm(props: {
                     type="number"
                     step="0.01"
                     value={item.lineTotal}
-                    onChange={(e) => updateItem(item.key, { lineTotal: Number(e.target.value) })}
+                    onChange={(e) => updateItem(item.key, { lineTotal: Number(e.target.value), discountPercent: null })}
                     className="w-24 rounded border border-ink/10 bg-white px-2 py-1 font-mono"
                     aria-label="Line total"
                   />
@@ -1809,6 +1929,10 @@ function ReviewForm(props: {
                   onReject={() => rejectMatch(item.key)}
                   onChoosePack={(packSizeId) => choosePack(item.key, packSizeId)}
                   onChooseItem={(itemId) => chooseItem(item.key, itemId)}
+                  units={props.units}
+                  newPack={item.newPackFields ?? null}
+                  onNewPack={(on) => setNewPack(item.key, on)}
+                  onNewPackChange={(values) => updateItem(item.key, { newPackFields: values })}
                 />
               )}
               </Fragment>

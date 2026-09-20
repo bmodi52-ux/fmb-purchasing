@@ -1,6 +1,12 @@
 "use client";
 
+import { PackFields, type PackFieldValues } from "../pricelist/pack-fields";
 import type { LineMatchResult } from "./actions";
+
+export type PackUnit = { id: string; code: string; label: string };
+
+/** The pack dropdown's value for "one this item doesn't have yet" (#60). */
+const NEW_PACK = "__new__";
 
 /**
  * What a goods line will be filed against, shown under the line itself.
@@ -18,6 +24,10 @@ export function LineMatchRow({
   onReject,
   onChoosePack,
   onChooseItem,
+  units,
+  newPack,
+  onNewPack,
+  onNewPackChange,
   layout = "row",
 }: {
   description: string;
@@ -26,6 +36,11 @@ export function LineMatchRow({
   onReject: () => void;
   onChoosePack: (packSizeId: string | null) => void;
   onChooseItem: (itemId: string) => void;
+  units: PackUnit[];
+  /** The pack being described because the item has no such pack (#60). */
+  newPack: PackFieldValues | null;
+  onNewPack: (on: boolean) => void;
+  onNewPackChange: (values: PackFieldValues) => void;
   /** "row" under a table row; "stack" inside the card a phone shows instead. */
   layout?: "row" | "stack";
 }) {
@@ -38,6 +53,10 @@ export function LineMatchRow({
       onReject={onReject}
       onChoosePack={onChoosePack}
       onChooseItem={onChooseItem}
+      units={units}
+      newPack={newPack}
+      onNewPack={onNewPack}
+      onNewPackChange={onNewPackChange}
     />
   );
 
@@ -59,12 +78,20 @@ function MatchSummary({
   onReject,
   onChoosePack,
   onChooseItem,
+  units,
+  newPack,
+  onNewPack,
+  onNewPackChange,
 }: {
   match: LineMatchResult | null | undefined;
   onConfirm: () => void;
   onReject: () => void;
   onChoosePack: (packSizeId: string | null) => void;
   onChooseItem: (itemId: string) => void;
+  units: PackUnit[];
+  newPack: PackFieldValues | null;
+  onNewPack: (on: boolean) => void;
+  onNewPackChange: (values: PackFieldValues) => void;
 }) {
   if (match === undefined) {
     return <span className="text-ink/40">Looking for this on the Pricelist…</span>;
@@ -106,7 +133,7 @@ function MatchSummary({
   }
 
   const sure = match.confidence === "sure";
-  const needsPack = match.packs.length > 1 && !match.packSizeId;
+  const needsPack = match.packs.length > 1 && !match.packSizeId && !newPack;
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -114,27 +141,45 @@ function MatchSummary({
       <span className="text-ink">{match.itemName}</span>
       {match.itemNumber && <span className="font-mono text-ink/45">{match.itemNumber}</span>}
 
-      {match.packs.length > 1 ? (
+      {/* A dropdown even when the item has one pack: the pack it has may not
+          be the one on this line, and that used to be filed silently against
+          it — eight 3 kg bags recorded as the 10 kg box (#60). */}
+      {match.packs.length > 0 ? (
         <select
-          value={match.packSizeId ?? ""}
-          onChange={(e) => onChoosePack(e.target.value || null)}
+          value={newPack ? NEW_PACK : (match.packSizeId ?? "")}
+          onChange={(e) => {
+            if (e.target.value === NEW_PACK) onNewPack(true);
+            else {
+              onNewPack(false);
+              onChoosePack(e.target.value || null);
+            }
+          }}
           aria-label={`Which pack of ${match.itemName}`}
           className={`rounded border bg-white px-1.5 py-0.5 ${needsPack ? "border-maroon/50" : "border-ink/15"}`}
         >
-          <option value="">— which pack? —</option>
+          {match.packs.length > 1 && <option value="">— which pack? —</option>}
           {match.packs.map((p) => (
             <option key={p.id} value={p.id}>
               {p.title}
             </option>
           ))}
+          <option value={NEW_PACK}>+ a pack size this item doesn&apos;t have yet</option>
         </select>
-      ) : match.packs.length === 1 ? (
-        <span className="text-ink/60">· {match.packs[0]!.title}</span>
       ) : (
         <span className="text-ink/50">· no pack sizes yet, one will be added</span>
       )}
 
       {needsPack && <span className="text-maroon">Choose the pack before submitting</span>}
+
+      {newPack && (
+        <div className="mt-1 w-full rounded-md border border-gold/40 bg-gold/5 p-2">
+          <p className="mb-2 text-ink/70">
+            A pack size {match.itemName} doesn&apos;t have yet. It is added to the Pricelist, for review, when you
+            submit.
+          </p>
+          <PackFields units={units} defaults={newPack} onChange={onNewPackChange} />
+        </div>
+      )}
 
       {sure ? (
         <button type="button" onClick={onReject} className="text-ink/45 underline hover:text-ink">

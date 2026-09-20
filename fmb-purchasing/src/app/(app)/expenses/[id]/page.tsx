@@ -164,20 +164,23 @@ export default async function ExpenseDetailPage({
     })
       ? [(attachmentCount ?? 0) > 0 ? "GST over $82.50, but the vendor has no ABN recorded" : "GST over $82.50, but no receipt is attached"]
       : []),
-    // Money claimed that the receipt doesn't show, a changed total, or a
-    // difference nobody explained (#51).
-    ...receiptFlags({
-      receiptTotal: expense.receipt_total == null ? null : Number(expense.receipt_total),
-      receiptTotalScanned: expense.receipt_total_scanned == null ? null : Number(expense.receipt_total_scanned),
-      receiptTotalNote: expense.receipt_total_note ?? null,
-      lines: (lineItems ?? []).map((l) => ({
-        description: l.description_raw as string,
-        lineTotal: Number(l.line_total),
-        notOnReceipt: l.not_on_receipt === true,
-        notOnReceiptNote: (l.not_on_receipt_note as string | null) ?? null,
-      })),
-    }).map((f) => f.label),
   ];
+
+  // Money claimed that the receipt doesn't show, a changed total, or a
+  // difference nobody explained (#51). Shown beside the Total rather than in
+  // the chips above, where it sat several inches from the figure it is about
+  // and beside unrelated price alerts (#63).
+  const moneyFlags = receiptFlags({
+    receiptTotal: expense.receipt_total == null ? null : Number(expense.receipt_total),
+    receiptTotalScanned: expense.receipt_total_scanned == null ? null : Number(expense.receipt_total_scanned),
+    receiptTotalNote: expense.receipt_total_note ?? null,
+    lines: (lineItems ?? []).map((l) => ({
+      description: l.description_raw as string,
+      lineTotal: Number(l.line_total),
+      notOnReceipt: l.not_on_receipt === true,
+      notOnReceiptNote: (l.not_on_receipt_note as string | null) ?? null,
+    })),
+  });
 
   // Prices past their alert limit and spend well above the vendor's usual
   // (#29, #42), for anything still counted as spend.
@@ -367,6 +370,18 @@ export default async function ExpenseDetailPage({
               <span className="text-base font-semibold">{money(expense.total)}</span>
               {expense.receipt_total != null && Math.abs(Number(expense.receipt_total) - Number(expense.total)) > 0.01 && (
                 <span className="block text-xs text-ink/55">receipt says {money(Number(expense.receipt_total))}</span>
+              )}
+              {moneyFlags.length > 0 && (
+                <ul className="mt-1.5 flex flex-col gap-1">
+                  {moneyFlags.map((f) => (
+                    <li
+                      key={f.label}
+                      className="rounded-md border border-alert/40 bg-alert/10 px-2 py-1 text-xs leading-snug font-medium text-alert"
+                    >
+                      {f.label}
+                    </li>
+                  ))}
+                </ul>
               )}
             </Field>
           </dl>
@@ -646,7 +661,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function NotOnReceiptBadge({ line }: { line: { not_on_receipt?: boolean | null; not_on_receipt_note?: string | null } }) {
   if (!line.not_on_receipt) return null;
   return (
-    <span className="mt-0.5 block text-xs text-maroon">
+    <span className="mt-0.5 block text-xs font-medium text-alert">
       Not on the receipt{line.not_on_receipt_note ? ` — ${line.not_on_receipt_note}` : ""}
     </span>
   );

@@ -17,6 +17,7 @@ import {
   chosenItem,
   chosenOffer,
   chosenPack,
+  createChosenPackSize,
   preferredVendor,
 } from "@/lib/expense-matching";
 import {
@@ -803,6 +804,12 @@ export type LineItemInput = {
    */
   packSizeId?: string | null;
   /**
+   * A pack size this item does not have yet, described on the line (#60): the
+   * product is on the Pricelist, this size of it is not. Created with the
+   * offer when the expense is submitted.
+   */
+  newPack?: { soldAs: string; innerQuantity: number; innerUnitId: string; packCount: number } | null;
+  /**
    * What this line is. Only "goods" is a purchase; the rest exist so the lines
    * add up to the total printed on the receipt — see migration 0026.
    */
@@ -915,7 +922,15 @@ async function buildLineRows(
           normalizedQuantity: item.normalizedQuantity,
         },
       };
+      // A pack size the submitter described because the item has no such pack
+      // (#60) is created first, so the line files against it like any other.
+      const newPackSizeId =
+        item.itemId && item.newPack
+          ? await createChosenPackSize(admin, { itemId: item.itemId, ...item.newPack, userId })
+          : null;
+
       const chosen =
+        (newPackSizeId ? await chosenPack(admin, { ...pin, packSizeId: newPackSizeId }) : null) ??
         (item.pricelistItemId ? await chosenOffer(admin, { ...pin, offerId: item.pricelistItemId }) : null) ??
         (item.packSizeId ? await chosenPack(admin, { ...pin, packSizeId: item.packSizeId }) : null) ??
         (item.itemId ? await chosenItem(admin, { ...pin, itemId: item.itemId }) : null);
