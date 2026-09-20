@@ -7,7 +7,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { formatPlainDate } from "@/lib/format";
 import { formatHijri, gregorianToHijri } from "@/lib/hijri/hijri";
-import { batchesFor, boxesFilled, costMenuDay, portionLabel, PRICE_BASIS_LABEL } from "@/lib/menu-costing";
+import { batchesFor, costMenuDay, portionLabel, PRICE_BASIS_LABEL } from "@/lib/menu-costing";
 import { loadDishes, loadItemPrices, loadKitchens } from "../data";
 import { addDishToDay, copyMenuFromDay, removeDishFromDay, setDayCounts } from "../actions";
 
@@ -171,7 +171,6 @@ export default async function MenuDayPage({
             {dishes.map((dish) => {
               const row = onDay.find((d) => d.dish_id === dish.dishId);
               const batches = batchesFor(dish, thaalis);
-              const filled = boxesFilled(dish, thaalis);
               return (
                 <li
                   key={dish.dishId}
@@ -182,9 +181,8 @@ export default async function MenuDayPage({
                   </Link>
                   <span className="text-ink/55">
                     {dish.basis === "batch"
-                      ? `${batches} ${batches === 1 ? "batch" : "batches"} of ${dish.batchBoxes} × ${portionLabel(dish.portionMl)}`
+                      ? `${batches} × the batch of ${dish.batchBoxes} × ${portionLabel(dish.portionMl)}`
                       : `${thaalis} × ${portionLabel(dish.portionMl)}`}
-                    {filled > thaalis && <span className="text-alert"> · fills {filled} boxes</span>}
                   </span>
                   {canManage && row && (
                     <form action={removeDishFromDay}>

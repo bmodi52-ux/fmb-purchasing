@@ -44,26 +44,20 @@ export type MenuDish = {
 };
 
 /**
- * How many times a recipe is made for a given number of thaalis.
+ * How many times over a recipe is made for a given number of thaalis.
  *
  * One box of the dish goes in each thaali, so the boxes to fill are the
- * thaalis. A per-box recipe scales exactly to them. A batch recipe cannot be
- * made in fractions — half a pot of bhuna gosht is not a thing anyone cooks —
- * so it rounds up, and what the rounding adds is worth showing rather than
- * hiding: 250 boxes from a batch that fills 200 is two batches, and the
- * kitchen fills 400.
+ * thaalis. A per-box recipe scales to them one for one; a batch recipe scales
+ * by the share of a batch needed, and it is allowed to be a fraction — the
+ * kitchen scales a recipe down rather than cooking a whole pot it does not
+ * need, so 250 boxes from a batch of 200 is 1.25 batches, not two.
  */
 export function batchesFor(dish: Pick<MenuDish, "basis" | "batchBoxes">, thaalis: number): number {
   if (thaalis <= 0) return 0;
   if (dish.basis === "box") return thaalis;
   const size = dish.batchBoxes ?? 0;
   if (size <= 0) return 0;
-  return Math.ceil(thaalis / size);
-}
-
-/** Boxes a batch recipe actually fills at that scale, which may exceed the count. */
-export function boxesFilled(dish: Pick<MenuDish, "basis" | "batchBoxes">, thaalis: number): number {
-  return dish.basis === "box" ? thaalis : batchesFor(dish, thaalis) * (dish.batchBoxes ?? 0);
+  return Math.round((thaalis / size) * 1000) / 1000;
 }
 
 export type RequirementLine = {
@@ -180,9 +174,8 @@ export function costMenuDay(
     lines,
     total,
     unpriced: lines.filter((l) => l.cost == null).length,
-    // Divided by what is being served, not by what the batches happen to
-    // fill: the question is what a thaali costs, and the extra from rounding
-    // a batch up is part of that cost.
+    // Divided by what is being served, which is also what was cooked, since
+    // a recipe scales to what is needed rather than to a whole pot.
     perThaali: thaalis > 0 ? round2(total / thaalis) : null,
   };
 }

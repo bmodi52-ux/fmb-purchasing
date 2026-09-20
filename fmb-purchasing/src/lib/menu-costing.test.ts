@@ -6,7 +6,6 @@ import {
   costMenuDay,
   priceFor,
   requirementsFor,
-  boxesFilled,
   type MenuDish,
 } from "./menu-costing";
 
@@ -49,9 +48,9 @@ const kadhi: MenuDish = {
 };
 
 describe("batchesFor", () => {
-  test("a batch recipe cannot be made in fractions", () => {
+  test("a batch recipe scales to what is needed, fractions and all", () => {
     assert.equal(batchesFor(bhunaGosht, 200), 1);
-    assert.equal(batchesFor(bhunaGosht, 201), 2, "one thaali over is another pot");
+    assert.equal(batchesFor(bhunaGosht, 250), 1.25, "the kitchen scales the recipe down, not up to two pots");
     assert.equal(batchesFor(bhunaGosht, 400), 2);
   });
 
@@ -64,10 +63,7 @@ describe("batchesFor", () => {
     assert.equal(batchesFor({ basis: "batch", batchBoxes: null }, 100), 0, "a batch recipe with no size");
   });
 
-  test("what a rounded-up batch actually fills", () => {
-    assert.equal(boxesFilled(bhunaGosht, 250), 400, "two batches of 200 boxes");
-    assert.equal(boxesFilled(kadhi, 250), 250);
-  });
+
 });
 
 describe("requirementsFor", () => {
@@ -85,9 +81,10 @@ describe("requirementsFor", () => {
     assert.equal(yoghurt.baseUnitCode, "kg");
   });
 
-  test("a second batch doubles what it takes", () => {
-    const lines = requirementsFor([bhunaGosht], 201);
-    assert.equal(lines.find((l) => l.itemId === "i-goat")?.quantity, 240);
+  test("a quarter more thaalis is a quarter more of everything", () => {
+    const lines = requirementsFor([bhunaGosht], 250);
+    assert.equal(lines.find((l) => l.itemId === "i-goat")?.quantity, 150, "120 kg × 1.25");
+    assert.equal(lines.find((l) => l.itemId === "i-onion")?.quantity, 100);
   });
 
   test("lines read in name order, and nothing is needed for no thaalis", () => {
@@ -140,10 +137,11 @@ describe("costMenuDay", () => {
     assert.equal(cost.lines.find((l) => l.itemId === "i-yoghurt")?.cost, null);
   });
 
-  test("the cost of rounding a batch up lands on the thaalis being served", () => {
-    const cost = costMenuDay([bhunaGosht], 201, prices);
-    assert.equal(cost.total, 3680, "two batches");
-    assert.equal(cost.perThaali, 18.31, "not halved because the second pot filled 200 more boxes");
+  test("cost per thaali holds steady as the count moves, because nothing is rounded", () => {
+    const at200 = costMenuDay([bhunaGosht], 200, prices);
+    const at250 = costMenuDay([bhunaGosht], 250, prices);
+    assert.equal(at250.total, 2300, "1.25 × 1,840");
+    assert.equal(at250.perThaali, at200.perThaali);
   });
 
   test("no thaalis, no cost per thaali", () => {
@@ -162,10 +160,10 @@ describe("portionLabel", () => {
 describe("two dishes in different boxes on the same day", () => {
   // 250 thaalis: bhuna gosht from a 200-box batch, kadhi portioned per box.
   test("each dish scales in its own boxes", () => {
-    assert.equal(batchesFor(bhunaGosht, 250), 2, "1 L boxes, from a batch of 200");
+    assert.equal(batchesFor(bhunaGosht, 250), 1.25, "1 L boxes, from a batch of 200");
     assert.equal(batchesFor(kadhi, 250), 250, "650 ml boxes, one at a time");
     const lines = requirementsFor([bhunaGosht, kadhi], 250);
-    assert.equal(lines.find((l) => l.itemId === "i-goat")?.quantity, 240, "two batches");
+    assert.equal(lines.find((l) => l.itemId === "i-goat")?.quantity, 150, "1.25 batches");
     assert.equal(lines.find((l) => l.itemId === "i-yoghurt")?.quantity, 100, "400 g × 250 boxes");
   });
 });
