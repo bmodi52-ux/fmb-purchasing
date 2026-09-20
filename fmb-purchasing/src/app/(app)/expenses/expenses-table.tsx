@@ -93,6 +93,7 @@ export function ExpensesTable({ rows, initialVisible }: { rows: ExpenseRow[]; in
       columns={ALL_COLUMNS}
       rows={rows}
       initialVisible={initialVisible}
+      amountOf={(r) => r.total}
       emptyLabel="No expenses yet."
     />
   );

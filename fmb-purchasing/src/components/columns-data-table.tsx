@@ -8,6 +8,7 @@ import { ColumnsMenu } from "./columns-menu";
 import { ExportToolbar } from "./export-toolbar";
 import { useReportPending } from "./pending";
 import { ColumnFilterMenu } from "./column-filter-menu";
+import { describeSelection, sumAmounts } from "@/lib/selection-summary";
 import {
   activeCount,
   isActive,
@@ -67,6 +68,7 @@ export function ColumnsDataTable<T extends { id: string }>({
   initialVisible,
   emptyLabel = "None.",
   bulkActions,
+  amountOf,
   renderExpanded,
   deriveRows,
 }: {
@@ -77,6 +79,13 @@ export function ColumnsDataTable<T extends { id: string }>({
   initialVisible: string[];
   emptyLabel?: string;
   bulkActions?: BulkAction<T>[];
+  /**
+   * What one row contributes to the total of a selection (#69). Given, the
+   * selection bar says what the rows come to as well as how many there are —
+   * the figure somebody would otherwise add up by hand before a transfer.
+   * Left out on a list with no money in it, which has nothing to total.
+   */
+  amountOf?: (row: T) => number | null;
   /** When provided, rows get a chevron that expands an extra detail row in place. */
   renderExpanded?: (row: T) => React.ReactNode;
   /**
@@ -392,7 +401,9 @@ export function ColumnsDataTable<T extends { id: string }>({
 
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-gold/30 bg-gold/10 px-3 py-2 text-sm">
-          <span className="text-ink/70">{selected.size} selected</span>
+          <span className="text-ink/70">
+            {describeSelection(selected.size, amountOf ? sumAmounts(selectedRows.map(amountOf)) : null)}
+          </span>
           {(bulkActions ?? []).map((action) => (
             <button
               key={action.label}

@@ -10,6 +10,7 @@ import { ReceiptViewer } from "@/components/receipt-viewer";
 import type { ExportColumn } from "@/lib/export";
 import { PayeeAccount } from "@/components/payee-account";
 import type { PaymentInstruction } from "@/lib/payment-instruction";
+import { describeSelection, sumAmounts } from "@/lib/selection-summary";
 
 export type PaymentRow = {
   id: string;
@@ -53,7 +54,17 @@ const SORT_OPTIONS: SortOption<PaymentRow>[] = [
 
 const today = new Date().toISOString().slice(0, 10);
 
-function BulkPayBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => void; onClear: () => void }) {
+function BulkPayBar({
+  ids,
+  total,
+  onDone,
+  onClear,
+}: {
+  ids: string[];
+  total: number;
+  onDone: () => void;
+  onClear: () => void;
+}) {
   const [date, setDate] = useState(today);
   const [reference, setReference] = useState("");
   const [pending, setPending] = useState(false);
@@ -104,7 +115,7 @@ function BulkPayBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => voi
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-md border border-gold/30 bg-gold/10 px-3 py-2 text-sm">
-      <span className="text-ink/70">{ids.length} selected</span>
+      <span className="text-ink/70">{describeSelection(ids.length, total)}</span>
       <input
         value={reference}
         onChange={(e) => setReference(e.target.value)}
@@ -178,12 +189,14 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
       sortOptions={SORT_OPTIONS}
     >
       {(rows, selection) => {
-        const selectedIds = rows.filter((r) => selection.isSelected(r.id)).map((r) => r.id);
+        const selectedRows = rows.filter((r) => selection.isSelected(r.id));
+        const selectedIds = selectedRows.map((r) => r.id);
         return (
           <div className="flex flex-col gap-3">
             {selectedIds.length > 0 && (
               <BulkPayBar
                 ids={selectedIds}
+                total={sumAmounts(selectedRows.map((r) => r.total))}
                 onDone={() => selectedIds.forEach((id) => selection.toggle(id))}
                 onClear={() => selectedIds.forEach((id) => selection.toggle(id))}
               />
