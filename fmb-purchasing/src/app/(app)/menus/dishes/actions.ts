@@ -151,3 +151,38 @@ export async function removeIngredient(formData: FormData) {
   revalidatePath(`/dishes/${dishId}`);
   revalidatePath("/menus");
 }
+
+/**
+ * The sizes the dish forms offer.
+ *
+ * Only two are filled today, and the rest of what the form used to list was
+ * guesswork. Rather than guess again, the list is somebody's to keep: adding
+ * a size puts it on the form, removing one takes it off. A dish already
+ * written for a size keeps it, so removing one is safe — it stops being
+ * offered, it does not repackage anything.
+ */
+export async function addBoxSize(formData: FormData): Promise<void> {
+  const user = await requireDishEditor();
+
+  const ml = Math.round(Number(formData.get("ml") ?? 0));
+  if (!Number.isFinite(ml) || ml <= 0) return;
+
+  await createAdminClient()
+    .from("box_sizes")
+    .upsert({ ml, active: true, created_by: user.id }, { onConflict: "ml" });
+
+  revalidatePath("/menus/dishes");
+}
+
+export async function removeBoxSize(formData: FormData): Promise<void> {
+  await requireDishEditor();
+
+  const ml = Math.round(Number(formData.get("ml") ?? 0));
+  if (!Number.isFinite(ml) || ml <= 0) return;
+
+  // Kept rather than deleted: a size that comes back should not look new, and
+  // the row remembers who put it there in the first place.
+  await createAdminClient().from("box_sizes").update({ active: false }).eq("ml", ml);
+
+  revalidatePath("/menus/dishes");
+}

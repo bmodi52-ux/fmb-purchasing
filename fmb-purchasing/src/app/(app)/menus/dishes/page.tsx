@@ -7,6 +7,8 @@ import { formatPlainDate } from "@/lib/format";
 import { NewDishForm } from "./new-dish-form";
 import { MenuTabs } from "../tabs";
 import { portionLabel } from "@/lib/menu-costing";
+import { loadBoxSizes } from "../data";
+import { BoxSizes } from "./box-sizes";
 
 export const metadata = { title: "Dishes" };
 
@@ -26,12 +28,13 @@ export default async function DishesPage() {
   const canManage = can(await getUserPermissions(user), "menus", "manage");
   const admin = createAdminClient();
 
-  const [{ data: dishes }, { data: ingredientCounts }, { data: served }] = await Promise.all([
+  const [{ data: dishes }, { data: ingredientCounts }, { data: served }, boxSizes] = await Promise.all([
     admin.from("dishes").select("id, name, recipe_basis, batch_boxes, portion_ml, active").order("name"),
     admin.from("dish_ingredients").select("dish_id"),
     // When each dish was last cooked, which is the history the sheet keeps
     // only by scrolling sideways through old columns.
     admin.from("menu_day_dishes").select("dish_id, menu_days ( service_date )"),
+    loadBoxSizes(admin),
   ]);
 
   const ingredientsByDish = new Map<string, number>();
@@ -65,7 +68,7 @@ export default async function DishesPage() {
 
       <MenuTabs active="dishes" />
 
-      {canManage && <NewDishForm />}
+      {canManage && <NewDishForm boxSizes={boxSizes} />}
 
       <section className="flex flex-col gap-3">
         {live.length === 0 ? (
@@ -97,6 +100,15 @@ export default async function DishesPage() {
               </li>
             ))}
           </ul>
+        )}
+
+        {canManage && (
+          <BoxSizes
+            sizes={boxSizes.map((ml) => ({
+              ml,
+              dishes: (dishes ?? []).filter((d) => d.portion_ml === ml).length,
+            }))}
+          />
         )}
 
         {retired.length > 0 && (

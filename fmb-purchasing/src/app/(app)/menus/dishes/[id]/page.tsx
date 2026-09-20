@@ -7,8 +7,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { formatPlainDate } from "@/lib/format";
 import { unitOptionLabel } from "@/lib/pack-description";
-import { costMenuDay, PORTION_SIZES_ML, portionLabel, type MenuDish } from "@/lib/menu-costing";
-import { loadDishes, loadItemPrices } from "../../data";
+import { boxSizeOptions, costMenuDay, portionLabel, type MenuDish } from "@/lib/menu-costing";
+import { loadBoxSizes, loadDishes, loadItemPrices } from "../../data";
 import { addIngredient, removeIngredient, updateDish, updateIngredient } from "../actions";
 
 export const metadata = { title: "Dish" };
@@ -30,10 +30,11 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
   const canManage = can(await getUserPermissions(user), "menus", "manage");
 
   const admin = createAdminClient();
-  const [{ data: dish }, { data: units }, { data: items }] = await Promise.all([
+  const [{ data: dish }, { data: units }, { data: items }, boxSizes] = await Promise.all([
     admin.from("dishes").select("*").eq("id", id).maybeSingle(),
     admin.from("units").select("id, code, label").order("sort_order"),
     admin.from("items").select("id, name, item_number").order("name"),
+    loadBoxSizes(admin),
   ]);
   if (!dish) notFound();
 
@@ -90,7 +91,7 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-ink/70">Goes in a</span>
                 <select key={dish.portion_ml} name="portion_ml" defaultValue={dish.portion_ml} className="input">
-                  {PORTION_SIZES_ML.map((ml) => (
+                  {boxSizeOptions(boxSizes, dish.portion_ml).map((ml) => (
                     <option key={ml} value={ml}>
                       {portionLabel(ml)}
                     </option>
