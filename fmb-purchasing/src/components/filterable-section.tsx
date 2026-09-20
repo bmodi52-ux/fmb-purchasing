@@ -5,6 +5,8 @@ import { ExportToolbar } from "./export-toolbar";
 import { useReportPending } from "./pending";
 import type { ExportColumn } from "@/lib/export";
 import { describeSelection, sumAmounts } from "@/lib/selection-summary";
+import { ColumnFilterMenu } from "./column-filter-menu";
+import { activeCount, isActive, matchesFilter, type ColumnFilters } from "./column-filter";
 
 export type SelectionApi = {
   isSelected: (id: string) => boolean;
@@ -51,6 +53,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
   getRowId,
   bulkActions,
   amountOf,
+  filterValue,
   sortOptions,
   children,
 }: {
@@ -64,6 +67,19 @@ export function FilterableSection<T extends Record<string, unknown>>({
   bulkActions?: BulkAction<T>[];
   /** What one row adds to the selection's total (#69); left out where there is no money. */
   amountOf?: (row: T) => number | null;
+  /**
+   * What each column holds, so it can be filtered on (#68).
+   *
+   * These lists own their own table markup — a payment row carries an account
+   * status and a Mark paid button that no generic table would render — so the
+   * filters cannot sit in the headings the way ColumnsDataTable puts them.
+   * They sit above the table instead, one menu per column, and the rows that
+   * come out are the rows the page draws.
+   *
+   * Falls back to reading the column's key off the row, which is what the
+   * exports already do, so a list gets filters by saying nothing at all.
+   */
+  filterValue?: (row: T, columnKey: string) => string | number | null | undefined;
   sortOptions?: SortOption<T>[];
   children: (filtered: T[], selection: SelectionApi) => React.ReactNode;
 }) {
@@ -73,6 +89,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
   // Bulk actions run through onClick rather than a form, so useFormStatus
   // can't see them — report their own busy flag instead.
   useReportPending(busyAction !== null);
+  const [filters, setFilters] = useState<ColumnFilters>({});
   const [sortKey, setSortKey] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const rowId = useMemo(
@@ -80,9 +97,22 @@ export function FilterableSection<T extends Record<string, unknown>>({
     [getRowId]
   );
 
+  const cellText = useMemo(() => {
+    const read = filterValue ?? ((row: T, key: string) => (row as Record<string, unknown>)[key] as string | number);
+    return (row: T, key: string) => {
+      const value = read(row, key);
+      return value == null ? "" : String(value);
+    };
+  }, [filterValue]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let result = q ? rows.filter((r) => searchText(r).toLowerCase().includes(q)) : rows;
+
+    for (const [key, filter] of Object.entries(filters)) {
+      if (!isActive(filter)) continue;
+      result = result.filter((r) => matchesFilter(cellText(r, key), filter));
+    }
 
     const option = (sortOptions ?? []).find((o) => o.key === sortKey);
     if (option) {
@@ -95,7 +125,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
 
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, query, sortKey, sortDir]);
+  }, [rows, query, filters, sortKey, sortDir, cellText]);
 
   const selectedRows = useMemo(() => rows.filter((r) => selected.has(rowId(r))), [rows, selected, rowId]);
   const exportSourceRows = selected.size > 0 ? selectedRows : filtered;
@@ -190,6 +220,46 @@ export function FilterableSection<T extends Record<string, unknown>>({
         </div>
         <ExportToolbar filenameBase={filenameBase} title={title} columns={columns} rows={exportSourceRows} />
       </div>
+
+      {columns.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-ink/60">
+          <span className="mr-1 text-ink/45">Filter:</span>
+          {columns.map((column) => (
+            <span
+              key={column.key}
+              className={`flex items-center gap-0.5 rounded-md border px-2 py-1 ${
+                isActive(filters[column.key])
+                  ? "border-gold-deep bg-gold/10 text-ink"
+                  : "border-ink/10 text-ink/55"
+              }`}
+            >
+              {column.label}
+              <ColumnFilterMenu
+                label={column.label}
+                values={rows.map((r) => cellText(r, column.key))}
+                filter={filters[column.key]}
+                onChange={(next) =>
+                  setFilters((current) => {
+                    const updated = { ...current };
+                    if (next) updated[column.key] = next;
+                    else delete updated[column.key];
+                    return updated;
+                  })
+                }
+              />
+            </span>
+          ))}
+          {activeCount(filters) > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilters({})}
+              className="ml-1 rounded-md border border-ink/15 px-2 py-1 hover:border-ink/30"
+            >
+              Clear {activeCount(filters)} {activeCount(filters) === 1 ? "filter" : "filters"}
+            </button>
+          )}
+        </div>
+      )}
 
       {selected.size > 0 && bulkActions && bulkActions.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-gold/30 bg-gold/10 px-3 py-2 text-sm">
