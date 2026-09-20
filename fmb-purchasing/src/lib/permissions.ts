@@ -17,6 +17,7 @@ export type PageKey =
   | "review_queue"
   | "budgets"
   | "menus"
+  | "procurement"
   | "admin_users"
   | "admin_teams"
   // Split out of payments/admin_users by 0057, so each can be granted alone.

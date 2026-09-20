@@ -9,6 +9,8 @@ import { formatPlainDate } from "@/lib/format";
 import { formatHijri, gregorianToHijri } from "@/lib/hijri/hijri";
 import { batchesFor, costMenuDay, portionLabel, PRICE_BASIS_LABEL } from "@/lib/menu-costing";
 import { loadDishes, loadItemPrices, loadKitchens } from "../data";
+import { releaseDay, unreleaseDay } from "../release-actions";
+import { progressOf } from "@/lib/procurement";
 import { addDishToDay, copyMenuFromDay, removeDishFromDay, setDayCounts } from "../actions";
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
@@ -60,6 +62,32 @@ export default async function MenuDayPage({
   const confirmed = day?.confirmed_thaalis == null ? null : Number(day.confirmed_thaalis);
   const thaalis = confirmed ?? planned;
   const cost = costMenuDay(dishes, thaalis, prices);
+
+  // Once released, the day has requirements of its own — frozen quantities
+  // and prices — and receipts allocated against them.
+  const { data: requirements } = day
+    ? await admin
+        .from("menu_requirements")
+        .select("id, item_id, quantity, planned_cost, status, base_unit_code, items ( name )")
+        .eq("menu_day_id", day.id)
+    : { data: [] };
+  const { data: allocations } = (requirements ?? []).length
+    ? await admin
+        .from("expense_line_allocations")
+        .select("menu_requirement_id, quantity, amount")
+        .in("menu_requirement_id", (requirements ?? []).map((r) => r.id as string))
+    : { data: [] };
+
+  const allocationsBy = new Map<string, { quantity: number; amount: number }[]>();
+  for (const a of allocations ?? []) {
+    const key = a.menu_requirement_id as string;
+    allocationsBy.set(key, [...(allocationsBy.get(key) ?? []), { quantity: Number(a.quantity), amount: Number(a.amount) }]);
+  }
+  const plannedTotal = (requirements ?? []).reduce((sum, r) => sum + Number(r.planned_cost ?? 0), 0);
+  const actualTotal = (allocations ?? []).reduce((sum, a) => sum + Number(a.amount), 0);
+  const stillToBuy = (requirements ?? []).filter(
+    (r) => !progressOf({ quantity: Number(r.quantity) }, allocationsBy.get(r.id as string) ?? []).complete
+  ).length;
 
   const [{ data: allDishes }, { data: pastDays }] = await Promise.all([
     admin.from("dishes").select("id, name").eq("active", true).order("name"),
@@ -160,6 +188,51 @@ export default async function MenuDayPage({
           </p>
         )}
       </section>
+
+      {canManage && day && dishes.length > 0 && thaalis > 0 && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
+          <div>
+            <p className="text-ink">
+              {day.status === "released"
+                ? "Released — what this day needs is somebody's to buy."
+                : "Not released yet. Releasing works out what the day needs and hands each list to whoever buys it."}
+            </p>
+            {day.status === "released" && (requirements ?? []).length > 0 && (
+              <p className="mt-1 text-xs text-ink/55">
+                {(requirements ?? []).length} items · planned {money(plannedTotal)}
+                {actualTotal > 0 && ` · spent so far ${money(actualTotal)}`}
+                {stillToBuy > 0 && ` · ${stillToBuy} still to buy`}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <form action={releaseDay}>
+              <input type="hidden" name="menu_day_id" value={day.id as string} />
+              <input type="hidden" name="date" value={date} />
+              <SubmitButton className="rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep">
+                {day.status === "released" ? "Release again" : "Release"}
+              </SubmitButton>
+            </form>
+            {day.status === "released" && (
+              <>
+                <Link
+                  href={`/procurement?from=${date}&to=${date}&who=all`}
+                  className="rounded-md border border-ink/15 px-4 py-2 hover:border-ink/30"
+                >
+                  What to buy
+                </Link>
+                <form action={unreleaseDay}>
+                  <input type="hidden" name="menu_day_id" value={day.id as string} />
+                  <input type="hidden" name="date" value={date} />
+                  <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-ink/60 hover:border-ink/30">
+                    Back to draft
+                  </SubmitButton>
+                </form>
+              </>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
         <h2 className="mb-4 section-title text-ink">Menu</h2>
@@ -307,6 +380,22 @@ export default async function MenuDayPage({
                 </tbody>
               </table>
             </div>
+
+            {actualTotal > 0 && (
+              <div className="mt-4 rounded-md border border-ink/10 bg-cream/60 p-3 text-sm">
+                <p className="text-ink">
+                  Planned {money(plannedTotal)} · spent {money(actualTotal)}{" "}
+                  <span className={actualTotal > plannedTotal ? "text-alert" : "text-palm"}>
+                    ({actualTotal > plannedTotal ? "+" : ""}
+                    {money(actualTotal - plannedTotal)})
+                  </span>
+                </p>
+                <p className="mt-0.5 text-xs text-ink/55">
+                  From the receipts allocated to this day.
+                  {stillToBuy > 0 && ` ${stillToBuy} of ${(requirements ?? []).length} items are still to buy, so this is not the final figure.`}
+                </p>
+              </div>
+            )}
 
             <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3 border-t border-ink/10 pt-3">
               <span className="text-sm text-ink/60">

@@ -23,6 +23,7 @@ export const NAV_ITEMS: {
   // Thaali costing (#70). One entry: the dishes are a tab of it, not a
   // separate place, because a dish only exists to go on a menu.
   { key: "menus", label: "Menus", href: "/menus", action: "view" },
+  { key: "procurement", label: "Procurement", href: "/procurement", action: "view" },
   { key: "admin_users", label: "Users", href: "/admin/users", action: "manage_users" },
   { key: "admin_teams", label: "Teams & permissions", href: "/admin/teams", action: "manage_teams" },
   // Shares the users-admin grant rather than adding a page key nobody has

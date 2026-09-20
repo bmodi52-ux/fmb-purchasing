@@ -6,8 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatPlainDate } from "@/lib/format";
 import { formatHijri, gregorianToHijri } from "@/lib/hijri/hijri";
 import { costMenuDay, type MenuDayCost, type MenuDish } from "@/lib/menu-costing";
-import { SECTIONS, SECTION_LABEL, sectionFor, type SectionKey } from "@/lib/menu-sections";
-import { loadDishes, loadItemPrices, loadKitchens } from "../data";
+import { SECTIONS, SECTION_LABEL, type SectionKey } from "@/lib/menu-sections";
+import { loadDishes, loadItemPrices, loadKitchens, loadSections } from "../data";
 import { MenuTabs } from "../tabs";
 
 export const metadata = { title: "Menu sheet" };
@@ -84,18 +84,7 @@ export default async function MenuSheetPage({
   const itemIds = [...new Set(dishes.flatMap((d) => d.ingredients.map((i) => i.itemId)))];
   const prices = await loadItemPrices(admin, itemIds);
 
-  // Which list each item belongs on, from its category and that category's parent.
-  const { data: items } = itemIds.length
-    ? await admin.from("items").select("id, name, category_id").in("id", itemIds)
-    : { data: [] };
-  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
-  const categoryById = new Map((categories ?? []).map((c) => [c.id as string, c]));
-  const sectionByItem = new Map<string, SectionKey>();
-  for (const item of items ?? []) {
-    const own = item.category_id ? categoryById.get(item.category_id as string) : null;
-    const parent = own?.parent_category_id ? categoryById.get(own.parent_category_id as string) : null;
-    sectionByItem.set(item.id as string, sectionFor([parent?.name as string | undefined, own?.name as string | undefined]));
-  }
+  const sectionByItem = await loadSections(admin, itemIds);
 
   const columns: Column[] = (days ?? []).map((d) => {
     const onDay = [...(d.menu_day_dishes ?? [])]

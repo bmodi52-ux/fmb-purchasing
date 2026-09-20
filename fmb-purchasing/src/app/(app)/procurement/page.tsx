@@ -1,0 +1,312 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth/session";
+import { can, getUserPermissions, requirePermission } from "@/lib/permissions";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { SubmitButton } from "@/components/submit-button";
+import { FormResetBoundary } from "@/components/form-reset-boundary";
+import { formatPlainDate } from "@/lib/format";
+import { SECTIONS, SECTION_LABEL, type SectionKey } from "@/lib/menu-sections";
+import { loadProcurement, type ProcurementLine } from "./data";
+import { reassign, setRequirementNote, setRequirementStatus, setRequirementVendor } from "./actions";
+import { ProcurementTabs } from "./tabs";
+
+export const metadata = { title: "Procurement" };
+
+const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
+
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const STATUS_LABEL: Record<ProcurementLine["status"], string> = {
+  to_order: "To order",
+  ordered: "Ordered",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
+
+/**
+ * What has to be bought, and how far it has got (#70, piece three).
+ *
+ * Grouped by day and then by section, because that is how it is bought: one
+ * trip for the meat, another for the produce. Each line says what to order —
+ * rounded to a pack somebody actually sells — who is buying it, and what has
+ * already been spent against it.
+ */
+export default async function ProcurementPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string; who?: string; status?: string }>;
+}) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "procurement", "view");
+  const permissions = await getUserPermissions(user);
+  const canManage = can(permissions, "procurement", "manage");
+
+  const { from: fromParam, to: toParam, who, status: statusParam } = await searchParams;
+  const today = new Date();
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(fromParam ?? "")
+    ? fromParam!
+    : isoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 3));
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(toParam ?? "")
+    ? toParam!
+    : isoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14));
+
+  // Mine by default: the page is mostly opened by whoever has the buying to
+  // do, and "everyone's" is a click away for whoever runs it.
+  const onlyMine = who !== "all";
+  const admin = createAdminClient();
+  const lines = await loadProcurement(admin, { from, to, ownerId: onlyMine ? user.id : null });
+  const shown = statusParam === "open" ? lines.filter((l) => l.status !== "delivered") : lines;
+
+  const [{ data: vendors }, { data: people }] = await Promise.all([
+    admin.from("vendors").select("id, name, vendor_number").eq("status", "approved").order("name"),
+    canManage ? admin.from("profiles").select("id, full_name, email").order("full_name") : Promise.resolve({ data: [] }),
+  ]);
+
+  // Day → section → lines, which is the order it gets bought in.
+  const byDay = new Map<string, ProcurementLine[]>();
+  for (const line of shown) {
+    const key = `${line.serviceDate}|${line.kitchenName}`;
+    byDay.set(key, [...(byDay.get(key) ?? []), line]);
+  }
+
+  const href = (next: Record<string, string>) => {
+    const params = new URLSearchParams({ from, to, who: onlyMine ? "mine" : "all", ...next });
+    if (statusParam) params.set("status", statusParam);
+    return `/procurement?${params.toString()}`;
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h1 className="page-title text-ink">Procurement</h1>
+        <p className="page-description mt-1 max-w-2xl">
+          What released menus need, by day and section. Quantities come from the menus; what to order is rounded to a
+          pack the supplier sells.
+        </p>
+      </div>
+
+      <ProcurementTabs active="buy" canManage={canManage} />
+
+      <form action="/procurement" className="flex flex-wrap items-end gap-3 text-sm">
+        <label className="flex flex-col gap-1">
+          <span className="text-ink/70">From</span>
+          <input type="date" name="from" defaultValue={from} className="input" />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-ink/70">To</span>
+          <input type="date" name="to" defaultValue={to} className="input" />
+        </label>
+        <input type="hidden" name="who" value={onlyMine ? "mine" : "all"} />
+        {statusParam && <input type="hidden" name="status" value={statusParam} />}
+        <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 hover:border-ink/30">Show</SubmitButton>
+        <div className="flex items-center gap-2">
+          <Link
+            href={href({ who: "mine" })}
+            className={`rounded-md border px-3 py-2 ${onlyMine ? "border-gold-deep bg-gold/10" : "border-ink/15 text-ink/60"}`}
+          >
+            Mine
+          </Link>
+          {canManage && (
+            <Link
+              href={href({ who: "all" })}
+              className={`rounded-md border px-3 py-2 ${!onlyMine ? "border-gold-deep bg-gold/10" : "border-ink/15 text-ink/60"}`}
+            >
+              Everyone&apos;s
+            </Link>
+          )}
+          <Link
+            href={statusParam === "open" ? href({}).replace(/&status=open/, "") : `${href({})}&status=open`}
+            className={`rounded-md border px-3 py-2 ${statusParam === "open" ? "border-gold-deep bg-gold/10" : "border-ink/15 text-ink/60"}`}
+          >
+            Still to buy
+          </Link>
+        </div>
+      </form>
+
+      {byDay.size === 0 ? (
+        <p className="text-sm text-ink/55">
+          Nothing to buy between these dates.{" "}
+          {onlyMine && canManage && <Link href={href({ who: "all" })} className="underline">Try everyone&apos;s.</Link>}
+        </p>
+      ) : (
+        [...byDay.entries()].map(([key, dayLines]) => {
+          const [date, kitchen] = key.split("|");
+          const planned = dayLines.reduce((sum, l) => sum + (l.plannedCost ?? 0), 0);
+          const spent = dayLines.reduce((sum, l) => sum + l.spent, 0);
+
+          return (
+            <section key={key} className="rounded-lg border border-ink/10 bg-white/60 p-4">
+              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <h2 className="section-title text-ink">
+                  <Link href={`/menus/${date}`} className="underline-offset-2 hover:underline">
+                    {formatPlainDate(date)}
+                  </Link>
+                  <span className="ml-2 text-sm font-normal text-ink/55">{kitchen}</span>
+                </h2>
+                <span className="font-mono text-sm text-ink/60">
+                  planned {money(planned)}
+                  {spent > 0 && <span className="ml-2 text-ink/80">· spent {money(spent)}</span>}
+                </span>
+              </div>
+
+              {SECTIONS.filter((s) => dayLines.some((l) => l.section === s)).map((section) => (
+                <div key={section} className="mb-4 last:mb-0">
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-xs font-medium tracking-wide text-ink/60 uppercase">{SECTION_LABEL[section]}</h3>
+                    {canManage && (
+                      <form action={reassign} className="flex items-center gap-1 text-xs">
+                        <input type="hidden" name="menu_day_id" value={dayLines[0].menuDayId} />
+                        <input type="hidden" name="section" value={section} />
+                        <FormResetBoundary>
+                          <select name="owner_id" defaultValue="" className="input py-0.5 text-xs" aria-label={`Hand ${SECTION_LABEL[section]} to`}>
+                            <option value="">— hand this section to —</option>
+                            {(people ?? []).map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.full_name || p.email}
+                              </option>
+                            ))}
+                          </select>
+                        </FormResetBoundary>
+                        <SubmitButton className="rounded border border-ink/15 px-2 py-0.5 hover:border-ink/30">
+                          Move
+                        </SubmitButton>
+                      </form>
+                    )}
+                  </div>
+
+                  <ul className="flex flex-col gap-2">
+                    {dayLines
+                      .filter((l) => l.section === section)
+                      .map((line) => (
+                        <li
+                          key={line.id}
+                          className={`rounded-md border p-3 text-sm ${
+                            line.status === "delivered" ? "border-palm/30 bg-palm/5" : "border-ink/10 bg-white"
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                            <span className="text-ink">
+                              {line.itemName}
+                              {line.itemNumber && <span className="ml-1.5 font-mono text-xs text-ink/40">{line.itemNumber}</span>}
+                            </span>
+                            <span className="font-mono text-ink/80">
+                              {line.quantity} {line.unit}
+                              {line.pack && line.pack.packs > 0 && (
+                                <span className="ml-2 text-ink/55">
+                                  = {line.pack.packs} × {line.pack.title}
+                                  {line.pack.over > 0 && ` (${line.pack.over} ${line.unit} over)`}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink/55">
+                            <span className={line.status === "delivered" ? "text-palm" : line.status === "ordered" ? "text-gold-deep" : ""}>
+                              {STATUS_LABEL[line.status]}
+                            </span>
+                            {line.ownerName ? <span>· {line.ownerName}</span> : <span className="text-alert">· nobody yet</span>}
+                            {line.plannedCost != null && <span>· planned {money(line.plannedCost)}</span>}
+                            {line.bought > 0 && (
+                              <span className="text-ink/75">
+                                · bought {line.bought} {line.unit} for {money(line.spent)}
+                                {line.outstanding > 0 && `, ${line.outstanding} ${line.unit} still to come`}
+                              </span>
+                            )}
+                            {line.note && <span>· {line.note}</span>}
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap items-end gap-2">
+                            {(["to_order", "ordered", "delivered"] as const)
+                              .filter((s) => s !== line.status)
+                              .map((s) => (
+                                <form key={s} action={setRequirementStatus}>
+                                  <input type="hidden" name="requirement_ids" value={line.id} />
+                                  <input type="hidden" name="status" value={s} />
+                                  <SubmitButton className="rounded border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
+                                    {s === "to_order" ? "Not ordered" : s === "ordered" ? "Mark ordered" : "Mark delivered"}
+                                  </SubmitButton>
+                                </form>
+                              ))}
+
+                            <form action={setRequirementVendor} className="flex items-end gap-1">
+                              <input type="hidden" name="requirement_id" value={line.id} />
+                              <FormResetBoundary>
+                                <select
+                                  key={line.vendorId ?? ""}
+                                  name="vendor_id"
+                                  defaultValue={line.vendorId ?? ""}
+                                  aria-label={`Vendor for ${line.itemName}`}
+                                  className="input py-1 text-xs"
+                                >
+                                  <option value="">— vendor —</option>
+                                  {(vendors ?? []).map((v) => (
+                                    <option key={v.id} value={v.id}>
+                                      {v.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </FormResetBoundary>
+                              <SubmitButton className="rounded border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
+                                Set
+                              </SubmitButton>
+                            </form>
+
+                            <form action={setRequirementNote} className="flex items-end gap-1">
+                              <input type="hidden" name="requirement_id" value={line.id} />
+                              <FormResetBoundary>
+                                <input
+                                  name="note"
+                                  defaultValue={line.note ?? ""}
+                                  placeholder="note"
+                                  aria-label={`Note for ${line.itemName}`}
+                                  className="input py-1 text-xs"
+                                />
+                              </FormResetBoundary>
+                              <SubmitButton className="rounded border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
+                                Save
+                              </SubmitButton>
+                            </form>
+
+                            {canManage && (
+                              <form action={reassign} className="flex items-end gap-1">
+                                <input type="hidden" name="requirement_id" value={line.id} />
+                                <FormResetBoundary>
+                                  <select
+                                    key={line.ownerId ?? ""}
+                                    name="owner_id"
+                                    defaultValue={line.ownerId ?? ""}
+                                    aria-label={`Who buys ${line.itemName}`}
+                                    className="input py-1 text-xs"
+                                  >
+                                    <option value="">— nobody —</option>
+                                    {(people ?? []).map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.full_name || p.email}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </FormResetBoundary>
+                                <SubmitButton className="rounded border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
+                                  Assign
+                                </SubmitButton>
+                              </form>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+export type { SectionKey };
