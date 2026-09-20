@@ -29,6 +29,15 @@ should not pass silently into a menu's planned cost. Worth deciding between
 flagging a pack whose receipts disagree with it by an order of magnitude,
 refusing to price from an unconfirmed pack at all, or both.
 
+### 72. "Boxes per batch" stays on screen for a per-box recipe
+
+Raised 2026-09-21 on Add a dish. Choosing "per box" leaves the Boxes per
+batch field sitting there with 200 in it, labelled "(if per batch)" — a
+field that does nothing, explaining in brackets that it does nothing.
+
+It should go when the recipe is per box, and come back when it is per batch.
+The dish page's own Details form has the same pair and the same problem.
+
 ## Improvements
 
 <!-- Existing things that should work better. -->
@@ -200,6 +209,62 @@ needed, per item, per day, per section. So:
   is never mistaken for final.
 
 Not to be started until asked.
+
+### 76. A thaali is a set of boxes, and not everybody takes all of it
+
+Raised 2026-09-21, filling in what #70 assumed. The app currently treats a
+day as "250 thaalis" and multiplies every dish by it. That is not what a
+thaali is.
+
+A thaali is a set of dishes distributed on a day, and each part of it is
+taken separately:
+
+- **A dish is one or two boxes.** Chicken biryani might be taken as 1 × 1 L
+  or 2 × 1 L; another dish as 1 × 1 L or not at all. Some parts are
+  individual items rather than boxes.
+- **People take part of a thaali.** Someone can skip a dish entirely, so the
+  number of boxes of a dish is not the number of thaalis.
+- **Roti is optional**, given with the thaali some days and not others. When
+  it is on, it has to reach procurement like anything else, with its own
+  person assigned to it.
+- **Fruit is optional** too. It buys as Fresh produce, but on the menu it is
+  its own thing, not an ingredient of a dish.
+
+What this means for what is already built: a day needs a count per dish, not
+one count for the day, and the menu needs to hold parts that are not dishes
+with recipes. Cost per thaali then becomes the cost of a full thaali against
+the cost of what was actually made — which is the more useful figure anyway.
+
+Worth settling before this is built: where the per-dish counts come from
+while the RSVP tool is still outside the app (#70 assumed a planned count
+confirmed about two days out), and whether "1 or 2 boxes" is a choice
+recorded per dish per day or a ratio applied to the count.
+
+### 73. Procurement dates should open on this week
+
+Raised 2026-09-21. To buy and Shopping lists both open on an empty From/To
+pair, so the first thing anybody does is type two dates.
+
+Wanted: open on the current week, Monday to Sunday; arrows either side to
+step back and forward a week; and a custom range still available for the
+times a butcher's order spans a fortnight. Both pages, working the same way.
+
+### 74. Call the Menus page what it is
+
+Raised 2026-09-21: "Thaali Menu", or whatever reads right. The page is about
+the thaali served on a day, and "Menus" on its own does not say that. The
+sidebar entry, the page heading and the tab names all say Menus at the
+moment.
+
+### 75. No way to set a menu on a day that has none
+
+Raised 2026-09-21 on the calendar. A day with a menu shows it and links to
+it. A day with nothing shows nothing to click but the date number in the
+corner, which does not read as a control — so the way to start a menu is to
+know that the number is a link.
+
+An empty cell wants something that says so: a plus, or "Set a menu", on
+hover or always.
 
 ### 68. Filter on any column, on every list
 
