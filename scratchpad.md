@@ -292,9 +292,15 @@ run off a simple day exactly as it runs off a costed one. What a simple day
 gives up is only the part that was derived: cost per thaali from recipes, and
 quantities that move when the count does.
 
-Which mode a day uses should be a toggle, so one day can be typed and the
-next worked out, and a day can move from one to the other as the kitchen is
-ready. Worth deciding whether the toggle sits on the day or on the kitchen.
+**The toggle is one setting for the whole app** (settled 2026-09-21), not
+per day and not per kitchen: everybody works the same way, and the move to
+the advanced way is a decision taken once, when the team is ready. It belongs
+with the other app settings.
+
+A day set up in one mode keeps what it holds when the switch is thrown —
+typed quantities are still requirements, a costed day still has its recipes —
+so the setting changes how days are set up and shown from then on, and flipping
+it back and forth destroys nothing.
 
 ### 73. Procurement dates should open on this week
 
