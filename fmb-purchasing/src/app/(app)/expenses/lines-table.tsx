@@ -162,6 +162,7 @@ export function LinesTable({
         columns={ALL_COLUMNS}
         rows={rows}
         initialVisible={initialVisible}
+        amountOf={(r) => r.lineTotal}
         emptyLabel="No line items in this period."
       />
       {/* The sum of everything loaded, not of what the filters leave — the

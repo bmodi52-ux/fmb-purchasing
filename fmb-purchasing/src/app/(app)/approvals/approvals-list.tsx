@@ -128,6 +128,7 @@ export function ApprovalsList({ expenses, showSubmitter }: { expenses: ApprovalR
         title="Approvals"
         placeholder="Filter by vendor, submitter, invoice…"
         bulkActions={bulkActions}
+        amountOf={(e) => e.total}
         sortOptions={SORT_OPTIONS}
       >
         {(rows, selection) => (

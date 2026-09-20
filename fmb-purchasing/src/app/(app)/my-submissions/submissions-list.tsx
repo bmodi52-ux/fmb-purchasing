@@ -149,6 +149,7 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
         title="My submissions"
         placeholder="Filter by vendor, invoice, entry #…"
         bulkActions={bulkActions}
+        amountOf={(e) => e.total}
         sortOptions={SORT_OPTIONS}
       >
         {(rows, selection) =>

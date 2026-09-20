@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ExportToolbar } from "./export-toolbar";
 import { useReportPending } from "./pending";
 import type { ExportColumn } from "@/lib/export";
+import { describeSelection, sumAmounts } from "@/lib/selection-summary";
 
 export type SelectionApi = {
   isSelected: (id: string) => boolean;
@@ -49,6 +50,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
   placeholder = "Filter…",
   getRowId,
   bulkActions,
+  amountOf,
   sortOptions,
   children,
 }: {
@@ -60,6 +62,8 @@ export function FilterableSection<T extends Record<string, unknown>>({
   placeholder?: string;
   getRowId?: (row: T) => string;
   bulkActions?: BulkAction<T>[];
+  /** What one row adds to the selection's total (#69); left out where there is no money. */
+  amountOf?: (row: T) => number | null;
   sortOptions?: SortOption<T>[];
   children: (filtered: T[], selection: SelectionApi) => React.ReactNode;
 }) {
@@ -189,7 +193,12 @@ export function FilterableSection<T extends Record<string, unknown>>({
 
       {selected.size > 0 && bulkActions && bulkActions.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-gold/30 bg-gold/10 px-3 py-2 text-sm">
-          <span className="text-ink/70">{selected.size} selected</span>
+          <span className="text-ink/70">
+            {describeSelection(
+              selected.size,
+              amountOf ? sumAmounts(selectedRows.map(amountOf)) : null
+            )}
+          </span>
           {bulkActions.map((action) => (
             <button
               key={action.label}
