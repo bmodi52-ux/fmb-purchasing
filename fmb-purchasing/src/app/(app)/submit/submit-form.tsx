@@ -43,6 +43,9 @@ import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image
 import { normalizeReceiptDate } from "@/lib/format";
 import { round2, sumLines, residualFor, claimVsReceipt, totalChangedFromScan } from "@/lib/expense-money";
 import { discountAmount, discountBase } from "@/lib/discount-percent";
+import { packDefaultsForLine, packFromFields } from "@/lib/new-pack";
+import type { PackFieldValues } from "../pricelist/pack-fields";
+import type { PackUnit } from "./line-match";
 import { categoriesForLineGroup, lineGroupFor } from "@/lib/categories";
 import { BLURRY_BELOW, measureSharpness } from "@/lib/image-quality";
 import { applyLineDefaults, hasDefaults } from "@/lib/supplier-defaults";
@@ -65,6 +68,11 @@ type ReviewItem = LineItemInput & {
    * the amount current as the lines it comes off change.
    */
   discountPercent?: number | null;
+  /**
+   * A pack size this item doesn't have yet, as the submitter is describing it
+   * (#60). Turned into newPack on the way to the server.
+   */
+  newPackFields?: PackFieldValues | null;
   /**
    * The Pricelist item and pack this line is filed against, as the form shows
    * it. Undefined until it has been looked for; null where there is nothing to
@@ -267,6 +275,7 @@ function withBookedResidual(items: ReviewItem[], receiptTotal: number): ReviewIt
 export function SubmitForm({
   categories,
   vendors,
+  units,
   myName,
   editExpense,
   resubmitFrom,
@@ -275,6 +284,8 @@ export function SubmitForm({
   /** Leaf categories, sorted, each tagged with the line kinds it suits. */
   categories: PickableCategory[];
   vendors: VendorOption[];
+  /** Units, for describing a pack size on a line (#60). */
+  units: PackUnit[];
   myName: string;
   editExpense?: ExpenseForEdit | null;
   /** A declined expense to start a corrected, new submission from. */
@@ -914,6 +925,7 @@ export function SubmitForm({
     <ReviewForm
       categories={categories}
       vendors={vendors}
+      units={units}
       myName={myName}
       vendorName={vendorName}
       setVendorName={setVendorName}
@@ -957,6 +969,7 @@ function ReviewForm(props: {
   /** Leaf categories, sorted, each tagged with the line kinds it suits. */
   categories: PickableCategory[];
   vendors: VendorOption[];
+  units: PackUnit[];
   myName: string;
   vendorName: string;
   setVendorName: (v: string) => void;
@@ -1256,6 +1269,22 @@ function ReviewForm(props: {
     );
   }
 
+  /**
+   * Describe a pack the item doesn't have (#60), or stop describing one.
+   *
+   * Opens on what the line already says — eight cases of something at 24 kg
+   * is 3 kg a case — so the usual answer is to glance at it and carry on.
+   */
+  function setNewPack(key: string, on: boolean) {
+    props.setItems((prev) =>
+      prev.map((it) => {
+        if (it.key !== key) return it;
+        if (!on) return { ...it, newPackFields: null };
+        return { ...it, packSizeId: null, newPackFields: packDefaultsForLine(it, props.units) };
+      })
+    );
+  }
+
   function setNotOnReceipt(key: string, on: boolean) {
     props.setItems((prev) =>
       prev.map((it) =>
@@ -1361,6 +1390,11 @@ function ReviewForm(props: {
       setError(`Choose which pack of ${packless.match?.itemName ?? "the item"} "${packless.description}" is.`);
       return;
     }
+    const halfDescribed = props.items.find((it) => it.newPackFields && !packFromFields(it.newPackFields));
+    if (halfDescribed) {
+      setError(`Say how much one pack of "${halfDescribed.description}" holds, and in what unit.`);
+      return;
+    }
     const offWithoutNote = props.items.find(
       (it) => it.notOnReceipt && it.description.trim() && !it.notOnReceiptNote?.trim()
     );
@@ -1392,9 +1426,12 @@ function ReviewForm(props: {
         lineItems: props.items
           .filter((it) => it.description.trim())
           .map(
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            ({ key: _key, itemNumber: _itemNumber, match: _match, autoAdded: _autoAdded, discountPercent: _pct, ...rest }) =>
-              rest
+            ({
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              key: _key, itemNumber: _itemNumber, match: _match, autoAdded: _autoAdded, discountPercent: _pct,
+              newPackFields,
+              ...rest
+            }) => ({ ...rest, newPack: packFromFields(newPackFields) })
           ),
       };
       const result = props.editExpenseId
@@ -1602,6 +1639,10 @@ function ReviewForm(props: {
                 onReject={() => rejectMatch(item.key)}
                 onChoosePack={(packSizeId) => choosePack(item.key, packSizeId)}
                 onChooseItem={(itemId) => chooseItem(item.key, itemId)}
+                units={props.units}
+                newPack={item.newPackFields ?? null}
+                onNewPack={(on) => setNewPack(item.key, on)}
+                onNewPackChange={(values) => updateItem(item.key, { newPackFields: values })}
               />
             )}
 
@@ -1885,6 +1926,10 @@ function ReviewForm(props: {
                   onReject={() => rejectMatch(item.key)}
                   onChoosePack={(packSizeId) => choosePack(item.key, packSizeId)}
                   onChooseItem={(itemId) => chooseItem(item.key, itemId)}
+                  units={props.units}
+                  newPack={item.newPackFields ?? null}
+                  onNewPack={(on) => setNewPack(item.key, on)}
+                  onNewPackChange={(values) => updateItem(item.key, { newPackFields: values })}
                 />
               )}
               </Fragment>

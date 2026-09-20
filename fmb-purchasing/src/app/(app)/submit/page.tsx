@@ -32,12 +32,14 @@ export default async function SubmitExpensePage({
   const resubmitFrom = !editExpense && resubmit ? await getExpenseForResubmit(resubmit) : null;
 
   const admin = createAdminClient();
-  const [{ data: categories }, { data: vendors }, { data: myRecent }] = await Promise.all([
+  const [{ data: categories }, { data: vendors }, { data: units }, { data: myRecent }] = await Promise.all([
     admin
       .from("categories")
       .select("id, name, parent_category_id, applies_to")
       .order("name"),
     admin.from("vendors").select("id, name, vendor_number").eq("status", "approved").order("name"),
+    // For describing a pack size the Pricelist doesn't have yet (#60).
+    admin.from("units").select("id, code, label").order("sort_order"),
     // Who this person has submitted for lately, offered first in the vendor
     // pickers (#59).
     admin
@@ -151,6 +153,7 @@ export default async function SubmitExpensePage({
         inbound={inbound}
         categories={categoryOptions}
         vendors={vendorOptions}
+        units={units ?? []}
         myName={user.fullName || user.email}
         editExpense={editExpense}
         resubmitFrom={resubmitFrom}
