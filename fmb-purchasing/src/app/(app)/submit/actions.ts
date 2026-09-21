@@ -61,6 +61,7 @@ import {
 } from "@/lib/receipt-storage";
 import { checkExtractionThrottle } from "@/lib/extraction-throttle";
 import { allocateExpenseToMenus } from "@/lib/allocate-expense";
+import type { ReceiptLineDetails } from "@/lib/receipt-line-details";
 
 export type ExtractState = {
   data: ExtractedReceipt | null;
@@ -586,6 +587,8 @@ export type LineToResolve = {
   itemId: string | null;
   /** The offer an expense being edited already files this line against. */
   pricelistItemId: string | null;
+  /** What the receipt printed about the pack (#79), for choosing among an item's packs. */
+  details?: ReceiptLineDetails | null;
 };
 
 type WordingRow = { item_id: string; vendor_id: string | null; description: string };
@@ -652,16 +655,16 @@ export async function matchReceiptLinesAction(input: {
           )
         : Promise.resolve([] as WordingRow[]),
       vendorId
-        ? allRows<{ pack_size_id: string }>((from, to) =>
+        ? allRows<{ pack_size_id: string; vendor_sku: string | null }>((from, to) =>
             admin
               .from("pricelist_items")
-              .select("pack_size_id")
+              .select("pack_size_id, vendor_sku")
               .eq("vendor_id", vendorId)
               .neq("status", "rejected")
               .order("id")
               .range(from, to)
           )
-        : Promise.resolve([] as { pack_size_id: string }[]),
+        : Promise.resolve([] as { pack_size_id: string; vendor_sku: string | null }[]),
       pinnedOfferIds.length
         ? admin.from("pricelist_items").select("id, pack_size_id").in("id", pinnedOfferIds)
         : Promise.resolve({ data: [] }),
@@ -701,6 +704,17 @@ export async function matchReceiptLinesAction(input: {
     description: w.description,
   }));
   const vendorPackIds = new Set(vendorOffers.map((o) => o.pack_size_id));
+  // The vendor's own product codes (#79): a code printed on the line that this
+  // vendor's offers carry exactly once names the pack outright.
+  const packsByCode = new Map<string, string[]>();
+  for (const o of vendorOffers) {
+    const code = o.vendor_sku?.trim().toLowerCase();
+    if (code) packsByCode.set(code, [...(packsByCode.get(code) ?? []), o.pack_size_id]);
+  }
+  const packForCode = (code: string | null | undefined) => {
+    const packs = code ? packsByCode.get(code.trim().toLowerCase()) : undefined;
+    return packs?.length === 1 ? packById.get(packs[0]!) : undefined;
+  };
   const packOfOffer = new Map(
     ((pinnedOffersResult.data ?? []) as { id: string; pack_size_id: string }[]).map((o) => [o.id, o.pack_size_id])
   );
@@ -732,7 +746,9 @@ export async function matchReceiptLinesAction(input: {
     // Something a person already settled — the offer an edited expense files
     // against, or an item picked from the options — is not second-guessed.
     const pinnedPackId = line.pricelistItemId ? packOfOffer.get(line.pricelistItemId) : undefined;
-    const pinnedPack = pinnedPackId ? packById.get(pinnedPackId) : undefined;
+    const pinnedPack =
+      (pinnedPackId ? packById.get(pinnedPackId) : undefined) ??
+      (line.itemId ? undefined : packForCode(line.details?.productCode));
     const pinnedItem = pinnedPack
       ? itemById.get(pinnedPack.item_id)
       : line.itemId
@@ -743,7 +759,7 @@ export async function matchReceiptLinesAction(input: {
         pinnedItem,
         "sure",
         pinnedPack?.id ??
-          choosePack(pinnedItem.packs, line.description, catalogueUnits, vendorPackIds, pinnedItem.name),
+          choosePack(pinnedItem.packs, line.description, catalogueUnits, vendorPackIds, pinnedItem.name, line.details ?? null),
         []
       );
       continue;
@@ -755,7 +771,7 @@ export async function matchReceiptLinesAction(input: {
       ? resultFor(
           item,
           pick.confidence,
-          choosePack(item.packs, line.description, catalogueUnits, vendorPackIds, item.name),
+          choosePack(item.packs, line.description, catalogueUnits, vendorPackIds, item.name, line.details ?? null),
           pick.alternatives
         )
       : {
@@ -823,6 +839,11 @@ export type LineItemInput = {
   gstApplicable: boolean;
   normalizedQuantity: number | null;
   normalizedUnit: string | null;
+  /**
+   * Brand, product code, packaging and pack as the receipt printed them
+   * (#79), written onto the pending offer and its pack for somebody to check.
+   */
+  details?: ReceiptLineDetails | null;
   /** Claimed, but not on the attached receipt (#51); needs notOnReceiptNote. */
   notOnReceipt?: boolean;
   notOnReceiptNote?: string | null;
@@ -922,6 +943,7 @@ async function buildLineRows(
           quantity: item.quantity,
           normalizedQuantity: item.normalizedQuantity,
         },
+        details: item.details ?? null,
       };
       // A pack size the submitter described because the item has no such pack
       // (#60) is created first, so the line files against it like any other.
@@ -952,6 +974,7 @@ async function buildLineRows(
           quantity: item.quantity,
           normalizedQuantity: item.normalizedQuantity,
         },
+        details: item.details ?? null,
       }));
       pricelistItemId = matched.id;
       // Prefer the category of the item this line resolved to. When the line

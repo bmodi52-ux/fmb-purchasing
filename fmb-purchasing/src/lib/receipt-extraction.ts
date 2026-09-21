@@ -14,6 +14,8 @@ import { LINE_KINDS, SUBSTANTIVE_KINDS } from "@/lib/line-kinds";
 import type { LineKind, StoredLineKind } from "@/lib/line-kinds";
 import { closerToTotal, linesShortfall } from "@/lib/extraction-completeness";
 import { applyDeduction } from "@/lib/receipt-deduction";
+import { PACKAGING } from "@/lib/pack-description";
+import { lineDetailsFrom, type ReceiptLineDetails } from "@/lib/receipt-line-details";
 
 export { LINE_KINDS, SUBSTANTIVE_KINDS };
 export type { LineKind, StoredLineKind };
@@ -39,6 +41,11 @@ export type ExtractedLineItem = {
    * which spread GST across GST-free food on any receipt that mixed the two.
    */
   gstApplicable: boolean;
+  /**
+   * Brand, product code, packaging and pack, as the line prints them (#79).
+   * Null when the line says none of it, and on anything that is not goods.
+   */
+  details?: ReceiptLineDetails | null;
 };
 
 /**
@@ -210,6 +217,34 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
                 type: "boolean",
                 description: "Whether GST applies to this line, inferred from the receipt.",
               },
+              brand: {
+                type: ["string", "null"],
+                description:
+                  "The product's brand, written out in full when the receipt abbreviates it ('M/LAND' -> 'Mainland'). Null when no brand is printed, and for a store's generic line.",
+              },
+              productCode: {
+                type: ["string", "null"],
+                description:
+                  "The vendor's own code for the product as printed on the line — an item, product, SKU or PLU code column. Not a barcode, quantity or price. Null when none is printed.",
+              },
+              packaging: {
+                type: "string",
+                enum: [...PACKAGING, "loose", "unclear"],
+                description:
+                  "What one unit bought comes in: 'loose' for produce, meat or deli goods priced by weight or each; 'unclear' when the line gives no sign.",
+              },
+              packSize: {
+                type: ["object", "null"],
+                additionalProperties: false,
+                description:
+                  "The pack one unit bought is, as printed: '500G' -> 500 g × 1; 'Milk 1L x 10' -> 1 L × 10; 'Eggs 30pk' -> 30 each × 1. Loose goods: 1 of the unit they are priced by. Null when the line does not say.",
+                properties: {
+                  innerQuantity: { type: "number", description: "How much one of the things in the pack holds." },
+                  unit: { type: "string", enum: ["kg", "g", "L", "mL", "each"] },
+                  packCount: { type: "number", description: "How many of those make the pack; 1 when not stated." },
+                },
+                required: ["innerQuantity", "unit", "packCount"],
+              },
             },
             required: [
               "description",
@@ -221,6 +256,10 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
               "normalizedQuantity",
               "normalizedUnit",
               "gstApplicable",
+              "brand",
+              "productCode",
+              "packaging",
+              "packSize",
             ],
           },
         },
@@ -317,6 +356,7 @@ Wholesale invoices here are often long and handwritten — a produce supplier's 
 
 OTHER RULES
 - For each goods line, infer the canonical base unit and total quantity from the printed pack description (e.g. "Tomato Sauce Carton — 3x4L" -> normalizedQuantity 12, normalizedUnit "L"; "Chicken 10kg box" -> normalizedQuantity 10, normalizedUnit "kg"). Leave both null when no sensible conversion applies, and on every line that is not goods — a service included.
+- For each goods line, also record what the line says about the product itself: the brand, the vendor's product code, what it comes in, and the pack size. Wholesale invoices usually print a product code column and a pack ("CTN 10x1L", "20KG BAG"); supermarket receipts usually print a brand, often abbreviated, and a size ("M/LAND CHSE TASTY SHRED 2KG" is Mainland, a 2 kg pack). These fill in a price list a person then checks, so read what is printed and use null or "unclear" rather than guessing. On every line that is not goods, set brand, productCode and packSize to null and packaging to "unclear".
 - Assign each line the closest category from the provided enum. "Miscellaneous" is a real choice meaning the spend genuinely belongs to no other category — a one-off fee, a sundry charge. It is NOT a way of saying you are unsure.
 - When the line text does not say enough to classify it — "Sundries", "Item 4", an illegible or truncated description with no handwriting to clarify it — choose the "Unclear" option instead of guessing. An unclear line is put in front of a person to decide, which is far better than a confident wrong category nobody ever revisits.
 - Strip currency symbols from numbers. If a value is unreadable or absent, use null rather than guessing.
@@ -594,6 +634,10 @@ function readResponse(response: Anthropic.Message): { receipt: ExtractedReceipt;
       normalizedQuantity: num(item.normalizedQuantity),
       normalizedUnit: str(item.normalizedUnit),
       gstApplicable: item.gstApplicable === true,
+      details:
+        toKind(item.kind) === "goods"
+          ? lineDetailsFrom(item as Parameters<typeof lineDetailsFrom>[0])
+          : null,
     })),
   };
 

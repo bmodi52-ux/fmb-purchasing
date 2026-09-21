@@ -614,6 +614,14 @@ export default async function ItemDetailPage({
                     </span>
                   </div>
                   {o.comments && <p className="mt-1 text-ink/60">{o.comments}</p>}
+                  {/* What a receipt filled in (#79) is only ever a reading of
+                      the invoice, so it waits here to be checked. */}
+                  {o.status === "pending" && (purchasesByOffer.get(o.id) ?? 0) > 0 && (
+                    <p className="mt-1 text-xs text-gold-deep">
+                      Filled in from a receipt — check the pack, brand, product code and price
+                      {canApprove ? ", then approve." : "."}
+                    </p>
+                  )}
 
                   {canApprove && o.status === "pending" && (
                     <div className="mt-2 flex gap-3">

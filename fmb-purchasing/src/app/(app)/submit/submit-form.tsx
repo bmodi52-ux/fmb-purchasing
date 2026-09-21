@@ -179,6 +179,7 @@ function toReviewItems(items: ExtractedReceipt["lineItems"]): ReviewItem[] {
     gstApplicable: item.gstApplicable,
     normalizedQuantity: item.normalizedQuantity,
     normalizedUnit: item.normalizedUnit,
+    details: item.details ?? null,
   }));
 }
 
@@ -1089,6 +1090,7 @@ function ReviewForm(props: {
         categoryName: it.categoryName,
         itemId: it.itemId ?? null,
         pricelistItemId: it.pricelistItemId ?? null,
+        details: it.details ?? null,
       })),
     })
       .then((results) =>

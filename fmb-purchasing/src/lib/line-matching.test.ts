@@ -197,6 +197,22 @@ describe("choosePack", () => {
     assert.equal(choosePack(packs, "Ginger 500g", units, none), "half");
   });
 
+  test("the pack the receipt printed, when the wording doesn't say (#79)", () => {
+    const details = {
+      brand: null,
+      productCode: null,
+      packaging: null,
+      packInnerQuantity: 20,
+      packUnit: "kg",
+      packCount: 1,
+    };
+    assert.equal(choosePack(packsOf("onions"), "Onions", units, none, "", details), "onions-20");
+    assert.equal(
+      choosePack(packsOf("green-chilli"), "Green Chilli", units, none, "", { ...details, packaging: "loose" }),
+      "chilli-loose"
+    );
+  });
+
   test("loose, when the line says so", () => {
     assert.equal(choosePack(packsOf("green-chilli"), "Green Chilli loose", units, none), "chilli-loose");
   });

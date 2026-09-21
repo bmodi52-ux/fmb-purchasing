@@ -1,6 +1,7 @@
 import { canonicalUnitCode } from "@/lib/units";
 import { packagingFromText } from "@/lib/pack-description";
 import { packShapeFromDescription } from "@/lib/pack-shape";
+import { packShapeFromDetails, type ReceiptLineDetails } from "@/lib/receipt-line-details";
 
 /**
  * Which Pricelist item, and which of its packs, a receipt line is.
@@ -290,14 +291,17 @@ export function choosePack(
   units: CatalogueUnit[],
   vendorPackIds: ReadonlySet<string>,
   /** The item's name, whose words say nothing about which pack it is. */
-  itemName = ""
+  itemName = "",
+  /** What the receipt printed about the pack (#79), read before the wording. */
+  details: ReceiptLineDetails | null = null
 ): string | null {
   if (packs.length === 0) return null;
   if (packs.length === 1) return packs[0]!.id;
 
-  const packaging = packagingFromText(description);
-  const loose = LOOSE_WORDING.test(description);
-  const stated = packShapeFromDescription(description);
+  const readPackaging = details?.packaging && details.packaging !== "loose" ? details.packaging : null;
+  const packaging = readPackaging ?? packagingFromText(description);
+  const loose = details?.packaging === "loose" || LOOSE_WORDING.test(description);
+  const stated = packShapeFromDetails(details) ?? packShapeFromDescription(description);
   const statedAmount = stated
     ? inBaseUnits(stated.innerQuantity * stated.packCount, stated.unitCode, units)
     : null;
