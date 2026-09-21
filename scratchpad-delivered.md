@@ -6,6 +6,114 @@ across both files — see scratchpad.md.
 
 ## Delivered
 
+### 77. A simple mode that is just the sheet, typed
+
+Delivered 2026-09-21. One setting for everybody, in App settings: a day's
+menu is typed as text and what to buy is typed under it, under the list it
+belongs to. Everything after it is unchanged — release, the section lists,
+who buys what, ordered and delivered, the receipts tying back — because a
+typed quantity is stored as the same requirement a recipe would have
+produced. A typed line reads "typed in" where a costed one names its dish.
+Nothing is thrown away when the setting is changed: a day keeps what it
+holds, and both kinds of line are costed and released together.
+
+Two defects found while checking it: a typed day could not be released at
+all, because the release control still required dishes and a thaali count;
+and changing the setting left every day page showing the old way, because
+only /menus was revalidated.
+
+### 76. A thaali is a set of boxes, and not everybody takes all of it
+
+Delivered 2026-09-21. The count moved from the day to the line: each dish on
+a menu says how many boxes a thaali may take and how many boxes to fill, and
+left blank the day assumes everybody takes everything it offers. Roti and
+fruit are parts of a thaali without being dishes — the day names the item,
+how much goes in a thaali, and how many take it — and roti buys on a list of
+its own, with its own person, because bread would otherwise fall in with the
+rice and the oil. Fruit is bought with the produce, as asked.
+
+The per-line counts are typed when the menu is set up, defaulting to the
+day's thaali count; when the RSVP tool eventually collects per-dish choices,
+its figures replace the typed ones and nothing else changes.
+
+Found while checking: an input of min 0.01 and step 0.05 silently refuses the
+value 1, so a roti of one each could not be saved at all.
+
+### 75. No way to set a menu on a day that has none
+
+Delivered 2026-09-21. Every empty day in the month now says "+ Set a menu".
+Before, the only way in was the date number in the corner, which does not
+read as a control.
+
+### 74. Call the Menus page what it is
+
+Delivered 2026-09-21 as "Thaali menu" — the sidebar, the headings, the tab
+titles and the permission label. The key stays `menus`, because that is what
+every permission row refers to; only what people read changed.
+
+### 73. Procurement dates should open on this week
+
+Delivered 2026-09-21. To buy and Shopping lists open on this week, Monday to
+Sunday, with arrows either side and the week named on screen. The date boxes
+are still underneath for a range that is not a week — a butcher's order
+spanning a fortnight — and the arrows then step from wherever that range
+starts. Twenty tests on the week arithmetic, including the cases that catch
+people: Sunday belongs to the week just gone, and a week crossing a month or
+a year still runs Monday to Sunday.
+
+### 72. "Boxes per batch" stays on screen for a per-box recipe
+
+Delivered 2026-09-21. The pair moves as one now: the batch size appears only
+when the recipe is written per batch, on both dish forms.
+
+### 71. A wrong pack size makes "last paid" ten times too high
+
+Delivered 2026-09-21. When a receipt's own reading and the pack's maths are
+five times or more apart, neither is stated as a price: the line is kept,
+marked, and left out of the latest paid, the cheapest paid lately, and the
+purchase a later one is compared against. An item whose every purchase is in
+dispute has no cost at all, which is the same answer as an item nobody has
+bought. Whoever can fix it is told in the words that name the fix — "the
+receipt reads 20 kg, but the pack it is matched to makes it 2 kg" — beside
+the other price flags, in front of an approver.
+
+On live this set aside seven lines, all the same fault: a pack missing its
+multiplier. Ginger went from $100.00/kg to $12.50/kg. Rice has no last-paid
+price at all until its pack is corrected, because its only purchase is the
+disputed one.
+
+Deliberately not caught: a reading in another unit, a receipt that says
+nothing about quantity, and a difference short of five times — somebody
+writing 70 kg for four 15 kg bags is rounding, not a wrong pack.
+
+### 69. Show the total of what's selected
+
+Delivered 2026-09-21. "3 selected · $6,327.15" wherever rows carrying money
+can be selected: Payments, Approvals, My submissions, All expenses and Line
+items. Lists with no money in them still say only how many. Both table
+components share one summary function, so the two halves of the app agree by
+construction. Money is added in cents, because a run of two-decimal amounts
+summed as floats drifts and this is the figure somebody checks against a bank
+statement.
+
+### 68. Filter on any column, on every list
+
+Delivered 2026-09-21 on the lists where it was asked for: Payments,
+Approvals, My submissions, Budgets and Backups & records all carry the
+per-column filter menu the Expenses and Pricelist tables already had, using
+the same matching module, with a Clear that says how many are on. These lists
+draw their own tables — a payment row carries an account status and a Mark
+paid button — so the filters sit above the table rather than in the headings,
+each carrying its column's name.
+
+Backups & records showed its last ten runs, which is not a log worth
+filtering; it shows two hundred now.
+
+Left alone after looking at each: Needs attention is a grouped queue of links
+whose grouping is its filter; Accounting and Teams & permissions are matrices
+where "filter by column" has no meaning; Notifications and Stand-ins are
+settings with toggles.
+
 ### 65. The old Tokyo Supabase project is gone
 
 Deleted 2026-09-20. It had been kept as the rollback since the move to Sydney

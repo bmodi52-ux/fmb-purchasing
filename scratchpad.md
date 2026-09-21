@@ -13,30 +13,7 @@ so this file stays to what is still open. Numbers are unique across both.
 
 <!-- What happened, where, and what you expected instead. -->
 
-### 71. A wrong pack size makes "last paid" ten times too high
-
-Found 2026-09-20 on the sandbox while checking menu costing. Ginger's last
-paid price reads $100.00/kg, dated 15/09/2026. The receipt behind it says
-"Ginger Box 2x10kg", $200 — ten dollars a kilo.
-
-The offer it was matched to has no real pack behind it: one loose unit of 1.
-Two of those is 2 kg, not 20, so the $200 divides by ten times too little.
-The figure then travels: the 18/09 menu was planned at $625 for 6.25 kg of
-ginger, and the receipt that covered it came to $62.50.
-
-Nothing in the arithmetic is wrong — the pack is. But a price this far out
-should not pass silently into a menu's planned cost. Worth deciding between
-flagging a pack whose receipts disagree with it by an order of magnitude,
-refusing to price from an unconfirmed pack at all, or both.
-
-### 72. "Boxes per batch" stays on screen for a per-box recipe
-
-Raised 2026-09-21 on Add a dish. Choosing "per box" leaves the Boxes per
-batch field sitting there with 200 in it, labelled "(if per batch)" — a
-field that does nothing, explaining in brackets that it does nothing.
-
-It should go when the recipe is per box, and come back when it is per batch.
-The dish page's own Details form has the same pair and the same problem.
+None outstanding.
 
 ## Improvements
 
@@ -208,161 +185,28 @@ needed, per item, per day, per section. So:
   day says how much of its requirement is still unbought so the actual figure
   is never mistaken for final.
 
-Not to be started until asked.
+**Where this got to** (2026-09-21). All four pieces are built, on live, and
+in use on the sandbox: the calendar in both dates, dishes and recipes, box
+sizes anybody can edit, requirements by section, printable and downloadable
+lists, release and assignment, ordered and delivered, reassignment by the
+purchasing head, vendor per line defaulting to the cheapest, planned against
+actual from receipts allocated back, and permissions for all of it. #76 then
+corrected what a thaali is, and #77 added the plainer way of working for a
+kitchen that is not ready for recipes.
 
-### 76. A thaali is a set of boxes, and not everybody takes all of it
+What is still open from the list above, none of it started:
 
-Raised 2026-09-21, filling in what #70 assumed. The app currently treats a
-day as "250 thaalis" and multiplies every dish by it. That is not what a
-thaali is.
-
-A thaali is a set of dishes distributed on a day, and each part of it is
-taken separately:
-
-- **A dish is one or two boxes.** Chicken biryani might be taken as 1 × 1 L
-  or 2 × 1 L; another dish as 1 × 1 L or not at all. Some parts are
-  individual items rather than boxes.
-- **People take part of a thaali.** Someone can skip a dish entirely, so the
-  number of boxes of a dish is not the number of thaalis.
-- **Roti is optional**, given with the thaali some days and not others. When
-  it is on, it has to reach procurement like anything else, with its own
-  person assigned to it.
-- **Fruit is optional** too. It buys as Fresh produce, but on the menu it is
-  its own thing, not an ingredient of a dish.
-
-What this means for what is already built: a day needs a count per dish, not
-one count for the day, and the menu needs to hold parts that are not dishes
-with recipes. Cost per thaali then becomes the cost of a full thaali against
-the cost of what was actually made — which is the more useful figure anyway.
-
-**How a menu is set up** (answered 2026-09-21). The menu itself states the
-box, so the counts come from setting it up rather than from anywhere else:
-
-> **Menu A**
-> Chicken biryani — 2 × 1 L box (people take 1 or 2)
-> Raita — 1 × 60 ml box
->
-> **Menu B**
-> Gosht — 1 × 650 ml box
-> Daal — 1 × 1 L box
-> Rice — 1 × 1 L box
-> Roti — yes/no
-
-So a line on a menu is a dish, a box size, and how many of that box the
-thaali offers. Somebody taking Menu B might take only daal and rice; somebody
-else only gosht and roti. What has to be bought therefore turns on how many
-people take each line, not on the day's count.
-
-**Roti is all or nothing.** How much roti a thaali gets is set when the menu
-is set up — 1, or 0.5, or 0.25. Whoever takes roti takes that amount; they
-cannot ask for half of it. So the only number that varies is how many people
-say yes.
-
-(60 ml is a guess, which is exactly why box sizes are a list somebody can
-edit — that part is done and on live.)
-
-**Where the per-line count comes from** (settled 2026-09-21). Buying needs a
-number against every line, not one number for the day: 250 thaalis might be
-180 gosht, 240 daal, 250 rice and 120 roti, and biryani offered as 2 × 1 L
-might come to 380 boxes across 250 people. The RSVP tool is outside the app
-and only says how many thaalis, so the number is typed when the menu is set
-up — a count beside each line, defaulting to the day's thaali count, changed
-where somebody knows better ("roti, about half").
-
-Chosen over buying for everyone on every line, which over-buys, and over
-waiting for RSVP to collect per-dish choices. When RSVP does collect them,
-its figures replace the typed ones and nothing else about this changes.
-
-### 77. A simple mode that is just the sheet, typed
-
-Raised 2026-09-21, and deliberately a step back from #70 and #76: the team
-may not be ready to work the advanced way, and the app should not be the
-thing holding up the move off the sheet.
-
-Wanted: a day can be set up plainly. The menu is typed as text — no dishes,
-no recipes, no box sizes — and under it the meat, fresh produce and dry goods
-are listed with their quantities, typed directly, without saying which dish
-they are for. That is what the Google Sheet holds today, and typing it into
-the app should be enough on its own.
-
-The point is that everything after it still works. A typed quantity is the
-same requirement as a calculated one, so release, the section lists, who buys
-what, ordered and delivered, the receipts allocated back — all of it should
-run off a simple day exactly as it runs off a costed one. What a simple day
-gives up is only the part that was derived: cost per thaali from recipes, and
-quantities that move when the count does.
-
-**The toggle is one setting for the whole app** (settled 2026-09-21), not
-per day and not per kitchen: everybody works the same way, and the move to
-the advanced way is a decision taken once, when the team is ready. It belongs
-with the other app settings.
-
-A day set up in one mode keeps what it holds when the switch is thrown —
-typed quantities are still requirements, a costed day still has its recipes —
-so the setting changes how days are set up and shown from then on, and flipping
-it back and forth destroys nothing.
-
-### 73. Procurement dates should open on this week
-
-Raised 2026-09-21. To buy and Shopping lists both open on an empty From/To
-pair, so the first thing anybody does is type two dates.
-
-Wanted: open on the current week, Monday to Sunday; arrows either side to
-step back and forward a week; and a custom range still available for the
-times a butcher's order spans a fortnight. Both pages, working the same way.
-
-### 74. Call the Menus page what it is
-
-Raised 2026-09-21: "Thaali Menu", or whatever reads right. The page is about
-the thaali served on a day, and "Menus" on its own does not say that. The
-sidebar entry, the page heading and the tab names all say Menus at the
-moment.
-
-### 75. No way to set a menu on a day that has none
-
-Raised 2026-09-21 on the calendar. A day with a menu shows it and links to
-it. A day with nothing shows nothing to click but the date number in the
-corner, which does not read as a control — so the way to start a menu is to
-know that the number is a link.
-
-An empty cell wants something that says so: a plus, or "Set a menu", on
-hover or always.
-
-### 68. Filter on any column, on every list
-
-Raised 2026-09-20 on Payments, which offers one search box ("Filter by
-vendor, submitter, invoice") and a Sort by list, and nothing per column.
-
-Expenses, Line items, Pricelist, Vendors and Users already have this: they
-are built on `ColumnsDataTable`, so every heading carries a filter menu,
-columns can be shown, hidden and reordered (#56), and the rows export as CSV,
-Excel, PDF or JSON. The lists that have none of it are Payments, Approvals,
-My submissions, Needs attention, Budgets, Accounting, Notifications,
-Stand-ins, Teams & permissions, and Backups & records.
-
-Wanted: the same filtering everywhere. Moving each list onto
-`ColumnsDataTable` brings the column chooser, the saved order and the
-exports with it, which is the point — one way of working on every page.
-
-Not a single change: each list has its own row shape, its own actions
-(Mark paid, Approve, Withdraw) and its own expanded rows, and some are cards
-on a phone. Payments first, since it is where the money goes out and where it
-was raised; then Approvals and My submissions; the admin lists last. Worth
-checking as each moves that the bulk actions still work and that nothing
-slows down on a long list.
-
-### 69. Show the total of what's selected
-
-Raised 2026-09-20 on Payments. Selecting three expenses says "3 selected"
-beside Mark paid and Download bank file, but not what they come to — which is
-the figure that matters before a bank transfer, and it has to be added up by
-hand.
-
-Wanted: the amount beside the count, wherever rows are selected for something
-— "3 selected · $6,327.15". Payments first. The same applies to any list
-whose rows carry money and offer a bulk action, so it belongs in
-`ColumnsDataTable` (which shows the same "N selected") as well as in the
-Payments table, ideally as one thing both use.
+- **Ordering deadlines** — an order-by date per vendor and a nudge before it.
+  Deferred on 2026-09-20 and still deferred.
+- **Who is told, and when** — assignments, released menus and late orders do
+  not use the notifications built in #27 and #28 yet.
+- **A record of changes** — who changed a released menu, and when.
+- **On a phone, in a shop** — the lists tick off and print, but nothing has
+  been done for one-handed use in a market, and the vendor's phone number is
+  not on the list.
+- **Reporting** — cost per thaali over time, by dish, by section; the monthly
+  committee pack (#40) would carry it.
+- **What is already in the store** — ignored on purpose, as agreed.
 
 ### 64. Check on live what has never been seen working
 
@@ -500,4 +344,3 @@ contractor's insurance expires.
 
 No-ABN withholding may apply when a contractor doesn't quote an ABN. Confirm
 with FMB's accountant whether it does.
-
