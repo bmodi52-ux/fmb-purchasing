@@ -189,12 +189,22 @@ describe("unitName", () => {
 
 describe("formatUnitCost", () => {
   test("items cost each, measures cost per unit", () => {
-    assert.equal(formatUnitCost(0.25, "ea"), "$0.2500 each");
-    assert.equal(formatUnitCost(2.4, "kg"), "$2.4000/kg");
+    assert.equal(formatUnitCost(0.25, "ea"), "$0.25 each");
+    assert.equal(formatUnitCost(2.4, "kg"), "$2.40/kg");
+  });
+
+  test("two places, as money is written (#82)", () => {
+    assert.equal(formatUnitCost(3.708, "kg"), "$3.71/kg");
+    assert.equal(formatUnitCost(2.4, "kg", { decimals: 4 }), "$2.4000/kg");
+  });
+
+  test("grams and millilitres are priced per kg and per L, not rounded to nothing", () => {
+    assert.equal(formatUnitCost(0.00178, "g"), "$1.78/kg");
+    assert.equal(formatUnitCost(0.0025, "mL"), "$2.50/L");
   });
 
   test("without the currency sign", () => {
-    assert.equal(formatUnitCost(2.4, "kg", { currency: false }), "2.4000/kg");
+    assert.equal(formatUnitCost(2.4, "kg", { currency: false }), "2.40/kg");
   });
 });
 

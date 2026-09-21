@@ -102,7 +102,7 @@ export function WidgetBody({ data }: { data: WidgetData }) {
             against.
           </p>
         );
-      return <LineChart series={series} valueFormat={(v) => `$${v.toFixed(4)}`} height={140} />;
+      return <LineChart series={series} valueFormat={(v) => `$${v.toFixed(2)}`} height={140} />;
     }
 
     case "unit-cost-table":
@@ -261,7 +261,7 @@ function UnitCostTable({ rows }: { rows: PerUnitRow[] }) {
               <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
                 {r.perPack != null ? `$${r.perPack.toFixed(2)}` : "—"}
               </td>
-              <td className="py-1 text-right font-mono tabular-nums">${r.perUnit.toFixed(4)}</td>
+              <td className="py-1 text-right font-mono tabular-nums">${r.perUnit.toFixed(2)}</td>
             </tr>
           ))}
         </tbody>

@@ -816,7 +816,7 @@ function UnitCostsSection({
                 <div>
                   <h3 className="mb-2 text-sm font-medium text-ink">{groupName}</h3>
                   {datedPoints >= 2 ? (
-                    <LineChart series={series} valueFormat={(v) => `$${v.toFixed(4)}`} height={150} />
+                    <LineChart series={series} valueFormat={(v) => `$${v.toFixed(2)}`} height={150} />
                   ) : (
                     <p className="text-xs text-ink/50">
                       One purchase so far — a trend appears once there is something to compare it
@@ -848,7 +848,7 @@ function UnitCostsSection({
                               {r.perPack != null ? `$${r.perPack.toFixed(2)}` : "—"}
                             </td>
                             <td className="py-1 text-right font-mono tabular-nums">
-                              ${r.perUnit.toFixed(4)}
+                              ${r.perUnit.toFixed(2)}
                             </td>
                           </tr>
                         ))}

@@ -216,18 +216,27 @@ export function packTitle(label: string | null | undefined, p: PackDescriptionIn
   return `${name} (${shape})`;
 }
 
+/** Units too small to price in cents, and the unit a thousand of them make. */
+const PRICED_PER_THOUSAND: Record<string, string> = { g: "kg", mL: "L" };
+
 /**
- * A cost per unit: "$0.2500 each" for items, "$2.4000/kg" for anything
- * measured. "$0.25/ea" was the same figure in stock-system shorthand.
+ * A cost per unit: "$0.25 each" for items, "$2.40/kg" for anything measured.
+ * "$0.25/ea" was the same figure in stock-system shorthand.
+ *
+ * Two places, as money is written (#82). Four read as noise, but two would
+ * turn a gram of cheese into "$0.00/g" — so grams and millilitres are priced
+ * per kg and per L instead, which is how a shelf tag prints them anyway.
  */
 export function formatUnitCost(
   cost: number,
   unitLabel: string | null | undefined,
-  { decimals = 4, currency = true }: { decimals?: number; currency?: boolean } = {}
+  { decimals = 2, currency = true }: { decimals?: number; currency?: boolean } = {}
 ): string {
-  const figure = `${currency ? "$" : ""}${cost.toFixed(decimals)}`;
-  if (isCountOfItems(unitLabel)) return `${figure} each`;
-  return unitLabel ? `${figure}/${unitLabel}` : figure;
+  const larger = PRICED_PER_THOUSAND[canonicalUnitCode(unitLabel) ?? ""];
+  const [value, label] = larger ? [cost * 1000, larger] : [cost, unitLabel];
+  const figure = `${currency ? "$" : ""}${value.toFixed(decimals)}`;
+  if (isCountOfItems(label)) return `${figure} each`;
+  return label ? `${figure}/${label}` : figure;
 }
 
 /**
