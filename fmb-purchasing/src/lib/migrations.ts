@@ -40,6 +40,7 @@ export const LEDGERED_MIGRATIONS = [
   "0065_thaali_menu_label.sql",
   "0066_pack_disagreement.sql",
   "0067_thaali_parts.sql",
+  "0068_simple_menus.sql",
 ] as const;
 
 export type MigrationStatus =

@@ -60,6 +60,20 @@ export const SETTING_DEFAULTS = {
     cheapestRecentDays: 90,
   },
   /**
+   * How a day's menu is planned (#77).
+   *
+   * "advanced" is the app as built: dishes with recipes, box sizes, a count
+   * against each line, a cost per thaali worked out from all of it. "simple"
+   * is the sheet this replaces, typed: the menu as text and the quantities
+   * listed under their headings.
+   *
+   * One setting for everybody rather than one per day or per kitchen, because
+   * moving to the costed way is a decision taken once, when the team is ready
+   * for it. A day set up in either way keeps what it holds when the switch is
+   * thrown; only how days are set up and shown from then on changes.
+   */
+  menu_mode: "advanced" as "advanced" | "simple",
+  /**
    * The scheduled check of how well receipts are read (#49): the confirmed
    * receipts are read again every so often, a few each morning, and admins
    * are told when accuracy falls.
@@ -75,6 +89,13 @@ export const SETTING_DEFAULTS = {
 };
 
 export type PriceAlertSettings = (typeof SETTING_DEFAULTS)["price_alerts"];
+
+export type MenuMode = (typeof SETTING_DEFAULTS)["menu_mode"];
+
+/** Anything else stored under this key is the app as built. */
+export function menuMode(value: unknown): MenuMode {
+  return value === "simple" ? "simple" : "advanced";
+}
 
 export type ReminderSettings = (typeof SETTING_DEFAULTS)["reminders"];
 export type AbaSettingValue = (typeof SETTING_DEFAULTS)["aba"];

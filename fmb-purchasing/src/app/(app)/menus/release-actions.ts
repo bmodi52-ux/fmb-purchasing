@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { costMenuDay } from "@/lib/menu-costing";
-import { loadDishes, loadExtras, loadItemPrices, loadSections, withDayCounts } from "./data";
+import { loadDishes, loadExtras, loadItemPrices, loadMenuLines, loadSections, withDayCounts } from "./data";
 
 /**
  * Releasing a day (#70): the menu stops being a plan and becomes somebody's
@@ -47,16 +47,24 @@ export async function releaseDay(formData: FormData) {
     await loadDishes(admin, dishIds),
     onDay as { dish_id: string; boxes_offered?: number | string | null; expected_boxes?: number | null }[]
   );
-  const extras = (await loadExtras(admin, [dayId])).get(dayId) ?? [];
+  const [extrasByDay, linesByDay] = await Promise.all([loadExtras(admin, [dayId]), loadMenuLines(admin, [dayId])]);
+  const extras = extrasByDay.get(dayId) ?? [];
+  const lines = linesByDay.get(dayId) ?? [];
   const thaalis = Number(day.confirmed_thaalis ?? day.planned_thaalis);
-  // Roti alone is a day worth releasing: it still has to be ordered.
-  if ((dishes.length === 0 && extras.length === 0) || thaalis <= 0) return;
+  // Roti alone is a day worth releasing, and so is a day nobody costed: a
+  // typed list still has to be bought.
+  if (dishes.length === 0 && extras.length === 0 && lines.length === 0) return;
+  if (thaalis <= 0 && lines.length === 0) return;
 
   const itemIds = [
-    ...new Set([...dishes.flatMap((d) => d.ingredients.map((i) => i.itemId)), ...extras.map((e) => e.itemId)]),
+    ...new Set([
+      ...dishes.flatMap((d) => d.ingredients.map((i) => i.itemId)),
+      ...extras.map((e) => e.itemId),
+      ...lines.map((l) => l.itemId),
+    ]),
   ];
   const [prices, sections] = await Promise.all([loadItemPrices(admin, itemIds), loadSections(admin, itemIds)]);
-  const cost = costMenuDay(dishes, thaalis, prices, extras);
+  const cost = costMenuDay({ dishes, extras, lines }, thaalis, prices);
 
   // Who buys each section: the kitchen's own owner, else the one set for
   // both kitchens.
@@ -93,7 +101,11 @@ export async function releaseDay(formData: FormData) {
   // list of its own, with its own person; fruit does not, because fruit is
   // bought with the rest of the produce even when the menu names it apart.
   const rotiItems = new Set(extras.filter((e) => e.kind === "roti").map((e) => e.itemId));
-  const sectionOf = (itemId: string) => (rotiItems.has(itemId) ? "roti" : (sections.get(itemId) ?? "dry"));
+  // A line typed under a heading belongs under that heading; somebody put it
+  // there on purpose.
+  const typedSections = new Map(lines.flatMap((l) => (l.section ? [[l.itemId, l.section] as const] : [])));
+  const sectionOf = (itemId: string) =>
+    rotiItems.has(itemId) ? "roti" : (typedSections.get(itemId) ?? sections.get(itemId) ?? "dry");
 
   const rows = cost.lines.map((line) => {
     const kept = before.get(line.itemId);

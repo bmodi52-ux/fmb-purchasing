@@ -108,7 +108,7 @@ export default async function MenuSheetPage({
       kitchenName: kitchens.find((k) => k.id === d.kitchen_id)?.name ?? "",
       dishes: onDay,
       thaalis,
-      cost: onDay.length > 0 || extras.length > 0 ? costMenuDay(onDay, thaalis, prices, extras) : null,
+      cost: onDay.length > 0 || extras.length > 0 ? costMenuDay({ dishes: onDay, extras }, thaalis, prices) : null,
     };
   });
 

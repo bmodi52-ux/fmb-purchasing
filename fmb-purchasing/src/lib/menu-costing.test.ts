@@ -11,6 +11,7 @@ import {
   requirementsFor,
   type MenuDish,
   type MenuExtra,
+  type MenuLine,
 } from "./menu-costing";
 
 const kg = { unitCode: "kg", unitToBase: 1, baseUnitCode: "kg" };
@@ -72,7 +73,7 @@ describe("batchesFor", () => {
 
 describe("requirementsFor", () => {
   test("the same item from two dishes is one line", () => {
-    const lines = requirementsFor([bhunaGosht, mugPulao], 200);
+    const lines = requirementsFor({ dishes: [bhunaGosht, mugPulao] }, 200);
     const onions = lines.find((l) => l.itemId === "i-onion");
     assert.equal(onions?.quantity, 100, "80 from the gosht, 20 from the pulao");
     assert.deepEqual(onions?.fromDishes, ["Bhuna gosht", "Mug pulao"]);
@@ -80,23 +81,23 @@ describe("requirementsFor", () => {
   });
 
   test("recipes written in grams come back in the base unit", () => {
-    const [yoghurt] = requirementsFor([kadhi], 250);
+    const [yoghurt] = requirementsFor({ dishes: [kadhi] }, 250);
     assert.equal(yoghurt.quantity, 100, "400 g a box × 250 boxes");
     assert.equal(yoghurt.baseUnitCode, "kg");
   });
 
   test("a quarter more thaalis is a quarter more of everything", () => {
-    const lines = requirementsFor([bhunaGosht], 250);
+    const lines = requirementsFor({ dishes: [bhunaGosht] }, 250);
     assert.equal(lines.find((l) => l.itemId === "i-goat")?.quantity, 150, "120 kg × 1.25");
     assert.equal(lines.find((l) => l.itemId === "i-onion")?.quantity, 100);
   });
 
   test("lines read in name order, and nothing is needed for no thaalis", () => {
     assert.deepEqual(
-      requirementsFor([bhunaGosht], 200).map((l) => l.itemName),
+      requirementsFor({ dishes: [bhunaGosht] }, 200).map((l) => l.itemName),
       ["Ginger", "Goat", "Onions"]
     );
-    assert.deepEqual(requirementsFor([bhunaGosht], 0), []);
+    assert.deepEqual(requirementsFor({ dishes: [bhunaGosht] }, 0), []);
   });
 });
 
@@ -124,7 +125,7 @@ describe("costMenuDay", () => {
   ]);
 
   test("the cost of a day, and of one thaali", () => {
-    const cost = costMenuDay([bhunaGosht], 200, prices);
+    const cost = costMenuDay({ dishes: [bhunaGosht] }, 200, prices);
     // 120 kg goat at 14, 80 kg onions at 1.50, 5 kg ginger at 8.
     assert.equal(cost.total, 1680 + 120 + 40);
     assert.equal(cost.perThaali, 9.2);
@@ -136,20 +137,20 @@ describe("costMenuDay", () => {
   });
 
   test("an item with no price is counted as unpriced, not as free", () => {
-    const cost = costMenuDay([bhunaGosht, kadhi], 200, prices);
+    const cost = costMenuDay({ dishes: [bhunaGosht, kadhi] }, 200, prices);
     assert.equal(cost.unpriced, 1);
     assert.equal(cost.lines.find((l) => l.itemId === "i-yoghurt")?.cost, null);
   });
 
   test("cost per thaali holds steady as the count moves, because nothing is rounded", () => {
-    const at200 = costMenuDay([bhunaGosht], 200, prices);
-    const at250 = costMenuDay([bhunaGosht], 250, prices);
+    const at200 = costMenuDay({ dishes: [bhunaGosht] }, 200, prices);
+    const at250 = costMenuDay({ dishes: [bhunaGosht] }, 250, prices);
     assert.equal(at250.total, 2300, "1.25 × 1,840");
     assert.equal(at250.perThaali, at200.perThaali);
   });
 
   test("no thaalis, no cost per thaali", () => {
-    assert.equal(costMenuDay([bhunaGosht], 0, prices).perThaali, null);
+    assert.equal(costMenuDay({ dishes: [bhunaGosht] }, 0, prices).perThaali, null);
   });
 });
 
@@ -184,7 +185,7 @@ describe("two dishes in different boxes on the same day", () => {
   test("each dish scales in its own boxes", () => {
     assert.equal(batchesFor(bhunaGosht, 250), 1.25, "1 L boxes, from a batch of 200");
     assert.equal(batchesFor(kadhi, 250), 250, "650 ml boxes, one at a time");
-    const lines = requirementsFor([bhunaGosht, kadhi], 250);
+    const lines = requirementsFor({ dishes: [bhunaGosht, kadhi] }, 250);
     assert.equal(lines.find((l) => l.itemId === "i-goat")?.quantity, 150, "1.25 batches");
     assert.equal(lines.find((l) => l.itemId === "i-yoghurt")?.quantity, 100, "400 g × 250 boxes");
   });
@@ -218,12 +219,12 @@ describe("a thaali is a set of boxes, and not everybody takes all of it (#76)", 
   });
 
   test("quantities follow the line's own count, not the day's", () => {
-    const [line] = requirementsFor([{ ...gosht, expectedBoxes: 180 }], 250);
+    const [line] = requirementsFor({ dishes: [{ ...gosht, expectedBoxes: 180 }] }, 250);
     assert.equal(line.quantity, 90, "180 boxes × 500 g");
   });
 
   test("a dish nobody takes is bought for nobody", () => {
-    assert.deepEqual(requirementsFor([{ ...gosht, expectedBoxes: 0 }], 250), []);
+    assert.deepEqual(requirementsFor({ dishes: [{ ...gosht, expectedBoxes: 0 }] }, 250), []);
   });
 
   test("biryani offered as two boxes is cooked for the boxes, not the people", () => {
@@ -240,7 +241,7 @@ describe("a thaali is a set of boxes, and not everybody takes all of it (#76)", 
       ],
     };
     assert.equal(batchesFor(biryani, boxesFor(biryani, 250)), 1.9, "380 boxes from a batch of 200");
-    assert.equal(requirementsFor([biryani], 250)[0].quantity, 76, "1.9 × 40 kg");
+    assert.equal(requirementsFor({ dishes: [biryani] }, 250)[0].quantity, 76, "1.9 × 40 kg");
   });
 });
 
@@ -257,19 +258,19 @@ describe("the parts of a thaali that are not dishes (#76)", () => {
   };
 
   test("how many to buy is how much each, times how many take it", () => {
-    const [line] = requirementsFor([], 250, [{ ...roti, expectedCount: 120 }]);
+    const [line] = requirementsFor({ extras: [{ ...roti, expectedCount: 120 }] }, 250);
     assert.equal(line.quantity, 120);
     assert.equal(line.itemName, "Roti");
   });
 
   test("half a roti each is half a roti for everyone who takes one", () => {
-    const [line] = requirementsFor([], 250, [{ ...roti, perThaali: 0.5, expectedCount: 120 }]);
+    const [line] = requirementsFor({ extras: [{ ...roti, perThaali: 0.5, expectedCount: 120 }] }, 250);
     assert.equal(line.quantity, 60);
   });
 
   test("nobody counted means the day's count", () => {
     assert.equal(countFor({}, 250), 250);
-    assert.equal(requirementsFor([], 250, [roti])[0].quantity, 250);
+    assert.equal(requirementsFor({ extras: [roti] }, 250)[0].quantity, 250);
   });
 
   test("an extra and a dish that want the same item are one line to buy", () => {
@@ -294,7 +295,7 @@ describe("the parts of a thaali that are not dishes (#76)", () => {
       unitToBase: 1,
       baseUnitCode: "kg",
     };
-    const lines = requirementsFor([{ ...fruitDish, expectedBoxes: 50 }], 250, [apples]);
+    const lines = requirementsFor({ dishes: [{ ...fruitDish, expectedBoxes: 50 }], extras: [apples] }, 250);
     assert.equal(lines.length, 1);
     assert.equal(lines[0].quantity, 25, "50 × 200 g, plus 100 × 150 g");
     assert.deepEqual(lines[0].fromDishes, ["Fruit salad", "Apples"]);
@@ -302,8 +303,72 @@ describe("the parts of a thaali that are not dishes (#76)", () => {
 
   test("cost per thaali is still divided by the thaalis, not by the boxes", () => {
     const prices = new Map([["i-roti", { latestPaid: 2 }]]);
-    const cost = costMenuDay([], 250, prices, [{ ...roti, expectedCount: 120 }]);
+    const cost = costMenuDay({ dishes: [], extras: [{ ...roti, expectedCount: 120 }] }, 250, prices);
     assert.equal(cost.total, 240, "120 roti at $2");
     assert.equal(cost.perThaali, 0.96, "240 ÷ 250, because that is what a thaali costs on average");
+  });
+});
+
+describe("a day typed the way the sheet types it (#77)", () => {
+  const goat: MenuLine = {
+    lineId: "l-goat",
+    itemId: "i-goat",
+    itemName: "Goat",
+    quantity: 120,
+    unitCode: "kg",
+    unitToBase: 1,
+    baseUnitCode: "kg",
+  };
+
+  test("a typed quantity is what to buy, with nothing to work out", () => {
+    const [line] = requirementsFor({ lines: [goat] }, 250);
+    assert.equal(line.quantity, 120);
+    assert.equal(line.baseUnitCode, "kg");
+  });
+
+  test("it does not move when the count does, because nobody said it should", () => {
+    assert.equal(requirementsFor({ lines: [goat] }, 250)[0].quantity, 120);
+    assert.equal(requirementsFor({ lines: [goat] }, 500)[0].quantity, 120);
+  });
+
+  test("typed in the unit it was written in, converted like any other", () => {
+    const yoghurt: MenuLine = {
+      lineId: "l-yoghurt",
+      itemId: "i-yoghurt",
+      itemName: "Yoghurt",
+      quantity: 800,
+      unitCode: "g",
+      unitToBase: 0.001,
+      baseUnitCode: "kg",
+    };
+    assert.equal(requirementsFor({ lines: [yoghurt] }, 250)[0].quantity, 0.8);
+  });
+
+  test("a typed line costs the same way a worked-out one does", () => {
+    const prices = new Map([["i-goat", { latestPaid: 27 }]]);
+    const cost = costMenuDay({ lines: [goat] }, 250, prices);
+    assert.equal(cost.total, 3240);
+    assert.equal(cost.perThaali, 12.96);
+  });
+
+  test("a day planned both ways has one line per item to buy", () => {
+    const kadhi: MenuDish = {
+      dishId: "d-kadhi",
+      dishName: "Kadhi",
+      basis: "box",
+      portionMl: 650,
+      batchBoxes: null,
+      ingredients: [
+        { itemId: "i-goat", itemName: "Goat", quantity: 0.1, unitCode: "kg", unitToBase: 1, baseUnitCode: "kg" },
+      ],
+    };
+    const lines = requirementsFor({ dishes: [kadhi], lines: [goat] }, 100);
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0].quantity, 130, "120 typed in, plus 100 boxes x 100 g");
+    assert.deepEqual(lines[0].fromDishes, ["Kadhi", "typed in"]);
+  });
+
+  test("nothing typed and nothing cooked is nothing to buy", () => {
+    assert.deepEqual(requirementsFor({}, 250), []);
   });
 });
