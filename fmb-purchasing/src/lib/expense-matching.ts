@@ -3,6 +3,7 @@ import { recordVendorChange } from "@/lib/vendor-history";
 import { canonicalUnitCode } from "@/lib/units";
 import { packShapeFromDescription, type PackShape } from "@/lib/pack-shape";
 import { isPackaging, packagingFromText } from "@/lib/pack-description";
+import { packShapeFromDetails, type ReceiptLineDetails } from "@/lib/receipt-line-details";
 
 export function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -316,6 +317,7 @@ async function matchOrCreatePackSize(
     canonicalUnitId,
     normalizedUnit,
     description,
+    details,
   }: {
     itemId: string;
     canonicalUnitId: string;
@@ -326,13 +328,17 @@ async function matchOrCreatePackSize(
      * still cannot be used for this; see packShapeFromDescription.
      */
     description?: string | null;
+    /** What extraction read off the line (#79) — a stated pack beats one parsed from the wording. */
+    details?: ReceiptLineDetails | null;
   }
 ): Promise<string> {
   // A shape the description states wins over "one unit". Everything else
   // about this function stays as it was, including what happens when it says
   // nothing: setting up the pack by hand is only skipped when the invoice
-  // itself did the describing.
-  const stated = packShapeFromDescription(description);
+  // itself did the describing. The pack extraction read off the line is the
+  // better reading of the same thing, so it goes first.
+  const stated = packShapeFromDetails(details) ?? packShapeFromDescription(description);
+  const readPackaging = details?.packaging && details.packaging !== "loose" ? details.packaging : null;
   const statedUnitId = stated ? await unitIdByCode(admin, stated.unitCode) : null;
 
   const innerUnitId =
@@ -349,11 +355,25 @@ async function matchOrCreatePackSize(
     .eq("pack_count", packCount)
     .is("label", null)
     .maybeSingle();
-  if (existing) return existing.id;
+  if (existing) {
+    // A pack nobody has said the packaging of takes what the line says; one
+    // somebody has described is left alone.
+    if (readPackaging) {
+      await admin
+        .from("item_pack_sizes")
+        .update({ packaging: readPackaging })
+        .eq("id", existing.id)
+        .is("packaging", null)
+        .eq("sold_loose", false);
+    }
+    return existing.id;
+  }
 
   const selfEvident = await isSelfEvidentQuantity(admin, innerUnitId);
-  // A stated pack of several is a carton, not something sold loose.
-  const soldLoose = selfEvident && packCount === 1 && innerQuantity === 1;
+  // A stated pack of several is a carton, not something sold loose; nor is
+  // one the line says comes in a bag or a box.
+  const soldLoose =
+    packCount === 1 && innerQuantity === 1 && (details?.packaging === "loose" || (selfEvident && !readPackaging));
 
   const { data: created, error } = await admin
     .from("item_pack_sizes")
@@ -364,7 +384,7 @@ async function matchOrCreatePackSize(
       pack_count: packCount,
       sold_loose: soldLoose,
       // "Green Chilli 6kg Box" says what it comes in as plainly as its weight.
-      packaging: soldLoose ? null : packagingFromText(description),
+      packaging: soldLoose ? null : (readPackaging ?? packagingFromText(description)),
       contents_confirmed: selfEvident,
     })
     .select("id")
@@ -526,6 +546,59 @@ async function fillMissingPackPrice(
 }
 
 /**
+ * Put a receipt's brand and product code on a pending offer that lacks them
+ * (#79). Only pending: an approved offer's details are what somebody checked,
+ * and a receipt is not grounds to change them without asking. A pending one
+ * is still waiting for that check, so filling its gaps only gives the
+ * approver more to confirm.
+ */
+async function fillMissingOfferDetails(
+  admin: SupabaseClient,
+  offerId: string,
+  details: ReceiptLineDetails | null | undefined
+): Promise<void> {
+  if (details?.brand) {
+    await admin
+      .from("pricelist_items")
+      .update({ brand: details.brand })
+      .eq("id", offerId)
+      .eq("status", "pending")
+      .is("brand", null);
+  }
+  if (details?.productCode) {
+    await admin
+      .from("pricelist_items")
+      .update({ vendor_sku: details.productCode })
+      .eq("id", offerId)
+      .eq("status", "pending")
+      .is("vendor_sku", null);
+  }
+}
+
+/**
+ * The offer this vendor sells under the product code printed on the line, or
+ * null (#79). A code is the vendor's own name for exactly one product, so it
+ * is stronger evidence than the wording — but only when it names exactly one
+ * live offer.
+ */
+async function findOfferByVendorCode(
+  admin: SupabaseClient,
+  vendorId: string,
+  code: string | null | undefined
+): Promise<string | null> {
+  const trimmed = code?.trim();
+  if (!trimmed) return null;
+  const { data } = await admin
+    .from("pricelist_items")
+    .select("id")
+    .eq("vendor_id", vendorId)
+    .eq("vendor_sku", trimmed)
+    .neq("status", "rejected")
+    .limit(2);
+  return data?.length === 1 ? (data[0]!.id as string) : null;
+}
+
+/**
  * This vendor's offer on a pack, adding a pending one when there is none.
  *
  * A reviewed offer is preferred over a provisional one, then the oldest, so
@@ -540,7 +613,14 @@ async function offerForPack(
     packSizeId,
     packPrice,
     userId,
-  }: { vendorId: string; packSizeId: string; packPrice: number | null; userId: string }
+    details = null,
+  }: {
+    vendorId: string;
+    packSizeId: string;
+    packPrice: number | null;
+    userId: string;
+    details?: ReceiptLineDetails | null;
+  }
 ): Promise<{ id: string; status: "matched" | "created" }> {
   const { data: offers, error } = await admin
     .from("pricelist_items")
@@ -558,6 +638,7 @@ async function offerForPack(
     );
   if (live[0]) {
     await fillMissingPackPrice(admin, live[0].id as string, packPrice);
+    await fillMissingOfferDetails(admin, live[0].id as string, details);
     return { id: live[0].id as string, status: "matched" };
   }
 
@@ -567,6 +648,8 @@ async function offerForPack(
       vendor_id: vendorId,
       pack_size_id: packSizeId,
       pack_price: packPrice,
+      brand: details?.brand ?? null,
+      vendor_sku: details?.productCode ?? null,
       status: "pending",
       created_by: userId,
     })
@@ -668,6 +751,7 @@ export async function chosenOffer(
     userId,
     line,
     normalizedUnit,
+    details,
   }: {
     offerId: string;
     vendorId: string;
@@ -676,6 +760,7 @@ export async function chosenOffer(
     userId: string;
     line?: ReceiptLineFacts | null;
     normalizedUnit: string | null;
+    details?: ReceiptLineDetails | null;
   }
 ): Promise<{ id: string; status: "matched"; categoryId: string | null } | null> {
   const { data: offer } = await admin
@@ -693,9 +778,10 @@ export async function chosenOffer(
 
   // The pack is already known, so the price is the price of that pack rather
   // than something derived from a shape read out of the wording.
-  const shape = packShapeFromDescription(description);
+  const shape = packShapeFromDetails(details) ?? packShapeFromDescription(description);
   const packPrice = line ? offerPackPrice({ ...line, normalizedUnit }, shape) : null;
   await fillMissingPackPrice(admin, offer.id, packPrice);
+  await fillMissingOfferDetails(admin, offer.id, details);
 
   // A pin is also a person saying "this wording means this item", which is the
   // same lesson a correction teaches — worth keeping for the next receipt.
@@ -720,6 +806,7 @@ type PinnedLine = {
   userId: string;
   line?: ReceiptLineFacts | null;
   normalizedUnit: string | null;
+  details?: ReceiptLineDetails | null;
 };
 
 /**
@@ -737,7 +824,7 @@ type PinnedLine = {
  */
 export async function chosenPack(
   admin: SupabaseClient,
-  { packSizeId, vendorId, description, originalDescription, userId, line, normalizedUnit }: PinnedLine & { packSizeId: string }
+  { packSizeId, vendorId, description, originalDescription, userId, line, normalizedUnit, details }: PinnedLine & { packSizeId: string }
 ): Promise<{ id: string; status: "matched" | "created"; categoryId: string | null } | null> {
   const { data: pack } = await admin
     .from("item_pack_sizes")
@@ -760,7 +847,7 @@ export async function chosenPack(
     : null;
   const packPrice = line ? offerPackPrice({ ...line, normalizedUnit }, shape) : null;
 
-  const offer = await offerForPack(admin, { vendorId, packSizeId: pack.id, packPrice, userId });
+  const offer = await offerForPack(admin, { vendorId, packSizeId: pack.id, packPrice, userId, details });
 
   const item = pack.items;
   if (item) {
@@ -796,6 +883,7 @@ export async function chosenItem(
           canonicalUnitId: item.canonical_unit_id,
           normalizedUnit: pin.normalizedUnit,
           description: pin.description,
+          details: pin.details,
         });
 
   return chosenPack(admin, { ...pin, packSizeId });
@@ -811,6 +899,7 @@ export async function matchOrCreateOffer(
     userId,
     normalizedUnit = null,
     line = null,
+    details = null,
   }: {
     vendorId: string;
     description: string;
@@ -835,11 +924,17 @@ export async function matchOrCreateOffer(
      * it.
      */
     line?: ReceiptLineFacts | null;
+    /** Brand, product code, packaging and pack, as extraction read them (#79). */
+    details?: ReceiptLineDetails | null;
   }
 ): Promise<{ id: string; status: "matched" | "created"; categoryId: string | null }> {
-  const shape = packShapeFromDescription(description);
+  const shape = packShapeFromDetails(details) ?? packShapeFromDescription(description);
   const packPrice = line ? offerPackPrice({ ...line, normalizedUnit }, shape) : null;
-  const knownOffer = await findOfferByVendorDescription(admin, vendorId, description);
+  // The vendor's own product code names one product exactly, so it is tried
+  // before the wording, which can say the same thing several ways.
+  const knownOffer =
+    (await findOfferByVendorCode(admin, vendorId, details?.productCode)) ??
+    (await findOfferByVendorDescription(admin, vendorId, description));
   if (knownOffer) {
     // Same reasoning as in matchOrCreateItem: this vendor's wording is already
     // tied to an item somebody categorised, so that category is the answer.
@@ -863,6 +958,7 @@ export async function matchOrCreateOffer(
     }
 
     await fillMissingPackPrice(admin, knownOffer, packPrice);
+    await fillMissingOfferDetails(admin, knownOffer, details);
     return { id: knownOffer, status: "matched", categoryId: matchedItem?.category_id ?? null };
   }
 
@@ -874,6 +970,7 @@ export async function matchOrCreateOffer(
     canonicalUnitId: itemRow!.canonical_unit_id,
     normalizedUnit,
     description,
+    details,
   });
 
   await recordVendorItemDescription(admin, { itemId: item.id, vendorId, description, userId });
@@ -885,7 +982,7 @@ export async function matchOrCreateOffer(
     userId,
   });
 
-  const offer = await offerForPack(admin, { vendorId, packSizeId, packPrice, userId });
+  const offer = await offerForPack(admin, { vendorId, packSizeId, packPrice, userId, details });
   return { ...offer, categoryId: item.categoryId };
 }
 
