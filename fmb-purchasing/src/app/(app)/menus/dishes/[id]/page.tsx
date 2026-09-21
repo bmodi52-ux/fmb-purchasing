@@ -55,7 +55,7 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
   const prices = await loadItemPrices(admin, (recipe?.ingredients ?? []).map((i) => i.itemId));
   // Costed at the scale the recipe is written for: one batch, or one thaali.
   const scale = dish.recipe_basis === "batch" ? Number(dish.batch_boxes ?? 0) : 1;
-  const cost = recipe ? costMenuDay([recipe as MenuDish], scale, prices) : null;
+  const cost = recipe ? costMenuDay({ dishes: [recipe as MenuDish] }, scale, prices) : null;
 
   const served = (servedRows ?? [])
     .map((r) => (Array.isArray(r.menu_days) ? r.menu_days[0] : r.menu_days) as

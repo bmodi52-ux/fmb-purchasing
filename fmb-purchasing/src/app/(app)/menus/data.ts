@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSetting } from "@/lib/app-settings";
 import { loadCheapestRecent } from "@/lib/price-alerts-data";
 import { todayIso } from "@/lib/periods-data";
-import type { ItemPrices, MenuDish, MenuExtra } from "@/lib/menu-costing";
+import type { ItemPrices, MenuDish, MenuExtra, MenuLine } from "@/lib/menu-costing";
 import { resolveSection, type SectionKey } from "@/lib/menu-sections";
 
 /**
@@ -145,6 +145,49 @@ export async function loadExtras(admin: SupabaseClient, menuDayIds: string[]): P
         unitCode: (unit?.code as string) ?? "ea",
         unitToBase: unit ? Number(unit.to_base_factor) : 1,
         baseUnitCode: (unit?.base_unit_code as string) ?? "ea",
+      },
+    ]);
+  }
+
+  return byDay;
+}
+
+/**
+ * What a day was told to buy, typed straight in (#77), keyed by day.
+ *
+ * No recipe, no dish: the quantity is the answer rather than something to
+ * work out from a count. The unit is kept as it was written, because "800 g"
+ * is how somebody says it and converting it on screen would be answering a
+ * question nobody asked.
+ */
+export async function loadMenuLines(admin: SupabaseClient, menuDayIds: string[]): Promise<Map<string, MenuLine[]>> {
+  const byDay = new Map<string, MenuLine[]>();
+  if (menuDayIds.length === 0) return byDay;
+
+  const { data: rows } = await admin
+    .from("menu_day_lines")
+    .select(
+      "id, menu_day_id, item_id, quantity, section, note, sort_order, items ( name ), units ( code, to_base_factor, base_unit_code )"
+    )
+    .in("menu_day_id", menuDayIds)
+    .order("sort_order");
+
+  for (const row of rows ?? []) {
+    const item = one(row.items) as { name: string } | null;
+    const unit = one(row.units) as { code: string; to_base_factor: number; base_unit_code: string } | null;
+    if (!item || !unit) continue;
+    const dayId = row.menu_day_id as string;
+    byDay.set(dayId, [
+      ...(byDay.get(dayId) ?? []),
+      {
+        lineId: row.id as string,
+        itemId: row.item_id as string,
+        itemName: item.name,
+        quantity: Number(row.quantity),
+        unitCode: unit.code,
+        unitToBase: Number(unit.to_base_factor),
+        baseUnitCode: unit.base_unit_code,
+        section: (row.section as string | null) ?? null,
       },
     ]);
   }

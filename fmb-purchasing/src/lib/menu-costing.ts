@@ -122,6 +122,30 @@ export function batchesFor(dish: Pick<MenuDish, "basis" | "batchBoxes">, boxes: 
   return Math.round((boxes / size) * 1000) / 1000;
 }
 
+/**
+ * A quantity typed straight in, for a day planned the way the sheet plans it
+ * (#77): "Goat 120 kg" under the Meat heading, with nothing said about which
+ * dish it is for.
+ */
+export type MenuLine = {
+  lineId: string;
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  unitCode: string;
+  unitToBase: number;
+  baseUnitCode: string;
+  /** The heading it was typed under, when that is not the item's own. */
+  section?: string | null;
+};
+
+/** Everything a day holds, however it was planned. */
+export type MenuContents = {
+  dishes?: MenuDish[];
+  extras?: MenuExtra[];
+  lines?: MenuLine[];
+};
+
 export type RequirementLine = {
   itemId: string;
   itemName: string;
@@ -140,11 +164,10 @@ export type RequirementLine = {
  * of 2.5 kg, and the shopping list that follows is a list of things to buy
  * rather than a list of recipe lines.
  */
-export function requirementsFor(
-  dishes: MenuDish[],
-  thaalis: number,
-  extras: MenuExtra[] = []
-): RequirementLine[] {
+export function requirementsFor(menu: MenuContents, thaalis: number): RequirementLine[] {
+  const dishes = menu.dishes ?? [];
+  const extras = menu.extras ?? [];
+  const lines = menu.lines ?? [];
   const byItem = new Map<string, RequirementLine>();
 
   const add = (line: { itemId: string; itemName: string; baseUnitCode: string }, quantity: number, from: string) => {
@@ -178,6 +201,14 @@ export function requirementsFor(
     const count = countFor(extra, thaalis);
     if (count <= 0) continue;
     add(extra, extra.perThaali * count * extra.unitToBase, extra.itemName);
+  }
+
+  // A typed quantity is already the answer: it says what to buy, not what a
+  // recipe implies. It is converted to base units and added like the rest, so
+  // a day planned both ways still has one line per item to buy.
+  for (const line of lines) {
+    if (line.quantity <= 0) continue;
+    add(line, line.quantity * line.unitToBase, "typed in");
   }
 
   return [...byItem.values()].sort((a, b) => a.itemName.localeCompare(b.itemName, "en", { sensitivity: "base" }));
@@ -237,12 +268,11 @@ export type MenuDayCost = {
 };
 
 export function costMenuDay(
-  dishes: MenuDish[],
+  menu: MenuContents,
   thaalis: number,
-  pricesByItem: Map<string, ItemPrices>,
-  extras: MenuExtra[] = []
+  pricesByItem: Map<string, ItemPrices>
 ): MenuDayCost {
-  const lines = requirementsFor(dishes, thaalis, extras).map((line) => {
+  const lines = requirementsFor(menu, thaalis).map((line) => {
     const { perUnit, basis } = priceFor(pricesByItem.get(line.itemId));
     return { ...line, perUnit, basis, cost: perUnit == null ? null : round2(line.quantity * perUnit) };
   });

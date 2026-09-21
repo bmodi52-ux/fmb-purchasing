@@ -13,6 +13,7 @@ import {
   setRemittanceEmails,
   setExtractionCheck,
   runExtractionCheckNow,
+  setMenuMode,
 } from "./actions";
 import { accuracy } from "@/lib/extraction-scoring";
 import { formatDateTime } from "@/lib/format";
@@ -42,6 +43,7 @@ export default async function AppSettingsPage() {
       "remittance_emails",
       "budget_alerts",
       "extraction_check",
+      "menu_mode",
     ]),
     admin.from("teams").select("id, name").order("name"),
     admin.from("scheduled_runs").select("last_run_at, summary").eq("job", "daily").maybeSingle(),
@@ -104,6 +106,39 @@ export default async function AppSettingsPage() {
           on={settings.remittance_emails}
           action={setRemittanceEmails}
         />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="section-title text-ink">Thaali menu</h2>
+        <form
+          action={setMenuMode}
+          className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="max-w-xl">
+            <p className="font-medium text-ink">How a day is planned</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-ink/60">
+              {settings.menu_mode === "simple"
+                ? "Simple: the menu is typed, and what to buy is typed under it — the sheet, in the app. Everything after it works the same: release, the lists, who buys what, and the receipts tying back."
+                : "Worked out: dishes with recipes and box sizes, a count against each line, and a cost per thaali that follows the numbers. Switch to simple while the kitchen is still writing recipes."}
+            </p>
+            <p className="mt-1 text-xs text-ink/45">
+              Nothing is thrown away either way. A day keeps what it holds; only how days are set up and shown from
+              here on changes.
+            </p>
+          </div>
+          <input type="hidden" name="mode" value={settings.menu_mode === "simple" ? "advanced" : "simple"} />
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium text-ink/60">
+              {settings.menu_mode === "simple" ? "Simple" : "Worked out"}
+            </span>
+            <SubmitButton
+              pendingLabel="Saving…"
+              className="whitespace-nowrap rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30"
+            >
+              {settings.menu_mode === "simple" ? "Use recipes and counts" : "Use the simple way"}
+            </SubmitButton>
+          </div>
+        </form>
       </section>
 
       <section className="flex flex-col gap-3">

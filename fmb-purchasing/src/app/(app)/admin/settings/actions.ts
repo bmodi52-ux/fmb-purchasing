@@ -96,6 +96,24 @@ export async function setRemittanceEmails(formData: FormData): Promise<void> {
 }
 
 /** The built-in budget alerts (#39): on or off, and at which percentages. */
+/**
+ * How menus are planned (#77): the costed way, or the sheet typed in.
+ *
+ * One decision for everybody, taken once when the team is ready for recipes.
+ * Nothing is thrown away either way — a day keeps what it holds, and only how
+ * days are set up and shown from here on changes.
+ */
+export async function setMenuMode(formData: FormData): Promise<void> {
+  const user = await requireSettingsAdmin();
+  const mode = String(formData.get("mode")) === "simple" ? "simple" : "advanced";
+  const { error } = await setSetting(createAdminClient(), "menu_mode", mode, user.id);
+  if (error) throw new Error("The setting could not be saved. Try again.");
+  revalidatePath("/admin/settings");
+  // Every day page reads this setting, not just the calendar, so the whole
+  // section is invalidated rather than its front door.
+  revalidatePath("/menus", "layout");
+}
+
 export async function setBudgetAlerts(formData: FormData): Promise<void> {
   const user = await requireSettingsAdmin();
   const percents = String(formData.get("percents") ?? "")

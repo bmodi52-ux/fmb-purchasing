@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
+import { isSection } from "@/lib/menu-sections";
 
 /**
  * Planning a day: what is being cooked, and for how many (#70).
@@ -260,5 +261,96 @@ export async function removeExtraFromDay(formData: FormData) {
   if (!id) return;
 
   await createAdminClient().from("menu_day_extras").delete().eq("id", id);
+  refresh(date);
+}
+
+/**
+ * A day planned the way the sheet plans it (#77): the menu typed as text, and
+ * under it what to buy, typed straight in.
+ */
+export async function setMenuText(formData: FormData) {
+  const user = await requirePlanner();
+  const kitchenId = String(formData.get("kitchen_id") ?? "");
+  const date = String(formData.get("date") ?? "");
+  if (!kitchenId || !date) return;
+
+  const admin = createAdminClient();
+  const dayId = await menuDayId(admin, kitchenId, date, user.id);
+  if (!dayId) return;
+
+  const text = String(formData.get("menu_text") ?? "").trim();
+  await admin
+    .from("menu_days")
+    .update({ menu_text: text || null, updated_by: user.id, updated_at: new Date().toISOString() })
+    .eq("id", dayId);
+
+  refresh(date);
+}
+
+export async function addMenuLine(formData: FormData) {
+  const user = await requirePlanner();
+  const kitchenId = String(formData.get("kitchen_id") ?? "");
+  const date = String(formData.get("date") ?? "");
+  const itemId = String(formData.get("item_id") ?? "");
+  const unitId = String(formData.get("unit_id") ?? "");
+  const quantity = Number(formData.get("quantity") ?? 0);
+  const section = String(formData.get("section") ?? "");
+  if (!kitchenId || !date || !itemId || !unitId) return;
+  if (!Number.isFinite(quantity) || quantity <= 0) return;
+
+  const admin = createAdminClient();
+  const dayId = await menuDayId(admin, kitchenId, date, user.id);
+  if (!dayId) return;
+
+  const { count } = await admin
+    .from("menu_day_lines")
+    .select("id", { count: "exact", head: true })
+    .eq("menu_day_id", dayId);
+
+  // Typing the same item twice means correcting it, not adding a second line.
+  await admin.from("menu_day_lines").upsert(
+    {
+      menu_day_id: dayId,
+      item_id: itemId,
+      quantity,
+      unit_id: unitId,
+      section: isSection(section) ? section : null,
+      sort_order: count ?? 0,
+      created_by: user.id,
+    },
+    { onConflict: "menu_day_id,item_id" }
+  );
+
+  refresh(date);
+}
+
+export async function setMenuLine(formData: FormData) {
+  await requirePlanner();
+  const id = String(formData.get("line_id") ?? "");
+  const date = String(formData.get("date") ?? "");
+  const quantity = Number(formData.get("quantity") ?? 0);
+  const unitId = String(formData.get("unit_id") ?? "");
+  const section = String(formData.get("section") ?? "");
+  if (!id || !Number.isFinite(quantity) || quantity <= 0) return;
+
+  await createAdminClient()
+    .from("menu_day_lines")
+    .update({
+      quantity,
+      ...(unitId ? { unit_id: unitId } : {}),
+      section: isSection(section) ? section : null,
+    })
+    .eq("id", id);
+
+  refresh(date);
+}
+
+export async function removeMenuLine(formData: FormData) {
+  await requirePlanner();
+  const id = String(formData.get("line_id") ?? "");
+  const date = String(formData.get("date") ?? "");
+  if (!id) return;
+
+  await createAdminClient().from("menu_day_lines").delete().eq("id", id);
   refresh(date);
 }
