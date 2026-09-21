@@ -14,6 +14,7 @@ import {
   reviewOffer,
   reviewItem,
   deleteOffer,
+  retireOffer,
   addVendorItemDescription,
   removeVendorItemDescription,
 } from "../actions";
@@ -31,6 +32,7 @@ import {
 } from "@/lib/pack-description";
 import { summarisePackPrices } from "@/lib/pack-prices";
 import { MergePanel, type DuplicateCandidate } from "./merge-panel";
+import { MoveOfferPanel } from "./move-offer-panel";
 import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
 import { BuyingForm } from "./buying-form";
 import { getSetting } from "@/lib/app-settings";
@@ -64,6 +66,8 @@ const ITEM_FIELD_LABELS: Record<string, string> = {
   price_fall_percent: "Alert on a fall over (%)",
   expected_min_per_unit: "Expected price from",
   expected_max_per_unit: "Expected price up to",
+  offer_moved_out: "Vendor offer moved to",
+  offer_moved_in: "Vendor offer moved here from",
 };
 
 const OFFER_FIELD_LABELS: Record<string, string> = {
@@ -72,6 +76,7 @@ const OFFER_FIELD_LABELS: Record<string, string> = {
   vendor_sku: "Vendor's product code",
   pack_size_id: "Pack size",
   pack_price: "Pack price",
+  status: "Status",
   comments: "Comments",
   // retained so history written before 0009 still reads sensibly
   unit_price: "Unit price",
@@ -363,7 +368,7 @@ export default async function ItemDetailPage({
   function offerDisplayValue(field: string, value: unknown): string {
     if (value == null || value === "") return "—";
     if (field === "vendor_id") return vendorNameById.get(String(value)) ?? "—";
-    if (field === "pack_size_id") return packSizeLabelById.get(String(value)) ?? "—";
+    if (field === "pack_size_id") return packSizeLabelById.get(String(value)) ?? "a pack on another item";
     if (field.endsWith("_unit_id")) return unitLabelById.get(String(value)) ?? "—";
     return String(value);
   }
@@ -720,6 +725,28 @@ export default async function ItemDetailPage({
                           Delete offer
                         </SubmitButton>
                       </form>
+                    )}
+                    {/* Delete would orphan the purchases, so an offer that has
+                        some is retired instead: nothing new matches it, and
+                        what it has keeps counting. A pending one an approver
+                        can already reject. */}
+                    {canEdit &&
+                      (purchasesByOffer.get(o.id) ?? 0) > 0 &&
+                      o.status !== "rejected" &&
+                      !(canApprove && o.status === "pending") && (
+                        <form action={retireOffer}>
+                          <input type="hidden" name="offer_id" value={o.id} />
+                          <input type="hidden" name="item_id" value={item.id} />
+                          <SubmitButton className="text-xs text-maroon/70 hover:underline">Retire offer</SubmitButton>
+                        </form>
+                      )}
+                    {canEdit && (
+                      <MoveOfferPanel
+                        offerId={o.id}
+                        itemId={item.id}
+                        offerLabel={`${o.vendor_id ? (vendorNameById.get(o.vendor_id) ?? "this vendor") : "this offer"}, ${packSizeLabelById.get(p.id) ?? ""}`}
+                        purchaseCount={purchasesByOffer.get(o.id) ?? 0}
+                      />
                     )}
                     <details>
                       <summary className="cursor-pointer hover:text-ink">History ({history.length})</summary>

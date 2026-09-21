@@ -20,7 +20,7 @@ export type DuplicateCandidate = {
   score: number;
 };
 
-type Target = { id: string; label: string };
+export type Target = { id: string; label: string };
 
 export function MergePanel({
   itemId,
@@ -160,7 +160,7 @@ export function MergePanel({
   );
 }
 
-function SearchBox({
+export function SearchBox({
   query,
   setQuery,
   results,
