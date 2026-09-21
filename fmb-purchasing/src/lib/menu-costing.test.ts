@@ -2,12 +2,15 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   batchesFor,
+  boxesFor,
   boxSizeOptions,
+  countFor,
   portionLabel,
   costMenuDay,
   priceFor,
   requirementsFor,
   type MenuDish,
+  type MenuExtra,
 } from "./menu-costing";
 
 const kg = { unitCode: "kg", unitToBase: 1, baseUnitCode: "kg" };
@@ -184,5 +187,123 @@ describe("two dishes in different boxes on the same day", () => {
     const lines = requirementsFor([bhunaGosht, kadhi], 250);
     assert.equal(lines.find((l) => l.itemId === "i-goat")?.quantity, 150, "1.25 batches");
     assert.equal(lines.find((l) => l.itemId === "i-yoghurt")?.quantity, 100, "400 g × 250 boxes");
+  });
+});
+
+describe("a thaali is a set of boxes, and not everybody takes all of it (#76)", () => {
+  // Menu B from the sheet: gosht, daal and rice, each one box, taken
+  // separately. 250 thaalis, but only 180 want the gosht.
+  const gosht: MenuDish = {
+    dishId: "d-gosht",
+    dishName: "Gosht",
+    basis: "box",
+    portionMl: 650,
+    batchBoxes: null,
+    ingredients: [
+      { itemId: "i-goat", itemName: "Goat", quantity: 0.5, unitCode: "kg", unitToBase: 1, baseUnitCode: "kg" },
+    ],
+  };
+
+  test("a line with nobody counted assumes everyone takes everything it offers", () => {
+    assert.equal(boxesFor({}, 250), 250, "one box each");
+    assert.equal(boxesFor({ boxesOffered: 2 }, 250), 500, "two boxes offered, so two boxes each");
+  });
+
+  test("a count against the line is what gets cooked", () => {
+    assert.equal(boxesFor({ boxesOffered: 2, expectedBoxes: 380 }, 250), 380);
+  });
+
+  test("nobody taking it is nothing to cook, not the day's count", () => {
+    assert.equal(boxesFor({ expectedBoxes: 0 }, 250), 0);
+  });
+
+  test("quantities follow the line's own count, not the day's", () => {
+    const [line] = requirementsFor([{ ...gosht, expectedBoxes: 180 }], 250);
+    assert.equal(line.quantity, 90, "180 boxes × 500 g");
+  });
+
+  test("a dish nobody takes is bought for nobody", () => {
+    assert.deepEqual(requirementsFor([{ ...gosht, expectedBoxes: 0 }], 250), []);
+  });
+
+  test("biryani offered as two boxes is cooked for the boxes, not the people", () => {
+    const biryani: MenuDish = {
+      dishId: "d-biryani",
+      dishName: "Chicken biryani",
+      basis: "batch",
+      portionMl: 1000,
+      batchBoxes: 200,
+      boxesOffered: 2,
+      expectedBoxes: 380,
+      ingredients: [
+        { itemId: "i-rice", itemName: "Rice", quantity: 40, unitCode: "kg", unitToBase: 1, baseUnitCode: "kg" },
+      ],
+    };
+    assert.equal(batchesFor(biryani, boxesFor(biryani, 250)), 1.9, "380 boxes from a batch of 200");
+    assert.equal(requirementsFor([biryani], 250)[0].quantity, 76, "1.9 × 40 kg");
+  });
+});
+
+describe("the parts of a thaali that are not dishes (#76)", () => {
+  const roti: MenuExtra = {
+    extraId: "x-roti",
+    kind: "roti",
+    itemId: "i-roti",
+    itemName: "Roti",
+    perThaali: 1,
+    unitCode: "ea",
+    unitToBase: 1,
+    baseUnitCode: "ea",
+  };
+
+  test("how many to buy is how much each, times how many take it", () => {
+    const [line] = requirementsFor([], 250, [{ ...roti, expectedCount: 120 }]);
+    assert.equal(line.quantity, 120);
+    assert.equal(line.itemName, "Roti");
+  });
+
+  test("half a roti each is half a roti for everyone who takes one", () => {
+    const [line] = requirementsFor([], 250, [{ ...roti, perThaali: 0.5, expectedCount: 120 }]);
+    assert.equal(line.quantity, 60);
+  });
+
+  test("nobody counted means the day's count", () => {
+    assert.equal(countFor({}, 250), 250);
+    assert.equal(requirementsFor([], 250, [roti])[0].quantity, 250);
+  });
+
+  test("an extra and a dish that want the same item are one line to buy", () => {
+    const fruitDish: MenuDish = {
+      dishId: "d-salad",
+      dishName: "Fruit salad",
+      basis: "box",
+      portionMl: 250,
+      batchBoxes: null,
+      ingredients: [
+        { itemId: "i-apple", itemName: "Apples", quantity: 0.2, unitCode: "kg", unitToBase: 1, baseUnitCode: "kg" },
+      ],
+    };
+    const apples: MenuExtra = {
+      extraId: "x-fruit",
+      kind: "fruit",
+      itemId: "i-apple",
+      itemName: "Apples",
+      perThaali: 0.15,
+      expectedCount: 100,
+      unitCode: "kg",
+      unitToBase: 1,
+      baseUnitCode: "kg",
+    };
+    const lines = requirementsFor([{ ...fruitDish, expectedBoxes: 50 }], 250, [apples]);
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0].quantity, 25, "50 × 200 g, plus 100 × 150 g");
+    assert.deepEqual(lines[0].fromDishes, ["Fruit salad", "Apples"]);
+  });
+
+  test("cost per thaali is still divided by the thaalis, not by the boxes", () => {
+    const prices = new Map([["i-roti", { latestPaid: 2 }]]);
+    const cost = costMenuDay([], 250, prices, [{ ...roti, expectedCount: 120 }]);
+    assert.equal(cost.total, 240, "120 roti at $2");
+    assert.equal(cost.perThaali, 0.96, "240 ÷ 250, because that is what a thaali costs on average");
   });
 });

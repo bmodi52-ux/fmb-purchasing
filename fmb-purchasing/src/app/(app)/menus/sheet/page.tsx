@@ -7,7 +7,7 @@ import { formatPlainDate } from "@/lib/format";
 import { formatHijri, gregorianToHijri } from "@/lib/hijri/hijri";
 import { costMenuDay, type MenuDayCost, type MenuDish } from "@/lib/menu-costing";
 import { SECTIONS, SECTION_LABEL, type SectionKey } from "@/lib/menu-sections";
-import { loadDishes, loadItemPrices, loadKitchens, loadSections } from "../data";
+import { loadDishes, loadExtras, loadItemPrices, loadKitchens, loadSections, withDayCounts } from "../data";
 import { MenuTabs } from "../tabs";
 
 export const metadata = { title: "Thaali menu · Sheet" };
@@ -18,11 +18,12 @@ function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** The header colours of the sheet this replaces: red, green, blue. */
+/** The header colours of the sheet this replaces: red, green, blue — and roti. */
 const SECTION_CLASS: Record<SectionKey, string> = {
   meat: "bg-maroon/10 text-maroon",
   produce: "bg-palm/10 text-palm",
   dry: "bg-gold/20 text-gold-deep",
+  roti: "bg-ink/10 text-ink/70",
 };
 
 type Column = {
@@ -71,7 +72,7 @@ export default async function MenuSheetPage({
   const { data: days } = await admin
     .from("menu_days")
     .select(
-      "id, kitchen_id, service_date, planned_thaalis, confirmed_thaalis, menu_day_dishes ( dish_id, sort_order )"
+      "id, kitchen_id, service_date, planned_thaalis, confirmed_thaalis, menu_day_dishes ( dish_id, sort_order, boxes_offered, expected_boxes )"
     )
     .in("kitchen_id", [...showingIds])
     .gte("service_date", from)
@@ -81,15 +82,25 @@ export default async function MenuSheetPage({
   const dishIds = [...new Set((days ?? []).flatMap((d) => (d.menu_day_dishes ?? []).map((x) => x.dish_id as string)))];
   const dishes = await loadDishes(admin, dishIds);
   const dishById = new Map(dishes.map((d) => [d.dishId, d]));
-  const itemIds = [...new Set(dishes.flatMap((d) => d.ingredients.map((i) => i.itemId)))];
+  // Roti and fruit belong on the sheet like anything else that is bought (#76).
+  const extrasByDay = await loadExtras(admin, (days ?? []).map((d) => d.id as string));
+  const itemIds = [
+    ...new Set([
+      ...dishes.flatMap((d) => d.ingredients.map((i) => i.itemId)),
+      ...[...extrasByDay.values()].flat().map((e) => e.itemId),
+    ]),
+  ];
   const prices = await loadItemPrices(admin, itemIds);
 
   const sectionByItem = await loadSections(admin, itemIds);
 
   const columns: Column[] = (days ?? []).map((d) => {
-    const onDay = [...(d.menu_day_dishes ?? [])]
-      .sort((a, b) => Number(a.sort_order) - Number(b.sort_order))
-      .flatMap((x) => dishById.get(x.dish_id as string) ?? []);
+    const rows = [...(d.menu_day_dishes ?? [])].sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+    const onDay = withDayCounts(
+      rows.flatMap((x) => dishById.get(x.dish_id as string) ?? []),
+      rows as { dish_id: string; boxes_offered?: number | string | null; expected_boxes?: number | null }[]
+    );
+    const extras = extrasByDay.get(d.id as string) ?? [];
     const thaalis = Number(d.confirmed_thaalis ?? d.planned_thaalis);
     return {
       date: d.service_date as string,
@@ -97,7 +108,7 @@ export default async function MenuSheetPage({
       kitchenName: kitchens.find((k) => k.id === d.kitchen_id)?.name ?? "",
       dishes: onDay,
       thaalis,
-      cost: onDay.length > 0 ? costMenuDay(onDay, thaalis, prices) : null,
+      cost: onDay.length > 0 || extras.length > 0 ? costMenuDay(onDay, thaalis, prices, extras) : null,
     };
   });
 

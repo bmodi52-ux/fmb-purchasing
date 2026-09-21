@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSetting } from "@/lib/app-settings";
 import { loadCheapestRecent } from "@/lib/price-alerts-data";
 import { todayIso } from "@/lib/periods-data";
-import type { ItemPrices, MenuDish } from "@/lib/menu-costing";
+import type { ItemPrices, MenuDish, MenuExtra } from "@/lib/menu-costing";
 import { resolveSection, type SectionKey } from "@/lib/menu-sections";
 
 /**
@@ -73,6 +73,83 @@ export async function loadDishes(admin: SupabaseClient, dishIds: string[]): Prom
 
   // In the order the days list them, which the caller decides.
   return dishIds.flatMap((id) => byDish.get(id) ?? []);
+}
+
+/**
+ * The menu's own numbers, laid over the dishes it names (#76).
+ *
+ * A dish is written once and served on many days; how many boxes of it a
+ * given day fills is the day's business, not the dish's. So the recipe comes
+ * from one place and the count from the other, and they are put together
+ * here rather than in four pages that each need both.
+ */
+export function withDayCounts(
+  dishes: MenuDish[],
+  rows: { dish_id: string; boxes_offered?: number | string | null; expected_boxes?: number | null }[]
+): MenuDish[] {
+  const byDish = new Map(rows.map((r) => [r.dish_id, r]));
+  return dishes.map((dish) => {
+    const row = byDish.get(dish.dishId);
+    if (!row) return dish;
+    return {
+      ...dish,
+      boxesOffered: row.boxes_offered == null ? 1 : Number(row.boxes_offered),
+      expectedBoxes: row.expected_boxes ?? null,
+    };
+  });
+}
+
+/**
+ * The parts of a day that are not dishes — roti, fruit — keyed by day (#76).
+ *
+ * They carry no recipe, so what they need is the item itself, in the unit the
+ * item is counted in.
+ */
+export async function loadExtras(admin: SupabaseClient, menuDayIds: string[]): Promise<Map<string, MenuExtra[]>> {
+  const byDay = new Map<string, MenuExtra[]>();
+  if (menuDayIds.length === 0) return byDay;
+
+  const { data: rows } = await admin
+    .from("menu_day_extras")
+    .select("id, menu_day_id, kind, item_id, per_thaali, expected_count, sort_order, items ( name, canonical_unit_id )")
+    .in("menu_day_id", menuDayIds)
+    .order("sort_order");
+  if (!rows || rows.length === 0) return byDay;
+
+  const unitIds = [
+    ...new Set(
+      rows.map((r) => (one(r.items) as { canonical_unit_id?: string } | null)?.canonical_unit_id).filter(Boolean)
+    ),
+  ] as string[];
+  const { data: units } = unitIds.length
+    ? await admin.from("units").select("id, code, to_base_factor, base_unit_code").in("id", unitIds)
+    : { data: [] };
+  const unitById = new Map((units ?? []).map((u) => [u.id as string, u]));
+
+  for (const row of rows) {
+    const item = one(row.items) as { name: string; canonical_unit_id: string | null } | null;
+    if (!item) continue;
+    const unit = item.canonical_unit_id ? unitById.get(item.canonical_unit_id) : undefined;
+    const dayId = row.menu_day_id as string;
+    byDay.set(dayId, [
+      ...(byDay.get(dayId) ?? []),
+      {
+        extraId: row.id as string,
+        kind: row.kind as MenuExtra["kind"],
+        itemId: row.item_id as string,
+        itemName: item.name,
+        perThaali: Number(row.per_thaali),
+        expectedCount: row.expected_count == null ? null : Number(row.expected_count),
+        // An item with no unit of its own is counted one for one, which is
+        // what "a roti" or "a piece of fruit" means anyway.
+        unitCode: (unit?.code as string) ?? "ea",
+        unitToBase: unit ? Number(unit.to_base_factor) : 1,
+        baseUnitCode: (unit?.base_unit_code as string) ?? "ea",
+      },
+    ]);
+  }
+
+  return byDay;
 }
 
 /**

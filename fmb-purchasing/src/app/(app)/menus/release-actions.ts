@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { costMenuDay } from "@/lib/menu-costing";
-import { loadDishes, loadItemPrices, loadSections } from "./data";
+import { loadDishes, loadExtras, loadItemPrices, loadSections, withDayCounts } from "./data";
 
 /**
  * Releasing a day (#70): the menu stops being a plan and becomes somebody's
@@ -34,21 +34,29 @@ export async function releaseDay(formData: FormData) {
   const admin = createAdminClient();
   const { data: day } = await admin
     .from("menu_days")
-    .select("id, kitchen_id, planned_thaalis, confirmed_thaalis, menu_day_dishes ( dish_id, sort_order )")
+    .select(
+      "id, kitchen_id, planned_thaalis, confirmed_thaalis, menu_day_dishes ( dish_id, sort_order, boxes_offered, expected_boxes )"
+    )
     .eq("id", dayId)
     .maybeSingle();
   if (!day) return;
 
-  const dishIds = [...(day.menu_day_dishes ?? [])]
-    .sort((a, b) => Number(a.sort_order) - Number(b.sort_order))
-    .map((d) => d.dish_id as string);
-  const dishes = await loadDishes(admin, dishIds);
+  const onDay = [...(day.menu_day_dishes ?? [])].sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+  const dishIds = onDay.map((d) => d.dish_id as string);
+  const dishes = withDayCounts(
+    await loadDishes(admin, dishIds),
+    onDay as { dish_id: string; boxes_offered?: number | string | null; expected_boxes?: number | null }[]
+  );
+  const extras = (await loadExtras(admin, [dayId])).get(dayId) ?? [];
   const thaalis = Number(day.confirmed_thaalis ?? day.planned_thaalis);
-  if (dishes.length === 0 || thaalis <= 0) return;
+  // Roti alone is a day worth releasing: it still has to be ordered.
+  if ((dishes.length === 0 && extras.length === 0) || thaalis <= 0) return;
 
-  const itemIds = [...new Set(dishes.flatMap((d) => d.ingredients.map((i) => i.itemId)))];
+  const itemIds = [
+    ...new Set([...dishes.flatMap((d) => d.ingredients.map((i) => i.itemId)), ...extras.map((e) => e.itemId)]),
+  ];
   const [prices, sections] = await Promise.all([loadItemPrices(admin, itemIds), loadSections(admin, itemIds)]);
-  const cost = costMenuDay(dishes, thaalis, prices);
+  const cost = costMenuDay(dishes, thaalis, prices, extras);
 
   // Who buys each section: the kitchen's own owner, else the one set for
   // both kitchens.
@@ -80,19 +88,26 @@ export async function releaseDay(formData: FormData) {
     .eq("menu_day_id", dayId);
   const before = new Map((existing ?? []).map((r) => [r.item_id as string, r]));
 
+  // The menu is better evidence than a category name: an item put on the day
+  // as its roti is the roti, whatever aisle it is filed under. Roti buys on a
+  // list of its own, with its own person; fruit does not, because fruit is
+  // bought with the rest of the produce even when the menu names it apart.
+  const rotiItems = new Set(extras.filter((e) => e.kind === "roti").map((e) => e.itemId));
+  const sectionOf = (itemId: string) => (rotiItems.has(itemId) ? "roti" : (sections.get(itemId) ?? "dry"));
+
   const rows = cost.lines.map((line) => {
     const kept = before.get(line.itemId);
     return {
       menu_day_id: dayId,
       item_id: line.itemId,
-      section: sections.get(line.itemId) ?? "dry",
+      section: sectionOf(line.itemId),
       quantity: line.quantity,
       base_unit_code: line.baseUnitCode,
       price_per_unit: line.perUnit,
       price_basis: line.basis,
       planned_cost: line.cost,
       // Buying that has already happened survives a re-release.
-      owner_id: kept?.owner_id ?? ownerFor(sections.get(line.itemId) ?? "dry"),
+      owner_id: kept?.owner_id ?? ownerFor(sectionOf(line.itemId)),
       vendor_id: kept?.vendor_id ?? vendorFor.get(line.itemId) ?? null,
       status: kept?.status ?? "to_order",
     };

@@ -1,6 +1,6 @@
 /**
- * The three lists a thaali day is bought in (#70): Meat, Fresh produce and
- * Dry goods — Meat, Veggies and Rashan as the sheet has them.
+ * The lists a thaali day is bought in (#70): Meat, Fresh produce and Dry
+ * goods — Meat, Veggies and Rashan as the sheet has them — and Roti (#76).
  *
  * Meat and Fresh produce are fixed, because they are bought from different
  * people on different days and nobody would want them merged. Dry goods is
@@ -13,18 +13,25 @@
  * categorised, and nothing has to be kept in step by hand.
  */
 
-export const SECTIONS = ["meat", "produce", "dry"] as const;
+/**
+ * Roti is its own list rather than part of Dry goods: on the days it is on at
+ * all, it is ordered from a baker by whoever arranges it. Bread would
+ * otherwise fall in with the rice and the oil, where nobody would look for it.
+ */
+export const SECTIONS = ["meat", "produce", "dry", "roti"] as const;
 export type SectionKey = (typeof SECTIONS)[number];
 
 export const SECTION_LABEL: Record<SectionKey, string> = {
   meat: "Meat",
   produce: "Fresh produce",
   dry: "Dry goods",
+  roti: "Roti",
 };
 
 /** Matched against the top of the category tree, lowercased. */
 const MEAT = /\b(meat|poultry|chicken|lamb|mutton|beef|goat|fish|seafood)\b/;
 const PRODUCE = /\b(produce|fruit|vegetable|vegetables|veg|herbs?)\b/;
+const ROTI = /\b(roti|rotli|bread|chapat(i|ti)|naan)\b/;
 
 /**
  * Which list an item belongs on, from its category and that category's
@@ -56,6 +63,7 @@ export function resolveSection(input: {
 
 export function sectionFor(categoryNames: (string | null | undefined)[]): SectionKey {
   const text = categoryNames.filter(Boolean).join(" ").toLowerCase();
+  if (ROTI.test(text)) return "roti";
   if (MEAT.test(text)) return "meat";
   if (PRODUCE.test(text)) return "produce";
   return "dry";
