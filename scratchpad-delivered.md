@@ -6,6 +6,42 @@ across both files — see scratchpad.md.
 
 ## Delivered
 
+### 82. Show figures to 2 decimal places, not 4
+
+Delivered 2026-09-21 (PR #77). Costs per unit read "$3.71/kg", not
+"$3.7080/kg", everywhere `formatUnitCost` is used and on the unit-cost report
+and widget. Grams and millilitres are priced per kg and per L, so they don't
+round to "$0.00/g". Stored values keep four places.
+
+### 81. No way to move a vendor offer to the right item, or delete it once used
+
+Delivered 2026-09-21 (PR #78). "Wrong item? Move it" on every offer: pick the
+right item and the offer moves there with its purchases, onto the same pack
+size (added if missing), or into that vendor's existing offer on it. Menu
+allocations to the old item's requirements are dropped, the vendor's wording
+moves too, and both items' history records it. An offer with purchases can be
+retired (marked rejected) where Delete can't be offered.
+
+### 80. An item's purchases, on a page of their own
+
+Delivered 2026-09-21 (PR #76). A Purchases tab on the item page lists every
+receipt line filed against it — date, entry, vendor, invoice, what the
+receipt said, pack, quantity, price, line total, cost per unit — with the
+expense and receipt a click away for those allowed to see them. Withdrawn
+expenses left out, as on the ledger.
+
+### 79. Receipts should set up an item's pack size and offer properly first time
+
+Delivered 2026-09-21 (PR #79). Extraction reads brand, the vendor's product
+code, packaging and the pack (quantity × unit × count) per goods line; they
+travel through the submit form onto new pending offers and packs, fill gaps
+on pending offers (approved ones are never touched), and a product code the
+vendor's offers carry once matches the pack outright. A pending offer with
+purchases says it was filled in from a receipt and needs checking.
+
+Not done, and not decided: whether offers already pending on live are filled
+in again from their receipts.
+
 ### 77. A simple mode that is just the sheet, typed
 
 Delivered 2026-09-21. One setting for everybody, in App settings: a day's

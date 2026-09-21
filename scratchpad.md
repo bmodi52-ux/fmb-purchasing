@@ -13,7 +13,23 @@ so this file stays to what is still open. Numbers are unique across both.
 
 <!-- What happened, where, and what you expected instead. -->
 
-None outstanding.
+### 78. Rejecting an item leaves its offers pending
+
+Raised 2026-09-21 on live. DRY-0006 (M/LAND CHSE TASTY SHRED 2KG) was
+rejected from its item page, but still sits in the Pricelist's "Pending
+review" table with Approve/Reject.
+
+The item row is `rejected` (reviewed 2026-09-21 09:39 UTC); its one offer
+(Campbells Northmead, $31.80) is still `pending` and was never reviewed.
+`reviewItem` in `pricelist/actions.ts` only updates `items`, and the
+Pricelist lists offers by their own status, not the item's. The reverse
+direction is already handled — approving an offer approves a pending item —
+but rejecting an item doesn't carry down. It is the only case on live.
+
+**Expected:** rejecting an item also rejects its pending offers (approved
+offers left alone, or rejected too — to decide), and the Pricelist doesn't
+show offers of a rejected item as pending. DRY-0006's offer then needs
+tidying on live, either by the fix backfilling or by rejecting that row.
 
 ## Improvements
 
