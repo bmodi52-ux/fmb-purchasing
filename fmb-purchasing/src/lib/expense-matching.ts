@@ -4,7 +4,7 @@ import { canonicalUnitCode } from "@/lib/units";
 import { packShapeFromDescription, type PackShape } from "@/lib/pack-shape";
 import { isPackaging, packagingFromText } from "@/lib/pack-description";
 
-function normalize(text: string): string {
+export function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 

@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { categoryLabelsById, CATEGORY_LINE_GROUPS } from "@/lib/categories";
-import { recordVendorItemDescription } from "@/lib/expense-matching";
+import { normalize, recordVendorItemDescription } from "@/lib/expense-matching";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
 import { UNIT_DIMENSIONS, type UnitDimension } from "@/lib/units";
 import { isPackaging } from "@/lib/pack-description";
@@ -245,6 +245,208 @@ export async function deleteOffer(formData: FormData) {
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
   revalidateReports();
+}
+
+/**
+ * Takes an offer out of use without losing the purchases filed against it
+ * (#81). Delete is refused once a purchase points at an offer, so an offer that
+ * was wrong from the start had no way out. Rejected is what "retired" already
+ * means to the rest of the app: no new receipt line matches it, and the
+ * purchases it has keep counting.
+ */
+export async function retireOffer(formData: FormData) {
+  const user = await requirePricelistEdit();
+  const offerId = String(formData.get("offer_id") ?? "");
+  const itemId = String(formData.get("item_id") ?? "");
+  if (!offerId) return;
+
+  const admin = createAdminClient();
+  const { data: before } = await admin.from("pricelist_items").select("status").eq("id", offerId).maybeSingle();
+  if (!before || before.status === "rejected") return;
+
+  await admin
+    .from("pricelist_items")
+    .update({ status: "rejected", updated_at: new Date().toISOString(), updated_by: user.id })
+    .eq("id", offerId);
+  await admin
+    .from("pricelist_item_history")
+    .insert({ item_id: offerId, changed_by: user.id, changes: { status: { old: before.status, new: "rejected" } } });
+
+  revalidatePath(`/pricelist/${itemId}`);
+  revalidatePath("/pricelist");
+  revalidateReports();
+}
+
+export type MoveOfferState = { error: string | null };
+
+/**
+ * Moves an offer, and every purchase filed against it, onto the item it
+ * should have been on (#81).
+ *
+ * A receipt line matched to the wrong item left no way back: the offer's pack
+ * size list only holds its own item's packs, and delete is refused once a
+ * purchase points at it. The steps, in an order that leaves nothing orphaned
+ * if one fails part way:
+ *
+ *   1. The same pack on the target item — the one already there, or a copy.
+ *   2. The offer moves onto it. If the target already has this vendor on
+ *      that pack, the purchases join that offer instead and this one goes,
+ *      so the item doesn't list the same vendor twice.
+ *   3. Menu allocations the lines had to the old item's requirements are
+ *      dropped — they were made for the wrong product.
+ *   4. The vendor wording that sent those lines to the old item moves with
+ *      them, so the vendor's next receipt lands on the right item.
+ */
+export async function moveOfferAction(_prev: MoveOfferState, formData: FormData): Promise<MoveOfferState> {
+  const user = await requirePricelistEdit();
+  const offerId = String(formData.get("offer_id") ?? "");
+  const fromItemId = String(formData.get("item_id") ?? "");
+  const targetItemId = String(formData.get("target_item_id") ?? "");
+  if (!offerId || !fromItemId) return { error: "That offer couldn't be found." };
+  if (!targetItemId) return { error: "Choose the item it belongs to." };
+  if (targetItemId === fromItemId) return { error: "It's already on this item." };
+
+  const admin = createAdminClient();
+  const [{ data: offer }, { data: target }] = await Promise.all([
+    admin.from("pricelist_items").select("id, vendor_id, pack_size_id, status").eq("id", offerId).maybeSingle(),
+    admin.from("items").select("id, name, item_number").eq("id", targetItemId).maybeSingle(),
+  ]);
+  if (!offer) return { error: "That offer couldn't be found." };
+  if (!target) return { error: "That item couldn't be found." };
+
+  const { data: pack } = await admin
+    .from("item_pack_sizes")
+    .select("id, item_id, label, inner_quantity, inner_unit_id, pack_count, sold_loose, packaging, contents_confirmed")
+    .eq("id", offer.pack_size_id)
+    .single();
+  if (!pack || pack.item_id !== fromItemId) return { error: "That offer isn't on this item any more." };
+
+  // 1. The same pack on the target.
+  const { data: samePacks } = await admin
+    .from("item_pack_sizes")
+    .select("id")
+    .eq("item_id", targetItemId)
+    .eq("inner_quantity", pack.inner_quantity)
+    .eq("inner_unit_id", pack.inner_unit_id)
+    .eq("pack_count", pack.pack_count)
+    .limit(1);
+  let targetPackId = samePacks?.[0]?.id as string | undefined;
+  if (!targetPackId) {
+    const { data: created, error } = await admin
+      .from("item_pack_sizes")
+      .insert({
+        item_id: targetItemId,
+        label: pack.label,
+        inner_quantity: pack.inner_quantity,
+        inner_unit_id: pack.inner_unit_id,
+        pack_count: pack.pack_count,
+        sold_loose: pack.sold_loose,
+        packaging: pack.packaging,
+        contents_confirmed: pack.contents_confirmed,
+        created_by: user.id,
+      })
+      .select("id")
+      .single();
+    if (error) return { error: error.message };
+    targetPackId = created.id as string;
+  }
+
+  const { data: lines } = await admin
+    .from("expense_line_items")
+    .select("id, description_raw")
+    .eq("pricelist_item_id", offerId);
+  const lineIds = (lines ?? []).map((l) => l.id as string);
+
+  // 2. The offer, or its purchases, onto that pack.
+  const { data: existing } = await admin
+    .from("pricelist_items")
+    .select("id")
+    .eq("pack_size_id", targetPackId)
+    .eq("vendor_id", offer.vendor_id)
+    .neq("status", "rejected")
+    .limit(1);
+  const joinOfferId = existing?.[0]?.id as string | undefined;
+  if (joinOfferId) {
+    if (lineIds.length) {
+      const { error } = await admin
+        .from("expense_line_items")
+        .update({ pricelist_item_id: joinOfferId })
+        .in("id", lineIds);
+      if (error) return { error: error.message };
+    }
+    await admin.from("pricelist_item_history").delete().eq("item_id", offerId);
+    await admin.from("pricelist_items").delete().eq("id", offerId);
+  } else {
+    const { error } = await admin
+      .from("pricelist_items")
+      .update({ pack_size_id: targetPackId, updated_at: new Date().toISOString(), updated_by: user.id })
+      .eq("id", offerId);
+    if (error) return { error: error.message };
+    await admin.from("pricelist_item_history").insert({
+      item_id: offerId,
+      changed_by: user.id,
+      changes: { pack_size_id: { old: offer.pack_size_id, new: targetPackId } },
+    });
+  }
+
+  // 3. Allocations made for the old item's menu requirements.
+  if (lineIds.length) {
+    const { data: oldRequirements } = await admin.from("menu_requirements").select("id").eq("item_id", fromItemId);
+    const requirementIds = (oldRequirements ?? []).map((r) => r.id as string);
+    if (requirementIds.length) {
+      await admin
+        .from("expense_line_allocations")
+        .delete()
+        .in("expense_line_item_id", lineIds)
+        .in("menu_requirement_id", requirementIds);
+    }
+  }
+
+  // 4. The vendor's wording follows the purchases.
+  const wordings = [...new Set((lines ?? []).map((l) => String(l.description_raw ?? "").trim()).filter(Boolean))];
+  if (wordings.length && offer.vendor_id) {
+    await admin
+      .from("vendor_item_descriptions")
+      .delete()
+      .eq("item_id", fromItemId)
+      .eq("vendor_id", offer.vendor_id)
+      .in("description_normalized", wordings.map(normalize));
+    for (const description of wordings) {
+      await recordVendorItemDescription(admin, {
+        itemId: targetItemId,
+        vendorId: offer.vendor_id as string,
+        description,
+        userId: user.id,
+      });
+    }
+  }
+
+  const { data: vendor } = offer.vendor_id
+    ? await admin.from("vendors").select("vendor_number, name").eq("id", offer.vendor_id).maybeSingle()
+    : { data: null };
+  const offerName = vendor ? `${vendor.vendor_number} — ${vendor.name}` : "An offer";
+  const purchases = `${lineIds.length} purchase${lineIds.length === 1 ? "" : "s"}`;
+  const { data: from } = await admin.from("items").select("name, item_number").eq("id", fromItemId).maybeSingle();
+  await admin.from("item_history").insert([
+    {
+      item_id: fromItemId,
+      changed_by: user.id,
+      changes: { offer_moved_out: { old: `${offerName}, ${purchases}`, new: `${target.item_number} ${target.name}` } },
+    },
+    {
+      item_id: targetItemId,
+      changed_by: user.id,
+      changes: {
+        offer_moved_in: { old: from ? `${from.item_number} ${from.name}` : null, new: `${offerName}, ${purchases}` },
+      },
+    },
+  ]);
+
+  revalidatePath("/pricelist");
+  revalidatePath(`/pricelist/${fromItemId}`);
+  revalidatePath(`/pricelist/${targetItemId}`);
+  revalidateReports();
+  redirect(`/pricelist/${targetItemId}`);
 }
 
 export async function removePackSize(formData: FormData) {
