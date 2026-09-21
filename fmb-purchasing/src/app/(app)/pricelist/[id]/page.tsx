@@ -42,6 +42,9 @@ import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { TabLink } from "@/components/tab-link";
 import { ReceiptViewer } from "@/components/receipt-viewer";
 import { describeSources, type DescriptionSource } from "@/lib/description-sources";
+import { getColumnPreference } from "@/lib/column-prefs";
+import { PurchasesTable, PURCHASES_DEFAULT_VISIBLE } from "./purchases-table";
+import { loadPurchaseRows } from "./purchases-data";
 
 const ITEM_FIELD_LABELS: Record<string, string> = {
   name: "Name",
@@ -87,7 +90,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: (data?.name as string | null) ?? "Item" };
 }
 
-type ItemTab = "overview" | "settings" | "history";
+type ItemTab = "overview" | "purchases" | "settings" | "history";
 
 /**
  * One item, in three tabs (#53): Overview is what people come for day to day —
@@ -107,7 +110,8 @@ export default async function ItemDetailPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const [{ id }, { tab: tabParam }] = await Promise.all([params, searchParams]);
-  const tab: ItemTab = tabParam === "settings" || tabParam === "history" ? tabParam : "overview";
+  const tab: ItemTab =
+    tabParam === "purchases" || tabParam === "settings" || tabParam === "history" ? tabParam : "overview";
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "pricelist", "view");
@@ -328,6 +332,22 @@ export default async function ItemDetailPage({
 
   const packSizeLabelById = new Map((packSizes ?? []).map((p) => [p.id, packTitle(p.label, packShapeOf(p))]));
 
+  // Purchases (#80): the lines behind the figures, only loaded on that tab.
+  const [purchaseRows, purchaseColumns] =
+    tab === "purchases"
+      ? await Promise.all([
+          loadPurchaseRows(admin, {
+            itemId: item.id,
+            offers: offers ?? [],
+            packLabelByOfferId: new Map(
+              (offers ?? []).map((o) => [o.id as string, packSizeLabelById.get(o.pack_size_id) ?? "—"])
+            ),
+            canOpenExpense: (_expenseId, submittedBy) => seesAllExpenses || submittedBy === user.id,
+          }),
+          getColumnPreference(user.id, "item_purchases", PURCHASES_DEFAULT_VISIBLE),
+        ])
+      : [[], []];
+
   function itemDisplayValue(field: string, value: unknown): string {
     if (value == null || value === "") return "—";
     if (field === "category_id") return categoryNameById.get(String(value)) ?? "—";
@@ -416,6 +436,9 @@ export default async function ItemDetailPage({
           <TabLink href={`/pricelist/${item.id}`} active={tab === "overview"}>
             Overview
           </TabLink>
+          <TabLink href={`/pricelist/${item.id}?tab=purchases`} active={tab === "purchases"}>
+            Purchases
+          </TabLink>
           <TabLink href={`/pricelist/${item.id}?tab=settings`} active={tab === "settings"}>
             Settings
           </TabLink>
@@ -424,6 +447,16 @@ export default async function ItemDetailPage({
           </TabLink>
         </nav>
       </div>
+
+      {tab === "purchases" && (
+        <section className="flex flex-col gap-3">
+          <p className="text-sm text-ink/50">
+            Every receipt line filed against this item, newest first — what was bought, from whom, and what it came to.
+            The entry number opens the expense.
+          </p>
+          <PurchasesTable rows={purchaseRows} initialVisible={purchaseColumns} />
+        </section>
+      )}
 
       {tab === "settings" && (
         <>
@@ -534,7 +567,15 @@ export default async function ItemDetailPage({
               value={formatUnitCost(Number(itemCost.avg_cost_per_base_unit), itemCost.base_unit_code)}
               note={`across ${itemCost.vendor_count} vendor(s)`}
             />
-            <Stat label="Purchases" value={String(itemCost.purchase_count)} note="receipt lines" />
+            <Stat
+              label="Purchases"
+              value={String(itemCost.purchase_count)}
+              note={
+                <Link href={`/pricelist/${item.id}?tab=purchases`} className="underline hover:text-ink">
+                  See each one
+                </Link>
+              }
+            />
             {packPrices.size > 0 && (
               <div className="sm:col-span-3">
                 <p className="mb-1 text-xs uppercase tracking-wide text-ink/40">Per pack</p>
@@ -1012,7 +1053,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`ml-2 text-xs ${color}`}>{status}</span>;
 }
 
-function Stat({ label, value, note }: { label: string; value: string; note?: string | null }) {
+function Stat({ label, value, note }: { label: string; value: string; note?: React.ReactNode }) {
   return (
     <div className="rounded-md border border-ink/10 bg-white p-3">
       <p className="text-xs uppercase tracking-wide text-ink/40">{label}</p>
