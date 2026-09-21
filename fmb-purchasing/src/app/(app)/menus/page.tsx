@@ -5,7 +5,7 @@ import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildMonthGrid, formatHijri } from "@/lib/hijri/hijri";
 import { costMenuDay } from "@/lib/menu-costing";
-import { loadDishes, loadItemPrices, loadKitchens } from "./data";
+import { loadDishes, loadExtras, loadItemPrices, loadKitchens, withDayCounts } from "./data";
 import { MenuTabs } from "./tabs";
 import type { MenuDayCost } from "@/lib/menu-costing";
 import type { MenuDish } from "@/lib/menu-costing";
@@ -71,7 +71,7 @@ export default async function MenuCalendarPage({
   const { data: days } = await admin
     .from("menu_days")
     .select(
-      "id, kitchen_id, service_date, planned_thaalis, confirmed_thaalis, status, menu_day_dishes ( dish_id, sort_order )"
+      "id, kitchen_id, service_date, planned_thaalis, confirmed_thaalis, status, menu_day_dishes ( dish_id, sort_order, boxes_offered, expected_boxes )"
     )
     .in("kitchen_id", [...showingIds])
     .gte("service_date", from)
@@ -84,14 +84,24 @@ export default async function MenuCalendarPage({
   ];
   const dishes = await loadDishes(admin, dishIds);
   const dishById = new Map(dishes.map((d) => [d.dishId, d]));
-  const prices = await loadItemPrices(admin, [...new Set(dishes.flatMap((d) => d.ingredients.map((i) => i.itemId)))]);
+  // Roti and fruit cost a day as much as its dishes do (#76).
+  const extrasByDay = await loadExtras(admin, (days ?? []).map((d) => d.id as string));
+  const prices = await loadItemPrices(admin, [
+    ...new Set([
+      ...dishes.flatMap((d) => d.ingredients.map((i) => i.itemId)),
+      ...[...extrasByDay.values()].flat().map((e) => e.itemId),
+    ]),
+  ]);
 
   // A day can now hold a menu from each kitchen, so the map is date → list.
   const byDate = new Map<string, DayEntry[]>();
   for (const d of days ?? []) {
-    const onDay = [...(d.menu_day_dishes ?? [])]
-      .sort((a, b) => Number(a.sort_order) - Number(b.sort_order))
-      .flatMap((x) => dishById.get(x.dish_id as string) ?? []);
+    const rows = [...(d.menu_day_dishes ?? [])].sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+    const onDay = withDayCounts(
+      rows.flatMap((x) => dishById.get(x.dish_id as string) ?? []),
+      rows as { dish_id: string; boxes_offered?: number | string | null; expected_boxes?: number | null }[]
+    );
+    const extras = extrasByDay.get(d.id as string) ?? [];
     const thaalis = Number(d.confirmed_thaalis ?? d.planned_thaalis);
     const date = d.service_date as string;
     const entry: DayEntry = {
@@ -99,7 +109,7 @@ export default async function MenuCalendarPage({
       kitchenName: kitchens.find((k) => k.id === d.kitchen_id)?.name ?? "",
       dishes: onDay,
       thaalis,
-      cost: onDay.length > 0 ? costMenuDay(onDay, thaalis, prices) : null,
+      cost: onDay.length > 0 || extras.length > 0 ? costMenuDay(onDay, thaalis, prices, extras) : null,
     };
     byDate.set(date, [...(byDate.get(date) ?? []), entry]);
   }

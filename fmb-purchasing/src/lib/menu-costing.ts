@@ -53,24 +53,73 @@ export type MenuDish = {
   portionMl: number;
   /** How many boxes one batch fills. Null on a per-box recipe. */
   batchBoxes: number | null;
+  /**
+   * How many boxes of this dish a thaali may take (#76). Biryani offered as
+   * "2 × 1 L" is two; most things are one.
+   */
+  boxesOffered?: number;
+  /**
+   * How many boxes to fill. Null means nobody has said yet, and the day
+   * assumes everybody takes everything it offers — the conservative reading,
+   * and the one that stops a list going short.
+   */
+  expectedBoxes?: number | null;
   ingredients: RecipeLine[];
 };
 
 /**
- * How many times over a recipe is made for a given number of thaalis.
+ * A part of a thaali that is not a dish: roti, fruit, anything bought as it
+ * is rather than cooked (#76).
  *
- * One box of the dish goes in each thaali, so the boxes to fill are the
- * thaalis. A per-box recipe scales to them one for one; a batch recipe scales
- * by the share of a batch needed, and it is allowed to be a fraction — the
- * kitchen scales a recipe down rather than cooking a whole pot it does not
- * need, so 250 boxes from a batch of 200 is 1.25 batches, not two.
+ * How much goes in a thaali is the menu's decision — a day of half a roti is
+ * half a roti for everyone who takes one — so only the number of takers
+ * varies, and the quantity to buy is the one multiplied by the other.
  */
-export function batchesFor(dish: Pick<MenuDish, "basis" | "batchBoxes">, thaalis: number): number {
-  if (thaalis <= 0) return 0;
-  if (dish.basis === "box") return thaalis;
+export type MenuExtra = {
+  extraId: string;
+  kind: "roti" | "fruit" | "other";
+  itemId: string;
+  itemName: string;
+  /** In the unit the quantity is written in: one roti, half a roti, a piece of fruit. */
+  perThaali: number;
+  /** How many people take it. Null means nobody has said, so the day's count stands. */
+  expectedCount?: number | null;
+  unitCode: string;
+  unitToBase: number;
+  baseUnitCode: string;
+};
+
+/**
+ * How many boxes of a dish the day has to fill (#76).
+ *
+ * The day's planned count is only the starting point: what is cooked is the
+ * number against the line, because people take part of a thaali and a dish
+ * offered as two boxes is not one box each.
+ */
+export function boxesFor(dish: Pick<MenuDish, "boxesOffered" | "expectedBoxes">, thaalis: number): number {
+  if (dish.expectedBoxes != null) return Math.max(0, dish.expectedBoxes);
+  return Math.max(0, thaalis) * (dish.boxesOffered ?? 1);
+}
+
+/** The same question for a part that is not a dish. */
+export function countFor(extra: Pick<MenuExtra, "expectedCount">, thaalis: number): number {
+  return Math.max(0, extra.expectedCount ?? thaalis);
+}
+
+/**
+ * How many times over a recipe is made, for a number of boxes to fill.
+ *
+ * A per-box recipe scales to them one for one; a batch recipe scales by the
+ * share of a batch needed, and it is allowed to be a fraction — the kitchen
+ * scales a recipe down rather than cooking a whole pot it does not need, so
+ * 250 boxes from a batch of 200 is 1.25 batches, not two.
+ */
+export function batchesFor(dish: Pick<MenuDish, "basis" | "batchBoxes">, boxes: number): number {
+  if (boxes <= 0) return 0;
+  if (dish.basis === "box") return boxes;
   const size = dish.batchBoxes ?? 0;
   if (size <= 0) return 0;
-  return Math.round((thaalis / size) * 1000) / 1000;
+  return Math.round((boxes / size) * 1000) / 1000;
 }
 
 export type RequirementLine = {
@@ -79,7 +128,7 @@ export type RequirementLine = {
   /** In the item's base unit — kg, L, ea — which is what prices are per. */
   quantity: number;
   baseUnitCode: string;
-  /** Which dishes asked for it, for a day that needs onions three times over. */
+  /** Which parts of the menu asked for it, for a day that needs onions three times over. */
   fromDishes: string[];
 };
 
@@ -91,29 +140,44 @@ export type RequirementLine = {
  * of 2.5 kg, and the shopping list that follows is a list of things to buy
  * rather than a list of recipe lines.
  */
-export function requirementsFor(dishes: MenuDish[], thaalis: number): RequirementLine[] {
+export function requirementsFor(
+  dishes: MenuDish[],
+  thaalis: number,
+  extras: MenuExtra[] = []
+): RequirementLine[] {
   const byItem = new Map<string, RequirementLine>();
 
+  const add = (line: { itemId: string; itemName: string; baseUnitCode: string }, quantity: number, from: string) => {
+    const existing = byItem.get(line.itemId);
+    if (existing) {
+      existing.quantity = round3(existing.quantity + quantity);
+      if (!existing.fromDishes.includes(from)) existing.fromDishes.push(from);
+    } else {
+      byItem.set(line.itemId, {
+        itemId: line.itemId,
+        itemName: line.itemName,
+        quantity: round3(quantity),
+        baseUnitCode: line.baseUnitCode,
+        fromDishes: [from],
+      });
+    }
+  };
+
   for (const dish of dishes) {
-    const scale = batchesFor(dish, thaalis);
+    const scale = batchesFor(dish, boxesFor(dish, thaalis));
     if (scale <= 0) continue;
 
     for (const line of dish.ingredients) {
-      const quantity = line.quantity * scale * line.unitToBase;
-      const existing = byItem.get(line.itemId);
-      if (existing) {
-        existing.quantity = round3(existing.quantity + quantity);
-        if (!existing.fromDishes.includes(dish.dishName)) existing.fromDishes.push(dish.dishName);
-      } else {
-        byItem.set(line.itemId, {
-          itemId: line.itemId,
-          itemName: line.itemName,
-          quantity: round3(quantity),
-          baseUnitCode: line.baseUnitCode,
-          fromDishes: [dish.dishName],
-        });
-      }
+      add(line, line.quantity * scale * line.unitToBase, dish.dishName);
     }
+  }
+
+  // Roti and fruit are bought as they are: how much a thaali gets, times how
+  // many take it.
+  for (const extra of extras) {
+    const count = countFor(extra, thaalis);
+    if (count <= 0) continue;
+    add(extra, extra.perThaali * count * extra.unitToBase, extra.itemName);
   }
 
   return [...byItem.values()].sort((a, b) => a.itemName.localeCompare(b.itemName, "en", { sensitivity: "base" }));
@@ -175,9 +239,10 @@ export type MenuDayCost = {
 export function costMenuDay(
   dishes: MenuDish[],
   thaalis: number,
-  pricesByItem: Map<string, ItemPrices>
+  pricesByItem: Map<string, ItemPrices>,
+  extras: MenuExtra[] = []
 ): MenuDayCost {
-  const lines = requirementsFor(dishes, thaalis).map((line) => {
+  const lines = requirementsFor(dishes, thaalis, extras).map((line) => {
     const { perUnit, basis } = priceFor(pricesByItem.get(line.itemId));
     return { ...line, perUnit, basis, cost: perUnit == null ? null : round2(line.quantity * perUnit) };
   });

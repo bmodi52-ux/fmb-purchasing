@@ -165,3 +165,100 @@ export async function renameKitchen(formData: FormData) {
   await createAdminClient().from("kitchens").update({ name }).eq("id", id);
   revalidatePath("/menus");
 }
+
+/**
+ * What a line of the menu offers, and how many take it (#76).
+ *
+ * The day's count is only a default: people take part of a thaali, and a dish
+ * offered as two boxes is not one box each. Clearing the number puts the line
+ * back to assuming everybody takes everything it offers, which is the
+ * conservative reading and the one that stops a list going short.
+ */
+export async function setDishCounts(formData: FormData) {
+  await requirePlanner();
+  const id = String(formData.get("menu_day_dish_id") ?? "");
+  const date = String(formData.get("date") ?? "");
+  if (!id) return;
+
+  const offered = Number(formData.get("boxes_offered") ?? 1);
+  const expectedRaw = String(formData.get("expected_boxes") ?? "").trim();
+  const expected = expectedRaw === "" ? null : Math.round(Number(expectedRaw));
+
+  await createAdminClient()
+    .from("menu_day_dishes")
+    .update({
+      boxes_offered: Number.isFinite(offered) && offered > 0 ? offered : 1,
+      expected_boxes: expected != null && Number.isFinite(expected) && expected >= 0 ? expected : null,
+    })
+    .eq("id", id);
+
+  refresh(date);
+}
+
+/**
+ * Roti, fruit, anything in a thaali that is bought rather than cooked (#76).
+ *
+ * How much goes in a thaali is the menu's decision and nobody else's: a day of
+ * half a roti is half a roti for everyone who takes one. Only the number of
+ * takers varies.
+ */
+export async function addExtraToDay(formData: FormData) {
+  const user = await requirePlanner();
+  const kitchenId = String(formData.get("kitchen_id") ?? "");
+  const date = String(formData.get("date") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  const itemId = String(formData.get("item_id") ?? "");
+  const perThaali = Number(formData.get("per_thaali") ?? 1);
+  if (!kitchenId || !date || !itemId) return;
+  if (kind !== "roti" && kind !== "fruit" && kind !== "other") return;
+  if (!Number.isFinite(perThaali) || perThaali <= 0) return;
+
+  const admin = createAdminClient();
+  const dayId = await menuDayId(admin, kitchenId, date, user.id);
+  if (!dayId) return;
+
+  const { count } = await admin
+    .from("menu_day_extras")
+    .select("id", { count: "exact", head: true })
+    .eq("menu_day_id", dayId);
+
+  await admin
+    .from("menu_day_extras")
+    .upsert(
+      { menu_day_id: dayId, kind, item_id: itemId, per_thaali: perThaali, sort_order: count ?? 0, created_by: user.id },
+      { onConflict: "menu_day_id,kind,item_id" }
+    );
+
+  refresh(date);
+}
+
+export async function setExtraCounts(formData: FormData) {
+  await requirePlanner();
+  const id = String(formData.get("extra_id") ?? "");
+  const date = String(formData.get("date") ?? "");
+  if (!id) return;
+
+  const perThaali = Number(formData.get("per_thaali") ?? 1);
+  const expectedRaw = String(formData.get("expected_count") ?? "").trim();
+  const expected = expectedRaw === "" ? null : Math.round(Number(expectedRaw));
+
+  await createAdminClient()
+    .from("menu_day_extras")
+    .update({
+      per_thaali: Number.isFinite(perThaali) && perThaali > 0 ? perThaali : 1,
+      expected_count: expected != null && Number.isFinite(expected) && expected >= 0 ? expected : null,
+    })
+    .eq("id", id);
+
+  refresh(date);
+}
+
+export async function removeExtraFromDay(formData: FormData) {
+  await requirePlanner();
+  const id = String(formData.get("extra_id") ?? "");
+  const date = String(formData.get("date") ?? "");
+  if (!id) return;
+
+  await createAdminClient().from("menu_day_extras").delete().eq("id", id);
+  refresh(date);
+}

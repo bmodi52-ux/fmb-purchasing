@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { sectionFor } from "./menu-sections";
+import { resolveSection, sectionFor } from "./menu-sections";
 
 describe("sectionFor (#70)", () => {
   test("meat, however the category is written", () => {
@@ -25,5 +25,20 @@ describe("sectionFor (#70)", () => {
 
   test("the parent decides when the leaf says nothing", () => {
     assert.equal(sectionFor(["Meat & Poultry", "Legs and Shoulders"]), "meat");
+  });
+});
+
+describe("roti is its own list (#76)", () => {
+  test("bread does not go in with the rice and the oil", () => {
+    assert.equal(sectionFor(["Bakery", "Roti"]), "roti");
+    assert.equal(sectionFor(["Bread"]), "roti");
+  });
+
+  test("a category set to roti by hand is roti", () => {
+    assert.equal(resolveSection({ categorySection: "roti", categoryName: "Groceries" }), "roti");
+  });
+
+  test("an item on the roti list stays there whatever its category says", () => {
+    assert.equal(resolveSection({ itemSection: "roti", categoryName: "Meat & Poultry" }), "roti");
   });
 });
