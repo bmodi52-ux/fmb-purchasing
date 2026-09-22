@@ -209,23 +209,27 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
                 description:
                   "Total quantity in the canonical base unit, deduced from pack description. E.g. 'Tomato Sauce Carton — 3x4L' -> 12.",
               },
+              // Text fields that can be absent take "" rather than null from here
+              // down: the API caps a strict schema at 16 nullable parameters, and
+              // str() and lineDetailsFrom() already read "" as null.
               normalizedUnit: {
-                type: ["string", "null"],
-                description: "Canonical base unit for normalizedQuantity, e.g. 'kg', 'L', 'unit'.",
+                type: "string",
+                description:
+                  "Canonical base unit for normalizedQuantity, e.g. 'kg', 'L', 'unit'. Empty string when normalizedQuantity is null.",
               },
               gstApplicable: {
                 type: "boolean",
                 description: "Whether GST applies to this line, inferred from the receipt.",
               },
               brand: {
-                type: ["string", "null"],
+                type: "string",
                 description:
-                  "The product's brand, written out in full when the receipt abbreviates it ('M/LAND' -> 'Mainland'). Null when no brand is printed, and for a store's generic line.",
+                  "The product's brand, written out in full when the receipt abbreviates it ('M/LAND' -> 'Mainland'). Empty string when no brand is printed, and for a store's generic line.",
               },
               productCode: {
-                type: ["string", "null"],
+                type: "string",
                 description:
-                  "The vendor's own code for the product as printed on the line — an item, product, SKU or PLU code column. Not a barcode, quantity or price. Null when none is printed.",
+                  "The vendor's own code for the product as printed on the line — an item, product, SKU or PLU code column. Not a barcode, quantity or price. Empty string when none is printed.",
               },
               packaging: {
                 type: "string",
@@ -283,12 +287,13 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
           type: ["object", "null"],
           additionalProperties: false,
           description:
-            "Who a covering email says to pay. Null when the upload is just a receipt with no such instruction.",
+            "Who a covering email says to pay. Null when the upload is just a receipt with no such instruction. " +
+            "Any detail the email does not give is an empty string.",
           properties: {
-            name: { type: ["string", "null"] },
-            bankAccountName: { type: ["string", "null"] },
-            bsb: { type: ["string", "null"], description: "Australian BSB, digits only." },
-            accountNumber: { type: ["string", "null"] },
+            name: { type: "string" },
+            bankAccountName: { type: "string" },
+            bsb: { type: "string", description: "Australian BSB, digits only." },
+            accountNumber: { type: "string" },
           },
           required: ["name", "bankAccountName", "bsb", "accountNumber"],
         },
@@ -339,7 +344,7 @@ Every receipt must resolve to Subtotal (excl. GST) -> GST amount -> Total (incl.
 GOODS OR SERVICE
 Most of what this kitchen buys is stock, and those lines are kind "goods". Work bought rather than stock is kind "service": a cleaning contract, a plumbing repair, equipment servicing, pest control, a hired hand, a delivery driver's labour billed separately from the freight. Use it whenever the line is an activity someone performed, not an item that arrived.
 - The difference is not cosmetic. Goods lines are matched into a price catalogue and become part of a per-unit cost history, which is meaningless for a one-off "Monthly deep clean — August" and pollutes it. Services are recorded, categorised and reported, and stay out of that catalogue.
-- Labour billed by the hour is still a service, even with a quantity and a rate on the line: record what the invoice says in quantity and unitPrice, but leave normalizedQuantity and normalizedUnit null, since hours do not convert to a pack size.
+- Labour billed by the hour is still a service, even with a quantity and a rate on the line: record what the invoice says in quantity and unitPrice, but leave normalizedQuantity null and normalizedUnit empty, since hours do not convert to a pack size.
 - An invoice can carry both: a plumber's parts are goods and their call-out labour is a service. Split them as the invoice does.
 
 EVERY DOLLAR OF THE TOTAL MUST APPEAR ON A LINE
@@ -355,8 +360,8 @@ RECORD EVERY LINE, TO THE LAST
 Wholesale invoices here are often long and handwritten — a produce supplier's docket can run to twenty rows of pen on a printed form. Record every row, in order, from the first to the last, however many there are and however alike they look ("20kg Onions" can appear twice at different prices; both are lines). Before calling the tool, add up the lines: if they come to less than the total, you have skipped rows — find them. A line whose description you cannot read is still a line: record its amount with the "Unclear" category rather than leaving it out.
 
 OTHER RULES
-- For each goods line, infer the canonical base unit and total quantity from the printed pack description (e.g. "Tomato Sauce Carton — 3x4L" -> normalizedQuantity 12, normalizedUnit "L"; "Chicken 10kg box" -> normalizedQuantity 10, normalizedUnit "kg"). Leave both null when no sensible conversion applies, and on every line that is not goods — a service included.
-- For each goods line, also record what the line says about the product itself: the brand, the vendor's product code, what it comes in, and the pack size. Wholesale invoices usually print a product code column and a pack ("CTN 10x1L", "20KG BAG"); supermarket receipts usually print a brand, often abbreviated, and a size ("M/LAND CHSE TASTY SHRED 2KG" is Mainland, a 2 kg pack). These fill in a price list a person then checks, so read what is printed and use null or "unclear" rather than guessing. On every line that is not goods, set brand, productCode and packSize to null and packaging to "unclear".
+- For each goods line, infer the canonical base unit and total quantity from the printed pack description (e.g. "Tomato Sauce Carton — 3x4L" -> normalizedQuantity 12, normalizedUnit "L"; "Chicken 10kg box" -> normalizedQuantity 10, normalizedUnit "kg"). Leave normalizedQuantity null and normalizedUnit empty when no sensible conversion applies, and on every line that is not goods — a service included.
+- For each goods line, also record what the line says about the product itself: the brand, the vendor's product code, what it comes in, and the pack size. Wholesale invoices usually print a product code column and a pack ("CTN 10x1L", "20KG BAG"); supermarket receipts usually print a brand, often abbreviated, and a size ("M/LAND CHSE TASTY SHRED 2KG" is Mainland, a 2 kg pack). These fill in a price list a person then checks, so read what is printed and leave a field empty (brand, productCode), null (packSize) or "unclear" (packaging) rather than guessing. On every line that is not goods, set brand and productCode to empty strings, packSize to null and packaging to "unclear".
 - Assign each line the closest category from the provided enum. "Miscellaneous" is a real choice meaning the spend genuinely belongs to no other category — a one-off fee, a sundry charge. It is NOT a way of saying you are unsure.
 - When the line text does not say enough to classify it — "Sundries", "Item 4", an illegible or truncated description with no handwriting to clarify it — choose the "Unclear" option instead of guessing. An unclear line is put in front of a person to decide, which is far better than a confident wrong category nobody ever revisits.
 - Strip currency symbols from numbers. If a value is unreadable or absent, use null rather than guessing.
