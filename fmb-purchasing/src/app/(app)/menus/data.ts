@@ -12,6 +12,14 @@ import { resolveSection, type SectionKey } from "@/lib/menu-sections";
 
 export type Kitchen = { id: string; name: string };
 
+/**
+ * Where a menu's roti and typed lines are held: on a day, or on a menu saved
+ * apart from any day (#17). The rows are the same shape in both.
+ */
+export type MenuSource = { extras: string; lines: string; key: string };
+export const DAY_SOURCE: MenuSource = { extras: "menu_day_extras", lines: "menu_day_lines", key: "menu_day_id" };
+export const SAVED_SOURCE: MenuSource = { extras: "saved_menu_extras", lines: "saved_menu_lines", key: "saved_menu_id" };
+
 export async function loadKitchens(admin: SupabaseClient): Promise<Kitchen[]> {
   const { data } = await admin.from("kitchens").select("id, name").eq("active", true).order("sort_order");
   return (data ?? []).map((k) => ({ id: k.id as string, name: k.name as string }));
@@ -105,15 +113,20 @@ export function withDayCounts(
  * They carry no recipe, so what they need is the item itself, in the unit the
  * item is counted in.
  */
-export async function loadExtras(admin: SupabaseClient, menuDayIds: string[]): Promise<Map<string, MenuExtra[]>> {
+export async function loadExtras(
+  admin: SupabaseClient,
+  menuDayIds: string[],
+  source: MenuSource = DAY_SOURCE
+): Promise<Map<string, MenuExtra[]>> {
   const byDay = new Map<string, MenuExtra[]>();
   if (menuDayIds.length === 0) return byDay;
 
   const { data: rows } = await admin
-    .from("menu_day_extras")
-    .select("id, menu_day_id, kind, item_id, per_thaali, expected_count, sort_order, items ( name, canonical_unit_id )")
-    .in("menu_day_id", menuDayIds)
-    .order("sort_order");
+    .from(source.extras)
+    .select(`id, ${source.key}, kind, item_id, per_thaali, expected_count, sort_order, items ( name, canonical_unit_id )` as string)
+    .in(source.key, menuDayIds)
+    .order("sort_order")
+    .returns<Record<string, unknown>[]>();
   if (!rows || rows.length === 0) return byDay;
 
   const unitIds = [
@@ -130,7 +143,7 @@ export async function loadExtras(admin: SupabaseClient, menuDayIds: string[]): P
     const item = one(row.items) as { name: string; canonical_unit_id: string | null } | null;
     if (!item) continue;
     const unit = item.canonical_unit_id ? unitById.get(item.canonical_unit_id) : undefined;
-    const dayId = row.menu_day_id as string;
+    const dayId = row[source.key] as string;
     byDay.set(dayId, [
       ...(byDay.get(dayId) ?? []),
       {
@@ -160,23 +173,28 @@ export async function loadExtras(admin: SupabaseClient, menuDayIds: string[]): P
  * is how somebody says it and converting it on screen would be answering a
  * question nobody asked.
  */
-export async function loadMenuLines(admin: SupabaseClient, menuDayIds: string[]): Promise<Map<string, MenuLine[]>> {
+export async function loadMenuLines(
+  admin: SupabaseClient,
+  menuDayIds: string[],
+  source: MenuSource = DAY_SOURCE
+): Promise<Map<string, MenuLine[]>> {
   const byDay = new Map<string, MenuLine[]>();
   if (menuDayIds.length === 0) return byDay;
 
   const { data: rows } = await admin
-    .from("menu_day_lines")
+    .from(source.lines)
     .select(
-      "id, menu_day_id, item_id, quantity, section, note, sort_order, items ( name ), units ( code, to_base_factor, base_unit_code )"
+      `id, ${source.key}, item_id, quantity, section, sort_order, items ( name ), units ( code, to_base_factor, base_unit_code )` as string
     )
-    .in("menu_day_id", menuDayIds)
-    .order("sort_order");
+    .in(source.key, menuDayIds)
+    .order("sort_order")
+    .returns<Record<string, unknown>[]>();
 
   for (const row of rows ?? []) {
     const item = one(row.items) as { name: string } | null;
     const unit = one(row.units) as { code: string; to_base_factor: number; base_unit_code: string } | null;
     if (!item || !unit) continue;
-    const dayId = row.menu_day_id as string;
+    const dayId = row[source.key] as string;
     byDay.set(dayId, [
       ...(byDay.get(dayId) ?? []),
       {
@@ -296,4 +314,39 @@ export async function menuDayBlockers(
         .in("menu_requirement_id", ids)
     : { count: 0 };
   return { bought, allocated: count ?? 0 };
+}
+
+/**
+ * Which dates already have a menu, and in which kitchens (#20) — so picking
+ * days to put a menu on shows the ones that would be affected. A day row with
+ * nothing on it (a count saved, nothing planned) doesn't count.
+ */
+export async function loadPlannedDates(
+  admin: SupabaseClient,
+  from: string,
+  to: string
+): Promise<Record<string, string[]>> {
+  const { data } = await admin
+    .from("menu_days")
+    .select(
+      "service_date, menu_text, kitchens ( name ), menu_day_dishes ( count ), menu_day_extras ( count ), menu_day_lines ( count )"
+    )
+    .gte("service_date", from)
+    .lte("service_date", to)
+    .returns<Record<string, unknown>[]>();
+
+  const count = (v: unknown) => Number((one(v as { count: number }[]) as { count: number } | null)?.count ?? 0);
+  const planned: Record<string, string[]> = {};
+  for (const row of data ?? []) {
+    const has =
+      Boolean(row.menu_text) ||
+      count(row.menu_day_dishes) > 0 ||
+      count(row.menu_day_extras) > 0 ||
+      count(row.menu_day_lines) > 0;
+    if (!has) continue;
+    const date = row.service_date as string;
+    const kitchen = (one(row.kitchens as { name: string }[]) as { name: string } | null)?.name ?? "";
+    planned[date] = [...(planned[date] ?? []), kitchen];
+  }
+  return planned;
 }
