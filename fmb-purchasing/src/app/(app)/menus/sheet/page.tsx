@@ -10,7 +10,7 @@ import { SECTIONS, SECTION_LABEL, type SectionKey } from "@/lib/menu-sections";
 import { loadDishes, loadExtras, loadItemPrices, loadKitchens, loadSections, withDayCounts } from "../data";
 import { MenuTabs } from "../tabs";
 
-export const metadata = { title: "Thaali menu · Sheet" };
+export const metadata = { title: "Thaali Calendar · Sheet" };
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
@@ -151,7 +151,7 @@ export default async function MenuSheetPage({
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h1 className="page-title text-ink">Thaali menu</h1>
+        <h1 className="page-title text-ink">Thaali Calendar</h1>
         <p className="page-description mt-1 max-w-2xl">
           Every day side by side, with what each one needs under Meat, Fresh produce and Dry goods — the planning
           sheet, with the quantities worked out rather than typed.
