@@ -15,6 +15,8 @@ import { TypedMenu } from "./typed-menu";
 import { DeleteMenu } from "./delete-menu";
 import { releaseDay, unreleaseDay } from "../release-actions";
 import { applySavedMenu, saveDayAsMenu } from "../saved/actions";
+import { loadDayChanges } from "../day-history";
+import { ORG_TIME_ZONE } from "@/lib/format";
 import { progressOf } from "@/lib/procurement";
 import {
   addDishToDay,
@@ -160,6 +162,10 @@ export default async function MenuDayPage({
 
   // Buying that has happened can't be deleted along with the day (#21).
   const boughtCount = (requirements ?? []).filter((r) => r.status === "ordered" || r.status === "delivered").length;
+  const history = await loadDayChanges(admin, kitchen.id, date);
+  const changedSinceRelease =
+    day?.status === "released" ? history.filter((h) => h.wasReleased && !h.action.startsWith("Released")).length : 0;
+
   const deleteBlockedBecause =
     boughtCount > 0
       ? `${boughtCount} ${boughtCount === 1 ? "item has" : "items have"} already been ordered or delivered. Take the dishes off one by one instead.`
@@ -497,6 +503,46 @@ export default async function MenuDayPage({
           </>
         )}
       </section>
+
+      {/* Who changed what, and whether the lists had gone out yet (#15). */}
+      {history.length > 0 && (
+        <details className="rounded-lg border border-ink/10 bg-white/60 p-4 text-sm" open={changedSinceRelease > 0}>
+          <summary className="cursor-pointer text-ink">
+            History
+            <span className="ml-2 text-ink/50">
+              {history.length} {history.length === 1 ? "change" : "changes"}
+              {changedSinceRelease > 0 && (
+                <span className="text-alert"> · {changedSinceRelease} after it was released</span>
+              )}
+            </span>
+          </summary>
+          <ul className="mt-3 flex flex-col divide-y divide-ink/5">
+            {history.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1.5">
+                <span className="w-40 shrink-0 text-xs text-ink/50">
+                  {new Date(h.changedAt).toLocaleString("en-AU", {
+                    timeZone: ORG_TIME_ZONE,
+                    day: "numeric",
+                    month: "short",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span className="text-ink">
+                  {h.action}
+                  {h.detail && <span className="text-ink/60"> · {h.detail}</span>}
+                </span>
+                <span className="text-xs text-ink/50">
+                  {h.changedBy ?? "someone"}
+                  {h.wasReleased && !h.action.startsWith("Released") && (
+                    <span className="ml-2 rounded-full bg-alert/10 px-2 py-0.5 text-alert">after release</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {canManage && day && (
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">

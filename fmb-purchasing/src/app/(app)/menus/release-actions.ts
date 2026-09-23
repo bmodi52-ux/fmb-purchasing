@@ -8,6 +8,7 @@ import { requirePermission } from "@/lib/permissions";
 import { costMenuDay } from "@/lib/menu-costing";
 import { loadDishes, loadExtras, loadItemPrices, loadMenuLines, loadSections, withDayCounts } from "./data";
 import { notify } from "@/lib/notifications-inapp";
+import { logDayChange } from "./day-history";
 import { dayLabel, newlyAssigned, sectionList } from "@/lib/thaali-buying";
 import type { SectionKey } from "@/lib/menu-sections";
 
@@ -151,6 +152,13 @@ export async function releaseDay(formData: FormData) {
     })
     .eq("id", dayId);
 
+  await logDayChange(admin, {
+    dayId,
+    userId: user.id,
+    action: (existing ?? []).length > 0 ? "Released again" : "Released",
+    detail: `${rows.length} ${rows.length === 1 ? "item" : "items"} to buy`,
+  });
+
   // Whoever has just been given something to buy hears about it (#15), except
   // the person releasing, who knows.
   const told = newlyAssigned(
@@ -197,6 +205,7 @@ export async function unreleaseDay(formData: FormData) {
     .from("menu_days")
     .update({ status: "draft", released_at: null, released_by: null, updated_by: user.id })
     .eq("id", dayId);
+  await logDayChange(admin, { dayId, userId: user.id, action: "Back to draft", detail: "lists nobody had bought against were taken back" });
 
   revalidatePath(`/menus/${date}`);
   revalidatePath("/menus");

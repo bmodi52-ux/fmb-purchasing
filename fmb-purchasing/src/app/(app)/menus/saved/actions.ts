@@ -16,6 +16,7 @@ import {
 } from "@/lib/menu-apply";
 import { loadKitchens, menuDayBlockers } from "../data";
 import { clearContents, copyContents, dayHolder, hasContents, savedHolder } from "../copy-menu";
+import { logDayChange } from "../day-history";
 
 /**
  * Estimates, saved menus and favourites (#17), and one menu on many days (#20).
@@ -387,7 +388,7 @@ export async function applySavedMenu(formData: FormData) {
   if (!id || dates.length === 0) return;
 
   const admin = createAdminClient();
-  const { data: menu } = await admin.from("saved_menus").select("thaalis, menu_text").eq("id", id).maybeSingle();
+  const { data: menu } = await admin.from("saved_menus").select("name, thaalis, menu_text").eq("id", id).maybeSingle();
   if (!menu) return;
 
   const kitchens = await loadKitchens(admin);
@@ -452,6 +453,12 @@ export async function applySavedMenu(formData: FormData) {
           updated_at: new Date().toISOString(),
         })
         .eq("id", dayId);
+      await logDayChange(admin, {
+        dayId,
+        userId: user.id,
+        action: outcome === "replace" ? "Replaced the menu with a saved one" : "Used a saved menu",
+        detail: (menu.name as string | null) ?? "an unsaved menu",
+      });
     }
   }
 
