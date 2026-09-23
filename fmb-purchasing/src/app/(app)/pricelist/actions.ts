@@ -647,6 +647,12 @@ async function reviewOffers(offerIds: string[], decision: "approved" | "rejected
  * Rejecting is deliberately not a delete. The item may already be named on
  * expense lines, and reports read those; "rejected" says nobody should file
  * anything new against it, which is what the state is for.
+ *
+ * Rejecting carries down to the item's offers still waiting for review (#16),
+ * the way approving an offer carries up to a pending item. Otherwise they sit
+ * in the Pricelist's "Pending review" table asking to be approved onto an item
+ * nobody wants. Offers already approved are left alone: somebody checked
+ * those, and they stay on the record of what was paid.
  */
 export async function reviewItem(formData: FormData) {
   const user = await getCurrentUser();
@@ -667,6 +673,19 @@ export async function reviewItem(formData: FormData) {
       updated_by: user.id,
     })
     .eq("id", itemId);
+
+  if (decision === "rejected") {
+    const { data: packs } = await admin.from("item_pack_sizes").select("id").eq("item_id", itemId);
+    const packIds = (packs ?? []).map((p) => p.id as string);
+    if (packIds.length > 0) {
+      await admin
+        .from("pricelist_items")
+        .update({ status: "rejected", reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+        .in("pack_size_id", packIds)
+        .eq("status", "pending");
+    }
+    revalidatePath("/vendors/[id]", "page");
+  }
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
