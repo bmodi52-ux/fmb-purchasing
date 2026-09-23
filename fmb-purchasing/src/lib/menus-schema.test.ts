@@ -129,3 +129,64 @@ describe("menu days", () => {
     assert.equal(await scalar<number>(db, "select count(*)::int as n from app_pages where key = 'menus'"), 1);
   });
 });
+
+describe("saved menus (0072)", () => {
+  test("an unnamed estimate is allowed, but a saved menu needs a name", async () => {
+    await db.query("insert into saved_menus (thaalis) values (250)");
+    await assert.rejects(
+      () => db.query("insert into saved_menus (saved, name) values (true, '  ')"),
+      /check constraint/i
+    );
+    await db.query("insert into saved_menus (saved, name, favourite) values (true, 'Friday biryani', true)");
+  });
+
+  test("a dish is on a saved menu once", async () => {
+    const menuId = await scalar<string>(db, "insert into saved_menus (thaalis) values (100) returning id");
+    const dishId = await scalar<string>(
+      db,
+      "insert into dishes (name, recipe_basis, batch_boxes, portion_ml) values ('Dal chawal', 'batch', 200, 1000) returning id"
+    );
+    await db.query("insert into saved_menu_dishes (saved_menu_id, dish_id) values ($1, $2)", [menuId, dishId]);
+    await assert.rejects(
+      () => db.query("insert into saved_menu_dishes (saved_menu_id, dish_id) values ($1, $2)", [menuId, dishId]),
+      /duplicate key|unique/i
+    );
+  });
+
+  test("deleting a saved menu takes its contents, not the dishes or items", async () => {
+    const menuId = await scalar<string>(db, "insert into saved_menus (thaalis) values (100) returning id");
+    const dishId = await scalar<string>(db, "select id from dishes where name = 'Dal chawal'");
+    await db.query("insert into saved_menu_dishes (saved_menu_id, dish_id) values ($1, $2)", [menuId, dishId]);
+    await db.query(
+      "insert into saved_menu_extras (saved_menu_id, kind, item_id, per_thaali) values ($1, 'roti', $2, 0.5)",
+      [menuId, ids.item]
+    );
+    await db.query(
+      "insert into saved_menu_lines (saved_menu_id, item_id, quantity, unit_id) values ($1, $2, 12, $3)",
+      [menuId, ids.item, ids.unit]
+    );
+    await db.query("delete from saved_menus where id = $1", [menuId]);
+    for (const table of ["saved_menu_dishes", "saved_menu_extras", "saved_menu_lines"]) {
+      assert.equal(await scalar<number>(db, `select count(*)::int as n from ${table} where saved_menu_id = $1`, [menuId]), 0);
+    }
+    assert.equal(await scalar<number>(db, "select count(*)::int as n from dishes where id = $1", [dishId]), 1);
+  });
+
+  test("deleting a day takes everything planned on it (#21)", async () => {
+    const dayId = await scalar<string>(
+      db,
+      "insert into menu_days (kitchen_id, service_date, planned_thaalis) values ($1, '2026-10-02', 300) returning id",
+      [ids.kitchen]
+    );
+    const dishId = await scalar<string>(db, "select id from dishes where name = 'Dal chawal'");
+    await db.query("insert into menu_day_dishes (menu_day_id, dish_id) values ($1, $2)", [dayId, dishId]);
+    await db.query(
+      "insert into menu_day_extras (menu_day_id, kind, item_id, per_thaali) values ($1, 'roti', $2, 1)",
+      [dayId, ids.item]
+    );
+    await db.query("delete from menu_days where id = $1", [dayId]);
+    for (const table of ["menu_day_dishes", "menu_day_extras"]) {
+      assert.equal(await scalar<number>(db, `select count(*)::int as n from ${table} where menu_day_id = $1`, [dayId]), 0);
+    }
+  });
+});

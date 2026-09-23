@@ -11,6 +11,7 @@ import { boxSizeOptions, costMenuDay, portionLabel, type MenuDish } from "@/lib/
 import { loadBoxSizes, loadDishes, loadItemPrices } from "../../data";
 import { addIngredient, removeIngredient, updateDish, updateIngredient } from "../actions";
 import { RecipeBasisFields } from "../recipe-basis-fields";
+import { newEstimate } from "../../saved/actions";
 
 export const metadata = { title: "Dish" };
 
@@ -70,13 +71,29 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
         <Link href="/menus/dishes" className="text-sm text-ink/50 hover:text-ink">
           ← Thaali Calendar · Dishes
         </Link>
-        <h1 className="page-title mt-1 text-ink">{dish.name}</h1>
-        <p className="mt-1 text-sm text-ink/60">
-          {dish.recipe_basis === "batch"
-            ? `Written per batch of ${dish.batch_boxes} × ${portionLabel(dish.portion_ml)}`
-            : `Written per ${portionLabel(dish.portion_ml)}`}
-          {!dish.active && <span className="ml-2 text-ink/45">· retired</span>}
-        </p>
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="page-title text-ink">{dish.name}</h1>
+            <p className="mt-1 text-sm text-ink/60">
+              {dish.recipe_basis === "batch"
+                ? `Written per batch of ${dish.batch_boxes} × ${portionLabel(dish.portion_ml)}`
+                : `Written per ${portionLabel(dish.portion_ml)}`}
+              {!dish.active && <span className="ml-2 text-ink/45">· retired</span>}
+            </p>
+          </div>
+          {/* What this dish would cost for any number of thaalis (#17). */}
+          {canManage && (
+            <form action={newEstimate}>
+              <input type="hidden" name="dish_id" value={dish.id} />
+              <SubmitButton
+                pendingLabel="Starting…"
+                className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30"
+              >
+                Estimate for a number of thaalis
+              </SubmitButton>
+            </form>
+          )}
+        </div>
       </div>
 
       {canManage && (

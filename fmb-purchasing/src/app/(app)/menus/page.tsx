@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { requirePermission } from "@/lib/permissions";
+import { can, getUserPermissions, requirePermission } from "@/lib/permissions";
+import { SubmitButton } from "@/components/submit-button";
+import { newEstimate } from "./saved/actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildMonthGrid, formatHijri } from "@/lib/hijri/hijri";
 import { costMenuDay } from "@/lib/menu-costing";
@@ -45,6 +47,7 @@ export default async function MenuCalendarPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "menus", "view");
+  const canManage = can(await getUserPermissions(user), "menus", "manage");
 
   const { month: monthParam, kitchens: kitchensParam } = await searchParams;
   const admin = createAdminClient();
@@ -138,12 +141,25 @@ export default async function MenuCalendarPage({
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="page-title text-ink">Thaali Calendar</h1>
-        <p className="page-description mt-1 max-w-2xl">
-          What is being cooked, for how many, and what that costs a thaali. A day&apos;s quantities come from its
-          dishes and its thaali count, so changing either works the rest out.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="page-title text-ink">Thaali Calendar</h1>
+          <p className="page-description mt-1 max-w-2xl">
+            What is being cooked, for how many, and what that costs a thaali. A day&apos;s quantities come from its
+            dishes and its thaali count, so changing either works the rest out.
+          </p>
+        </div>
+        {/* One menu, then as many days as it is wanted for (#20). */}
+        {canManage && (
+          <form action={newEstimate}>
+            <SubmitButton
+              pendingLabel="Starting…"
+              className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep"
+            >
+              + Add menu
+            </SubmitButton>
+          </form>
+        )}
       </div>
 
       <MenuTabs active="calendar" />

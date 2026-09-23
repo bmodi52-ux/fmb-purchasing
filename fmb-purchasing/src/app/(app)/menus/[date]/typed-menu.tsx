@@ -2,7 +2,6 @@ import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { SECTIONS, SECTION_LABEL, type SectionKey } from "@/lib/menu-sections";
 import type { MenuLine } from "@/lib/menu-costing";
-import { addMenuLine, removeMenuLine, setMenuLine, setMenuText } from "../actions";
 import { REMOVE_BUTTON } from "./styles";
 
 /**
@@ -18,9 +17,12 @@ import { REMOVE_BUTTON } from "./styles";
  * what, ordered and delivered, and the receipts allocated back all work on a
  * day planned this way.
  */
+type Action = (formData: FormData) => void | Promise<void>;
+
 export function TypedMenu({
-  date,
-  kitchenId,
+  hidden,
+  rowHidden,
+  actions,
   menuText,
   lines,
   items,
@@ -28,8 +30,11 @@ export function TypedMenu({
   sectionFor,
   canManage,
 }: {
-  date: string;
-  kitchenId: string;
+  /** Says which menu the text and new lines belong to: a day, or a saved menu (#17). */
+  hidden: Record<string, string>;
+  /** Carried by the forms on each line. */
+  rowHidden: Record<string, string>;
+  actions: { setText: Action; addLine: Action; setLine: Action; removeLine: Action };
   menuText: string | null;
   lines: MenuLine[];
   items: { id: string; name: string }[];
@@ -55,9 +60,8 @@ export function TypedMenu({
         </p>
 
         {canManage ? (
-          <form action={setMenuText} className="mt-3 flex flex-col gap-2">
-            <input type="hidden" name="kitchen_id" value={kitchenId} />
-            <input type="hidden" name="date" value={date} />
+          <form action={actions.setText} className="mt-3 flex flex-col gap-2">
+            <Hidden fields={hidden} />
             <FormResetBoundary>
               <textarea
                 name="menu_text"
@@ -104,9 +108,9 @@ export function TypedMenu({
                       >
                         <span className="min-w-48 flex-1 text-ink">{line.itemName}</span>
                         {canManage ? (
-                          <form action={setMenuLine} className="flex flex-wrap items-center gap-1">
+                          <form action={actions.setLine} className="flex flex-wrap items-center gap-1">
                             <input type="hidden" name="line_id" value={line.lineId} />
-                            <input type="hidden" name="date" value={date} />
+                            <Hidden fields={rowHidden} />
                             <FormResetBoundary>
                               <input
                                 name="quantity"
@@ -155,9 +159,9 @@ export function TypedMenu({
                           </span>
                         )}
                         {canManage && (
-                          <form action={removeMenuLine}>
+                          <form action={actions.removeLine}>
                             <input type="hidden" name="line_id" value={line.lineId} />
-                            <input type="hidden" name="date" value={date} />
+                            <Hidden fields={rowHidden} />
                             <SubmitButton className={REMOVE_BUTTON} pendingLabel="Removing…">Remove</SubmitButton>
                           </form>
                         )}
@@ -170,9 +174,8 @@ export function TypedMenu({
         )}
 
         {canManage && (
-          <form action={addMenuLine} className="mt-4 flex flex-wrap items-end gap-2 border-t border-ink/10 pt-4">
-            <input type="hidden" name="kitchen_id" value={kitchenId} />
-            <input type="hidden" name="date" value={date} />
+          <form action={actions.addLine} className="mt-4 flex flex-wrap items-end gap-2 border-t border-ink/10 pt-4">
+            <Hidden fields={hidden} />
             <FormResetBoundary>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-ink/70">Item</span>
@@ -219,6 +222,16 @@ export function TypedMenu({
           </form>
         )}
       </section>
+    </>
+  );
+}
+
+function Hidden({ fields }: { fields: Record<string, string> }) {
+  return (
+    <>
+      {Object.entries(fields).map(([name, value]) => (
+        <input key={name} type="hidden" name={name} value={value} />
+      ))}
     </>
   );
 }

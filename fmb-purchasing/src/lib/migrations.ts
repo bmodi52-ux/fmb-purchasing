@@ -44,6 +44,7 @@ export const LEDGERED_MIGRATIONS = [
   "0069_menu_tables_rls.sql",
   "0070_rejected_item_offers.sql",
   "0071_thaali_calendar_label.sql",
+  "0072_saved_menus.sql",
 ] as const;
 
 export type MigrationStatus =
