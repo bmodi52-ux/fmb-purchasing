@@ -20,6 +20,8 @@ import {
 import { loadDishes, loadExtras, loadItemPrices, loadKitchens, loadMenuLines, loadSections, withDayCounts } from "../data";
 import { getSetting } from "@/lib/app-settings";
 import { TypedMenu } from "./typed-menu";
+import { DeleteMenu } from "./delete-menu";
+import { REMOVE_BUTTON } from "./styles";
 import { releaseDay, unreleaseDay } from "../release-actions";
 import { progressOf } from "@/lib/procurement";
 import {
@@ -149,6 +151,15 @@ export default async function MenuDayPage({
       : Promise.resolve({ data: [] }),
     admin.from("units").select("id, code, label").order("sort_order"),
   ]);
+
+  // Buying that has happened can't be deleted along with the day (#21).
+  const boughtCount = (requirements ?? []).filter((r) => r.status === "ordered" || r.status === "delivered").length;
+  const deleteBlockedBecause =
+    boughtCount > 0
+      ? `${boughtCount} ${boughtCount === 1 ? "item has" : "items have"} already been ordered or delivered. Take the dishes off one by one instead.`
+      : (allocations ?? []).length > 0
+        ? "receipts have been allocated to it. Take the dishes off one by one instead."
+        : null;
 
   const onDayIds = new Set(onDay.map((d) => d.dish_id as string));
   const hijri = formatHijri(gregorianToHijri(new Date(`${date}T00:00:00`)));
@@ -331,7 +342,7 @@ export default async function MenuDayPage({
                         <form action={removeDishFromDay}>
                           <input type="hidden" name="menu_day_dish_id" value={row.id as string} />
                           <input type="hidden" name="date" value={date} />
-                          <SubmitButton className="text-xs text-maroon/70 hover:underline">remove</SubmitButton>
+                          <SubmitButton className={REMOVE_BUTTON} pendingLabel="Removing…">Remove</SubmitButton>
                         </form>
                       )}
                     </div>
@@ -471,7 +482,7 @@ export default async function MenuDayPage({
                         <form action={removeExtraFromDay}>
                           <input type="hidden" name="extra_id" value={extra.extraId} />
                           <input type="hidden" name="date" value={date} />
-                          <SubmitButton className="text-xs text-maroon/70 hover:underline">remove</SubmitButton>
+                          <SubmitButton className={REMOVE_BUTTON} pendingLabel="Removing…">Remove</SubmitButton>
                         </form>
                       )}
                     </div>
@@ -657,6 +668,21 @@ export default async function MenuDayPage({
           </>
         )}
       </section>
+
+      {canManage && day && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
+          <p className="text-ink/60">Start this day again, or take it off the calendar.</p>
+          <DeleteMenu
+            dayId={day.id as string}
+            date={date}
+            dateLabel={formatPlainDate(date)}
+            kitchenId={kitchen.id}
+            kitchenName={kitchen.name}
+            released={day.status === "released"}
+            blockedBecause={deleteBlockedBecause}
+          />
+        </section>
+      )}
     </div>
   );
 }
