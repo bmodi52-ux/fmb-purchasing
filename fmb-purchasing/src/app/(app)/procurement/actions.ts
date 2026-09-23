@@ -5,6 +5,9 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { can, getUserPermissions, requirePermission } from "@/lib/permissions";
+import { notify } from "@/lib/notifications-inapp";
+import { dayLabel, sectionList } from "@/lib/thaali-buying";
+import type { SectionKey } from "@/lib/menu-sections";
 
 /**
  * Buying what a released menu needs (#70).
@@ -109,13 +112,43 @@ export async function reassign(formData: FormData) {
   const admin = createAdminClient();
   const update = { owner_id: ownerId || null };
 
+  // What is actually changing hands, so the new holder is told about that and
+  // not about lines that were already theirs (#15).
+  const moving = admin.from("menu_requirements").select("id, section, owner_id, menu_days ( service_date, kitchens ( name ) )");
+  const { data: before } = requirementId
+    ? await moving.eq("id", requirementId)
+    : dayId && section
+      ? await moving.eq("menu_day_id", dayId).eq("section", section)
+      : { data: [] };
+
   if (requirementId) {
     await admin.from("menu_requirements").update(update).eq("id", requirementId);
   } else if (dayId && section) {
     await admin.from("menu_requirements").update(update).eq("menu_day_id", dayId).eq("section", section);
   }
 
+  const handed = (before ?? []).filter((r) => r.owner_id !== ownerId);
+  if (ownerId && ownerId !== user.id && handed.length > 0) {
+    const day = one(handed[0].menu_days) as { service_date: string; kitchens: unknown } | null;
+    const kitchen = one(day?.kitchens) as { name: string } | null;
+    const date = day?.service_date ?? "";
+    await notify(admin, [
+      {
+        userId: ownerId,
+        kind: "thaali_buying",
+        title: `Handed to you: ${handed.length} ${handed.length === 1 ? "thing" : "things"} to buy for ${dayLabel(date)}`,
+        body: `${kitchen?.name ?? "The kitchen"} · ${sectionList([...new Set(handed.map((r) => r.section as SectionKey))])}`,
+        link: `/procurement?from=${date}&to=${date}`,
+      },
+    ]);
+  }
+
   refresh();
+}
+
+function one<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
 }
 
 /** Who buys each section by default, which is what a release assigns from. */

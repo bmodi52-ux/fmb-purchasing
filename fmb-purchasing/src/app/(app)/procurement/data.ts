@@ -35,6 +35,11 @@ export type ProcurementLine = {
   ownerId: string | null;
   ownerName: string | null;
   vendorId: string | null;
+  vendorName: string | null;
+  /** A number to ring, from the vendor's contacts, for ordering from a phone (#15). */
+  vendorPhone: string | null;
+  /** Days ahead the vendor needs the order; null means the day before. */
+  leadDays: number | null;
   note: string | null;
   /** What to actually order, rounded to a pack the vendor sells. */
   pack: PackSuggestion | null;
@@ -75,7 +80,8 @@ export async function loadProcurement(
   const itemIds = [...new Set(rows.map((r) => r.item_id))];
   const ownerIds = [...new Set(rows.map((r) => r.owner_id).filter(Boolean) as string[])];
 
-  const [{ data: allocations }, { data: packs }, { data: owners }] = await Promise.all([
+  const vendorIds = [...new Set(rows.map((r) => r.vendor_id).filter(Boolean) as string[])];
+  const [{ data: allocations }, { data: packs }, { data: owners }, { data: vendors }, { data: contacts }] = await Promise.all([
     admin.from("expense_line_allocations").select("menu_requirement_id, quantity, amount").in("menu_requirement_id", ids),
     admin
       .from("item_pack_sizes")
@@ -84,7 +90,19 @@ export async function loadProcurement(
     ownerIds.length
       ? admin.from("profiles").select("id, full_name, email").in("id", ownerIds)
       : Promise.resolve({ data: [] }),
+    vendorIds.length
+      ? admin.from("vendors").select("id, name, order_lead_days").in("id", vendorIds)
+      : Promise.resolve({ data: [] }),
+    vendorIds.length
+      ? admin.from("vendor_contacts").select("vendor_id, phone, created_at").in("vendor_id", vendorIds).not("phone", "is", null).order("created_at")
+      : Promise.resolve({ data: [] }),
   ]);
+  const vendorById = new Map((vendors ?? []).map((v) => [v.id as string, v]));
+  const phoneOf = new Map<string, string>();
+  for (const c of contacts ?? []) {
+    const phone = String(c.phone ?? "").trim();
+    if (phone && !phoneOf.has(c.vendor_id as string)) phoneOf.set(c.vendor_id as string, phone);
+  }
 
   const allocationsBy = new Map<string, { quantity: number; amount: number }[]>();
   for (const a of allocations ?? []) {
@@ -136,6 +154,9 @@ export async function loadProcurement(
         ownerId: row.owner_id,
         ownerName: row.owner_id ? (ownerName.get(row.owner_id) ?? null) : null,
         vendorId: row.vendor_id,
+        vendorName: row.vendor_id ? ((vendorById.get(row.vendor_id)?.name as string | undefined) ?? null) : null,
+        vendorPhone: row.vendor_id ? (phoneOf.get(row.vendor_id) ?? null) : null,
+        leadDays: row.vendor_id ? ((vendorById.get(row.vendor_id)?.order_lead_days as number | null | undefined) ?? null) : null,
         note: row.note,
         pack: suggestPacks(progress.outstanding > 0 ? progress.outstanding : quantity, packsBy.get(row.item_id) ?? []),
         bought: progress.bought,

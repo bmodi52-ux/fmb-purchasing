@@ -64,6 +64,7 @@ type Vendor = {
   default_category_id: string | null;
   default_payee: "me" | "vendor" | null;
   gst_treatment: "gst_free" | "taxable" | null;
+  order_lead_days: number | null;
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -104,7 +105,7 @@ export default async function VendorDetailPage({
     admin
       .from("vendors")
       .select(
-        "id, name, abn, vendor_number, status, billing_address, gst_registered, gst_registered_from, abn_active, abr_checked_at, default_category_id, default_payee, gst_treatment"
+        "id, name, abn, vendor_number, status, billing_address, gst_registered, gst_registered_from, abn_active, abr_checked_at, default_category_id, default_payee, gst_treatment, order_lead_days"
       )
       .eq("id", id)
       .maybeSingle<Vendor>(),
@@ -334,6 +335,18 @@ async function DetailsTab({
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Order ahead for the thaali (days)">
+            <input
+              name="order_lead_days"
+              type="number"
+              min="0"
+              max="30"
+              defaultValue={vendor.order_lead_days ?? ""}
+              placeholder="1 — the day before"
+              disabled={!canEdit}
+              className="input"
+            />
           </Field>
           {canEdit && (
             <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30 sm:col-span-3">

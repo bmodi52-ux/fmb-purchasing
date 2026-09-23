@@ -35,7 +35,8 @@ export type NotificationKind =
   | "announcement"
   | "alert"
   | "stand_in"
-  | "receipt_received";
+  | "receipt_received"
+  | "thaali_buying";
 
 /** Who a kind can reach at all, so nobody is offered settings for things they never receive. */
 export type Audience = "everyone" | "approvers" | "payers" | "admins" | "reviewers";
@@ -90,6 +91,14 @@ export const NOTIFICATION_KINDS: KindDefinition[] = [
     kind: "receipt_received",
     label: "A receipt you emailed in",
     description: "A receipt you forwarded to the app's address is ready to submit.",
+    audience: ["everyone"],
+    defaults: { in_app: true, push: true, email: false },
+  },
+  {
+    kind: "thaali_buying",
+    label: "Thaali buying",
+    description:
+      "A released menu has things for you to buy, a list was handed to you, or something you hold should be ordered by now.",
     audience: ["everyone"],
     defaults: { in_app: true, push: true, email: false },
   },

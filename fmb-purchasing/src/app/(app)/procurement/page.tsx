@@ -12,6 +12,7 @@ import { loadProcurement, type ProcurementLine } from "./data";
 import { WeekPicker } from "./week-picker";
 import { reassign, setRequirementNote, setRequirementStatus, setRequirementVendor } from "./actions";
 import { ProcurementTabs } from "./tabs";
+import { dayLabel, orderByDate, urgency } from "@/lib/thaali-buying";
 
 export const metadata = { title: "Procurement" };
 
@@ -192,6 +193,26 @@ export default async function ProcurementPage({
                             </span>
                           </div>
 
+                          {/* When it has to be ordered by, and who to ring (#15). */}
+                          {(line.status === "to_order" || line.vendorName) && (
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                              {line.status === "to_order" && <OrderBy line={line} today={today} />}
+                              {line.vendorName && (
+                                <span className="text-ink/60">
+                                  {line.vendorName}
+                                  {line.vendorPhone && (
+                                    <a
+                                      href={`tel:${line.vendorPhone.replace(/[^\d+]/g, "")}`}
+                                      className="ml-2 inline-block rounded-full border border-ink/15 px-2.5 py-1 text-ink hover:border-ink/30"
+                                    >
+                                      Call {line.vendorPhone}
+                                    </a>
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink/55">
                             <span className={line.status === "delivered" ? "text-palm" : line.status === "ordered" ? "text-gold-deep" : ""}>
                               {STATUS_LABEL[line.status]}
@@ -214,7 +235,15 @@ export default async function ProcurementPage({
                                 <form key={s} action={setRequirementStatus}>
                                   <input type="hidden" name="requirement_ids" value={line.id} />
                                   <input type="hidden" name="status" value={s} />
-                                  <SubmitButton className="rounded border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
+                                  {/* The next step is the big one: on a phone in a shop it is
+                                      the only button that matters (#15). */}
+                                  <SubmitButton
+                                    className={
+                                      s === NEXT_STEP[line.status]
+                                        ? "rounded-md bg-gold px-4 py-2.5 text-sm font-medium text-ink hover:bg-gold-deep sm:px-3 sm:py-1 sm:text-xs"
+                                        : "rounded border border-ink/15 px-3 py-2 text-sm hover:border-ink/30 sm:px-2 sm:py-1 sm:text-xs"
+                                    }
+                                  >
                                     {s === "to_order" ? "Not ordered" : s === "ordered" ? "Mark ordered" : "Mark delivered"}
                                   </SubmitButton>
                                 </form>
@@ -295,6 +324,22 @@ export default async function ProcurementPage({
       )}
     </div>
   );
+}
+
+const NEXT_STEP: Record<ProcurementLine["status"], ProcurementLine["status"] | null> = {
+  to_order: "ordered",
+  ordered: "delivered",
+  delivered: null,
+  cancelled: null,
+};
+
+/** "Order by Wed 30 Sep", said more loudly the closer it gets (#15). */
+function OrderBy({ line, today }: { line: ProcurementLine; today: string }) {
+  const by = orderByDate(line.serviceDate, line.leadDays);
+  const how = urgency(line, today);
+  if (how === "late") return <span className="font-medium text-alert">Should have been ordered by {dayLabel(by)}</span>;
+  if (how === "today") return <span className="font-medium text-gold-deep">Order today</span>;
+  return <span className={how === "soon" ? "text-ink/80" : "text-ink/55"}>Order by {dayLabel(by)}</span>;
 }
 
 export type { SectionKey };

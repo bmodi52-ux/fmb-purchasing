@@ -5,6 +5,7 @@ import { reportError } from "@/lib/errors";
 import { ORG_TIME_ZONE } from "@/lib/format";
 import { continueExtractionCheck } from "@/lib/extraction-check";
 import { remindAboutRecords } from "@/lib/records";
+import { runThaaliNudges } from "@/lib/thaali-nudges";
 
 /**
  * The once-a-day job: reminders and escalation (#27).
@@ -66,7 +67,14 @@ export async function GET(request: Request): Promise<Response> {
         await reportError({ source: "records-reminder", error: err });
       }
     }
-    const summary = { ...reminders, extractionCheck, recordsReminded };
+    // Thaali orders that should be in by now (#15), on its own like the rest.
+    let thaaliNudged = 0;
+    try {
+      thaaliNudged = (await runThaaliNudges(admin, today)).nudged;
+    } catch (err) {
+      await reportError({ source: "thaali-nudges", error: err });
+    }
+    const summary = { ...reminders, extractionCheck, recordsReminded, thaaliNudged };
     await admin.from("scheduled_runs").update({ summary }).eq("job", JOB);
     return Response.json({ ran: today, summary });
   } catch (err) {

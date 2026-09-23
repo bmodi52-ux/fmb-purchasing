@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { isSection } from "@/lib/menu-sections";
 import { menuDayBlockers } from "./data";
+import { dayOfRow, logDayChange } from "./day-history";
 
 /**
  * Planning a day: what is being cooked, and for how many (#70).
@@ -45,6 +46,11 @@ async function menuDayId(
   return (created?.id as string) ?? null;
 }
 
+async function nameOf(admin: ReturnType<typeof createAdminClient>, table: "dishes" | "items", id: string) {
+  const { data } = await admin.from(table).select("name").eq("id", id).maybeSingle();
+  return (data?.name as string | undefined) ?? "something";
+}
+
 function refresh(date: string) {
   revalidatePath("/menus");
   revalidatePath(`/menus/${date}`);
@@ -75,16 +81,27 @@ export async function addDishToDay(formData: FormData) {
     .maybeSingle();
 
   await admin.from("menu_days").update({ updated_by: user.id, updated_at: new Date().toISOString() }).eq("id", dayId);
+  await logDayChange(admin, { dayId, userId: user.id, action: "Added a dish", detail: await nameOf(admin, "dishes", dishId) });
   refresh(date);
 }
 
 export async function removeDishFromDay(formData: FormData) {
-  await requirePlanner();
+  const user = await requirePlanner();
   const id = String(formData.get("menu_day_dish_id") ?? "");
   const date = String(formData.get("date") ?? "");
   if (!id) return;
 
-  await createAdminClient().from("menu_day_dishes").delete().eq("id", id);
+  const admin = createAdminClient();
+  const { data: row } = await admin.from("menu_day_dishes").select("menu_day_id, dish_id").eq("id", id).maybeSingle();
+  await admin.from("menu_day_dishes").delete().eq("id", id);
+  if (row) {
+    await logDayChange(admin, {
+      dayId: row.menu_day_id as string,
+      userId: user.id,
+      action: "Removed a dish",
+      detail: await nameOf(admin, "dishes", row.dish_id as string),
+    });
+  }
   refresh(date);
 }
 
@@ -115,6 +132,12 @@ export async function setDayCounts(formData: FormData) {
     })
     .eq("id", dayId);
 
+  await logDayChange(admin, {
+    dayId,
+    userId: user.id,
+    action: "Changed the count",
+    detail: `planned ${Number.isFinite(planned) ? Math.max(0, Math.round(planned)) : 0}, confirmed ${confirmedRaw === "" ? "not yet" : Math.max(0, Math.round(Number(confirmedRaw)))}${notes ? ` · note: ${notes}` : ""}`,
+  });
   refresh(date);
 }
 
@@ -154,6 +177,13 @@ export async function copyMenuFromDay(formData: FormData) {
     await admin.from("menu_days").update({ planned_thaalis: source.planned_thaalis }).eq("id", dayId);
   }
 
+  const { data: from } = await admin.from("menu_days").select("service_date").eq("id", sourceId).maybeSingle();
+  await logDayChange(admin, {
+    dayId,
+    userId: user.id,
+    action: "Copied a past menu",
+    detail: from ? `from ${from.service_date as string}` : null,
+  });
   refresh(date);
 }
 
@@ -177,7 +207,7 @@ export async function renameKitchen(formData: FormData) {
  * conservative reading and the one that stops a list going short.
  */
 export async function setDishCounts(formData: FormData) {
-  await requirePlanner();
+  const user = await requirePlanner();
   const id = String(formData.get("menu_day_dish_id") ?? "");
   const date = String(formData.get("date") ?? "");
   if (!id) return;
@@ -194,6 +224,16 @@ export async function setDishCounts(formData: FormData) {
     })
     .eq("id", id);
 
+  const admin = createAdminClient();
+  const { data: row } = await admin.from("menu_day_dishes").select("menu_day_id, dish_id").eq("id", id).maybeSingle();
+  if (row) {
+    await logDayChange(admin, {
+      dayId: row.menu_day_id as string,
+      userId: user.id,
+      action: "Changed a dish's boxes",
+      detail: `${await nameOf(admin, "dishes", row.dish_id as string)}: ${offered} a thaali, ${expectedRaw === "" ? "everyone takes it" : `${expected} to fill`}`,
+    });
+  }
   refresh(date);
 }
 
@@ -231,11 +271,17 @@ export async function addExtraToDay(formData: FormData) {
       { onConflict: "menu_day_id,kind,item_id" }
     );
 
+  await logDayChange(admin, {
+    dayId,
+    userId: user.id,
+    action: `Added ${kind === "other" ? "a part" : kind}`,
+    detail: `${await nameOf(admin, "items", itemId)}, ${perThaali} a thaali`,
+  });
   refresh(date);
 }
 
 export async function setExtraCounts(formData: FormData) {
-  await requirePlanner();
+  const user = await requirePlanner();
   const id = String(formData.get("extra_id") ?? "");
   const date = String(formData.get("date") ?? "");
   if (!id) return;
@@ -252,16 +298,36 @@ export async function setExtraCounts(formData: FormData) {
     })
     .eq("id", id);
 
+  const admin = createAdminClient();
+  const { data: row } = await admin.from("menu_day_extras").select("menu_day_id, item_id").eq("id", id).maybeSingle();
+  if (row) {
+    await logDayChange(admin, {
+      dayId: row.menu_day_id as string,
+      userId: user.id,
+      action: "Changed roti or fruit",
+      detail: `${await nameOf(admin, "items", row.item_id as string)}: ${perThaali} a thaali, ${expectedRaw === "" ? "everyone takes it" : `${expected} taking it`}`,
+    });
+  }
   refresh(date);
 }
 
 export async function removeExtraFromDay(formData: FormData) {
-  await requirePlanner();
+  const user = await requirePlanner();
   const id = String(formData.get("extra_id") ?? "");
   const date = String(formData.get("date") ?? "");
   if (!id) return;
 
-  await createAdminClient().from("menu_day_extras").delete().eq("id", id);
+  const admin = createAdminClient();
+  const { data: row } = await admin.from("menu_day_extras").select("menu_day_id, item_id").eq("id", id).maybeSingle();
+  await admin.from("menu_day_extras").delete().eq("id", id);
+  if (row) {
+    await logDayChange(admin, {
+      dayId: row.menu_day_id as string,
+      userId: user.id,
+      action: "Removed roti or fruit",
+      detail: await nameOf(admin, "items", row.item_id as string),
+    });
+  }
   refresh(date);
 }
 
@@ -285,6 +351,7 @@ export async function setMenuText(formData: FormData) {
     .update({ menu_text: text || null, updated_by: user.id, updated_at: new Date().toISOString() })
     .eq("id", dayId);
 
+  await logDayChange(admin, { dayId, userId: user.id, action: "Changed the menu text", detail: text || "cleared" });
   refresh(date);
 }
 
@@ -322,11 +389,18 @@ export async function addMenuLine(formData: FormData) {
     { onConflict: "menu_day_id,item_id" }
   );
 
+  const { data: unit } = await admin.from("units").select("code").eq("id", unitId).maybeSingle();
+  await logDayChange(admin, {
+    dayId,
+    userId: user.id,
+    action: "Added to what to buy",
+    detail: `${await nameOf(admin, "items", itemId)} ${quantity} ${(unit?.code as string | undefined) ?? ""}`.trim(),
+  });
   refresh(date);
 }
 
 export async function setMenuLine(formData: FormData) {
-  await requirePlanner();
+  const user = await requirePlanner();
   const id = String(formData.get("line_id") ?? "");
   const date = String(formData.get("date") ?? "");
   const quantity = Number(formData.get("quantity") ?? 0);
@@ -343,16 +417,42 @@ export async function setMenuLine(formData: FormData) {
     })
     .eq("id", id);
 
+  const admin = createAdminClient();
+  const { data: row } = await admin
+    .from("menu_day_lines")
+    .select("menu_day_id, item_id, units ( code )")
+    .eq("id", id)
+    .maybeSingle();
+  if (row) {
+    const unit = (Array.isArray(row.units) ? row.units[0] : row.units) as { code: string } | null;
+    await logDayChange(admin, {
+      dayId: row.menu_day_id as string,
+      userId: user.id,
+      action: "Changed what to buy",
+      detail: `${await nameOf(admin, "items", row.item_id as string)} ${quantity} ${unit?.code ?? ""}`.trim(),
+    });
+  }
   refresh(date);
 }
 
 export async function removeMenuLine(formData: FormData) {
-  await requirePlanner();
+  const user = await requirePlanner();
   const id = String(formData.get("line_id") ?? "");
   const date = String(formData.get("date") ?? "");
   if (!id) return;
 
-  await createAdminClient().from("menu_day_lines").delete().eq("id", id);
+  const admin = createAdminClient();
+  const dayId = await dayOfRow(admin, "menu_day_lines", id);
+  const { data: row } = await admin.from("menu_day_lines").select("item_id").eq("id", id).maybeSingle();
+  await admin.from("menu_day_lines").delete().eq("id", id);
+  if (row) {
+    await logDayChange(admin, {
+      dayId,
+      userId: user.id,
+      action: "Removed from what to buy",
+      detail: await nameOf(admin, "items", row.item_id as string),
+    });
+  }
   refresh(date);
 }
 
@@ -363,7 +463,7 @@ export async function removeMenuLine(formData: FormData) {
  * touched.
  */
 export async function deleteMenuDay(formData: FormData) {
-  await requirePlanner();
+  const user = await requirePlanner();
   const dayId = String(formData.get("menu_day_id") ?? "");
   const date = String(formData.get("date") ?? "");
   const kitchenId = String(formData.get("kitchen_id") ?? "");
@@ -373,7 +473,8 @@ export async function deleteMenuDay(formData: FormData) {
   const { bought, allocated } = await menuDayBlockers(admin, dayId);
   if (bought > 0 || allocated > 0) return;
 
-  // Everything hanging off the day cascades with it.
+  await logDayChange(admin, { dayId, userId: user.id, action: "Deleted the menu" });
+  // Everything hanging off the day cascades with it; its history stays.
   await admin.from("menu_days").delete().eq("id", dayId);
 
   refresh(date);
