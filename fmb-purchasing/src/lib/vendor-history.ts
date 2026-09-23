@@ -77,6 +77,7 @@ export const VENDOR_FIELD_LABELS: Record<string, string> = {
   default_category_id: "Usual category",
   default_payee: "Usually paid to",
   gst_treatment: "GST",
+  order_lead_days: "Order ahead (days)",
   gst_registered: "Registered for GST",
   abn_active: "ABN active",
 };

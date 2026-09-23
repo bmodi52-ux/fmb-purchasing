@@ -7,6 +7,9 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { costMenuDay } from "@/lib/menu-costing";
 import { loadDishes, loadExtras, loadItemPrices, loadMenuLines, loadSections, withDayCounts } from "./data";
+import { notify } from "@/lib/notifications-inapp";
+import { dayLabel, newlyAssigned, sectionList } from "@/lib/thaali-buying";
+import type { SectionKey } from "@/lib/menu-sections";
 
 /**
  * Releasing a day (#70): the menu stops being a plan and becomes somebody's
@@ -35,7 +38,7 @@ export async function releaseDay(formData: FormData) {
   const { data: day } = await admin
     .from("menu_days")
     .select(
-      "id, kitchen_id, planned_thaalis, confirmed_thaalis, menu_day_dishes ( dish_id, sort_order, boxes_offered, expected_boxes )"
+      "id, kitchen_id, service_date, planned_thaalis, confirmed_thaalis, kitchens ( name ), menu_day_dishes ( dish_id, sort_order, boxes_offered, expected_boxes )"
     )
     .eq("id", dayId)
     .maybeSingle();
@@ -92,7 +95,7 @@ export async function releaseDay(formData: FormData) {
 
   const { data: existing } = await admin
     .from("menu_requirements")
-    .select("id, item_id, status, owner_id, vendor_id")
+    .select("id, item_id, section, status, owner_id, vendor_id")
     .eq("menu_day_id", dayId);
   const before = new Map((existing ?? []).map((r) => [r.item_id as string, r]));
 
@@ -147,6 +150,31 @@ export async function releaseDay(formData: FormData) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", dayId);
+
+  // Whoever has just been given something to buy hears about it (#15), except
+  // the person releasing, who knows.
+  const told = newlyAssigned(
+    (existing ?? []).map((r) => ({
+      itemId: r.item_id as string,
+      ownerId: (r.owner_id as string | null) ?? null,
+      section: r.section as SectionKey,
+    })),
+    rows.map((r) => ({ itemId: r.item_id, ownerId: r.owner_id, section: r.section as SectionKey }))
+  );
+  const kitchen = (Array.isArray(day.kitchens) ? day.kitchens[0] : day.kitchens) as { name: string } | null;
+  const serviceDate = day.service_date as string;
+  await notify(
+    admin,
+    [...told.entries()]
+      .filter(([ownerId]) => ownerId !== user.id)
+      .map(([ownerId, { count, sections }]) => ({
+        userId: ownerId,
+        kind: "thaali_buying" as const,
+        title: `Thaali on ${dayLabel(serviceDate)}: ${count} ${count === 1 ? "thing" : "things"} for you to buy`,
+        body: `${kitchen?.name ?? "The kitchen"} · ${sectionList(sections)}`,
+        link: `/procurement?from=${serviceDate}&to=${serviceDate}`,
+      }))
+  );
 
   revalidatePath(`/menus/${date}`);
   revalidatePath("/menus");

@@ -78,6 +78,14 @@ export async function updateVendorDetails(formData: FormData) {
 }
 
 /** What a receipt from this vendor usually is (#49). */
+/** Days ahead a thaali order has to go in (#15); blank means the day before. */
+function leadDays(raw: FormDataEntryValue | null): number | null {
+  const text = String(raw ?? "").trim();
+  if (text === "") return null;
+  const n = Math.round(Number(text));
+  return Number.isFinite(n) ? Math.min(30, Math.max(0, n)) : null;
+}
+
 export async function updateVendorDefaults(formData: FormData) {
   const user = await requireVendorEdit();
   const vendorId = String(formData.get("vendor_id") ?? "");
@@ -89,10 +97,11 @@ export async function updateVendorDefaults(formData: FormData) {
     default_category_id: String(formData.get("default_category_id") ?? "") || null,
     default_payee: payee === "me" || payee === "vendor" ? payee : null,
     gst_treatment: gst === "gst_free" || gst === "taxable" ? gst : null,
+    order_lead_days: leadDays(formData.get("order_lead_days")),
   };
   const { data: before } = await admin
     .from("vendors")
-    .select("default_category_id, default_payee, gst_treatment")
+    .select("default_category_id, default_payee, gst_treatment, order_lead_days")
     .eq("id", vendorId)
     .maybeSingle();
   const { error } = await admin.from("vendors").update(next).eq("id", vendorId);
@@ -102,7 +111,7 @@ export async function updateVendorDefaults(formData: FormData) {
       vendorId,
       userId: user.id,
       kind: "usual_settings_changed",
-      changes: diffFields(before, next, ["default_category_id", "default_payee", "gst_treatment"]),
+      changes: diffFields(before, next, ["default_category_id", "default_payee", "gst_treatment", "order_lead_days"]),
     });
   }
   revalidatePath(`/vendors/${vendorId}`);
