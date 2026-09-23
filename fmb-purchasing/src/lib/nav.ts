@@ -22,7 +22,7 @@ export const NAV_ITEMS: {
   { key: "budgets", label: "Budgets", href: "/budgets", action: "view" },
   // Thaali costing (#70). One entry: the dishes are a tab of it, not a
   // separate place, because a dish only exists to go on a menu.
-  { key: "menus", label: "Thaali menu", href: "/menus", action: "view" },
+  { key: "menus", label: "Thaali Calendar", href: "/menus", action: "view" },
   { key: "procurement", label: "Procurement", href: "/procurement", action: "view" },
   { key: "admin_users", label: "Users", href: "/admin/users", action: "manage_users" },
   { key: "admin_teams", label: "Teams & permissions", href: "/admin/teams", action: "manage_teams" },

@@ -109,7 +109,7 @@ export default async function AppSettingsPage() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="section-title text-ink">Thaali menu</h2>
+        <h2 className="section-title text-ink">Thaali Calendar</h2>
         <form
           action={setMenuMode}
           className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"

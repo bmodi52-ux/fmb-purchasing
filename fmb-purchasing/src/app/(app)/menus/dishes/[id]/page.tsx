@@ -68,7 +68,7 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
     <div className="flex flex-col gap-6">
       <div>
         <Link href="/menus/dishes" className="text-sm text-ink/50 hover:text-ink">
-          ← Thaali menu · Dishes
+          ← Thaali Calendar · Dishes
         </Link>
         <h1 className="page-title mt-1 text-ink">{dish.name}</h1>
         <p className="mt-1 text-sm text-ink/60">

@@ -157,7 +157,7 @@ export default async function MenuDayPage({
     <div className="flex flex-col gap-6">
       <div>
         <Link href={`/menus?kitchen=${kitchen.id}`} className="text-sm text-ink/50 hover:text-ink">
-          ← Thaali menu · Calendar
+          ← Thaali Calendar
         </Link>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="page-title text-ink">{formatPlainDate(date)}</h1>

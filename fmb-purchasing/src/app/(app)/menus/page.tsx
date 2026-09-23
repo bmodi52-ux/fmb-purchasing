@@ -19,7 +19,7 @@ type DayEntry = {
   cost: MenuDayCost | null;
 };
 
-export const metadata = { title: "Thaali menu" };
+export const metadata = { title: "Thaali Calendar" };
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 const MONTHS = "January February March April May June July August September October November December".split(" ");
@@ -139,7 +139,7 @@ export default async function MenuCalendarPage({
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h1 className="page-title text-ink">Thaali menu</h1>
+        <h1 className="page-title text-ink">Thaali Calendar</h1>
         <p className="page-description mt-1 max-w-2xl">
           What is being cooked, for how many, and what that costs a thaali. A day&apos;s quantities come from its
           dishes and its thaali count, so changing either works the rest out.
