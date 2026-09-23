@@ -412,8 +412,8 @@ export function ColumnsDataTable<T extends { id: string }>({
               onClick={() => runBulkAction(action)}
               className={
                 action.variant === "danger"
-                  ? "rounded-md border border-maroon/40 px-3 py-1 text-xs font-medium text-maroon hover:bg-maroon/5 disabled:opacity-50"
-                  : "rounded-md bg-gold px-3 py-1 text-xs font-medium text-ink hover:bg-gold-deep disabled:opacity-50"
+                  ? "btn btn-danger btn-xs"
+                  : "btn btn-primary btn-xs"
               }
             >
               {busyAction === action.label ? "…" : action.label}
@@ -442,7 +442,7 @@ export function ColumnsDataTable<T extends { id: string }>({
           {filteredRows.map((row) => {
             const [titleColumn, ...detailColumns] = visibleColumns;
             return (
-              <li key={row.id} className="rounded-lg border border-ink/10 bg-white/60 p-3 text-sm">
+              <li key={row.id} className="card p-3 text-sm">
                 <div className="flex items-start gap-2">
                   <input
                     type="checkbox"

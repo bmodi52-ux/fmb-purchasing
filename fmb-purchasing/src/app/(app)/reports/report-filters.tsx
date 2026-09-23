@@ -49,7 +49,7 @@ export function buildHref(query: ReportQuery, patch: Partial<ReportQuery>): stri
 
 export function SectionTabs({ query, active }: { query: ReportQuery; active: ReportSection }) {
   return (
-    <nav aria-label="Report sections" className="flex flex-wrap gap-1.5">
+    <nav aria-label="Report sections" className="tabs border-b-0">
       {SECTIONS.map((s) => {
         const isActive = s.key === active;
         return (
@@ -57,11 +57,7 @@ export function SectionTabs({ query, active }: { query: ReportQuery; active: Rep
             key={s.key}
             href={buildHref(query, { section: s.key })}
             aria-current={isActive ? "page" : undefined}
-            className={`rounded-full px-3.5 py-1.5 text-sm transition-colors ${
-              isActive
-                ? "bg-gold font-medium text-ink"
-                : "border border-ink/15 text-ink/65 hover:border-ink/30 hover:text-ink"
-            }`}
+            className="tab"
           >
             {s.label}
           </Link>
@@ -89,7 +85,7 @@ export function ReportFilters({
   const isFiltered = query.vendors.length > 0 || query.categories.length > 0 || query.items.length > 0;
 
   return (
-    <div className="flex flex-wrap items-end gap-x-3 gap-y-3 rounded-xl border border-ink/10 bg-white/60 p-3">
+    <div className="flex flex-wrap items-end gap-x-3 gap-y-3 card p-3">
       <FilterControls
         query={query}
         today={today}

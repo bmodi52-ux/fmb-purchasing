@@ -80,7 +80,7 @@ export default async function TeamsAdminPage() {
             className="rounded-md border border-ink/15 bg-white px-3 py-2 text-ink outline-none focus:border-gold focus:ring-1 focus:ring-gold"
           />
         </label>
-        <SubmitButton className="rounded-md bg-gold px-4 py-2 font-medium text-ink transition-colors hover:bg-gold-deep">
+        <SubmitButton className="btn btn-primary">
           Create team
         </SubmitButton>
       </form>
@@ -99,7 +99,7 @@ export default async function TeamsAdminPage() {
           const columnGranted = (actionKey: string) => pageKeys.every((pg) => has(pg, actionKey));
 
           return (
-            <section key={team.id} className="rounded-lg border border-ink/10 bg-white/60 p-5">
+            <section key={team.id} className="card p-5">
               <div className="mb-4 flex items-center gap-2">
                 <h2 className="section-title text-ink">{team.name}</h2>
                 {team.is_default && (
@@ -238,7 +238,7 @@ export default async function TeamsAdminPage() {
         {changeRows.length === 0 ? (
           <p className="text-sm text-ink/50">No changes recorded yet.</p>
         ) : (
-          <ol className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60">
+          <ol className="flex flex-col divide-y divide-ink/5 card">
             {changeRows.map((row) => (
               <li key={row.id} className="flex flex-col gap-0.5 px-4 py-2.5 text-sm sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
                 <span className="text-ink">

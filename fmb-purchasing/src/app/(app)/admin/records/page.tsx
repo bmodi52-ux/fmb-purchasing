@@ -77,8 +77,8 @@ export default async function RecordsPage() {
           <h2 className="section-title text-ink">Backups</h2>
           <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-ink/60">
             Supabase&apos;s own backups cover the database but not receipt files. Run{" "}
-            <span className="font-mono">node scripts/backup-data.mjs</span> and{" "}
-            <span className="font-mono">node scripts/backup-receipts.mjs</span> on a schedule; each run is recorded here.
+            <span className="tabular-nums">node scripts/backup-data.mjs</span> and{" "}
+            <span className="tabular-nums">node scripts/backup-receipts.mjs</span> on a schedule; each run is recorded here.
           </p>
         </div>
         {(runs ?? []).length === 0 ? (
@@ -108,7 +108,7 @@ export default async function RecordsPage() {
           </p>
         </div>
         {(rehearsals ?? []).length > 0 && (
-          <ul className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60 text-sm">
+          <ul className="flex flex-col divide-y divide-ink/5 card text-sm">
             {(rehearsals ?? []).map((r) => (
               <li key={r.id as string} className="flex flex-col gap-0.5 px-4 py-2">
                 <p className="text-ink">
@@ -123,7 +123,7 @@ export default async function RecordsPage() {
             ))}
           </ul>
         )}
-        <form action={recordRestoreRehearsal} className="grid gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-4 text-sm sm:grid-cols-3">
+        <form action={recordRestoreRehearsal} className="grid gap-3 card px-4 py-4 text-sm sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-ink/55">Rehearsed on</span>
             <input type="date" name="rehearsed_on" required defaultValue={todayIso()} className="input text-sm" />
@@ -153,7 +153,7 @@ export default async function RecordsPage() {
             <span className="text-ink/55">Notes</span>
             <textarea name="notes" rows={2} placeholder="Which backup, what was checked, anything that went wrong" className="input text-sm" />
           </label>
-          <SubmitButton pendingLabel="Recording…" className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep">
+          <SubmitButton pendingLabel="Recording…" className="btn btn-primary self-start">
             Record rehearsal
           </SubmitButton>
         </form>

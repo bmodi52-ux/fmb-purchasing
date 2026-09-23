@@ -130,7 +130,7 @@ export default async function VendorDetailPage({
             against the edge on a narrow screen. */}
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="page-title text-ink">{vendor.name}</h1>
-          <span className="font-mono text-sm text-ink/50">{vendor.vendor_number}</span>
+          <span className="tabular-nums text-sm text-ink/50">{vendor.vendor_number}</span>
           <StatusPill status={vendor.status} />
         </div>
 
@@ -144,7 +144,7 @@ export default async function VendorDetailPage({
           />
         )}
 
-        <nav aria-label="Vendor sections" className="mt-5 flex gap-1 border-b border-ink/10">
+        <nav aria-label="Vendor sections" className="tabs mt-5">
           <TabLink href={`/vendors/${vendor.id}`} active={!showProducts}>
             Details
           </TabLink>
@@ -248,7 +248,7 @@ async function DetailsTab({
 
   return (
     <div className="flex flex-col gap-8">
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-4 section-title text-ink">Details</h2>
         <form action={updateVendorDetails} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <input type="hidden" name="vendor_id" value={vendor.id} />
@@ -272,7 +272,7 @@ async function DetailsTab({
           </div>
 
           {canEdit && (
-            <SubmitButton className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
+            <SubmitButton className="btn btn-primary self-start sm:col-span-2">
               Save details
             </SubmitButton>
           )}
@@ -288,7 +288,7 @@ async function DetailsTab({
                 <input type="hidden" name="vendor_id" value={vendor.id} />
                 <SubmitButton
                   pendingLabel="Checking…"
-                  className="whitespace-nowrap rounded-md border border-ink/15 px-3 py-1.5 text-xs text-ink/70 hover:border-ink/30"
+                  className="btn btn-secondary btn-sm"
                 >
                   Check with the ABR
                 </SubmitButton>
@@ -298,7 +298,7 @@ async function DetailsTab({
         )}
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">Usual settings</h2>
         <p className="mb-4 text-sm text-ink/55">
           Filled in on Submit when a receipt from this vendor doesn&apos;t say otherwise. The receipt&apos;s own category
@@ -349,14 +349,14 @@ async function DetailsTab({
             />
           </Field>
           {canEdit && (
-            <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30 sm:col-span-3">
+            <SubmitButton className="btn btn-secondary self-start sm:col-span-3">
               Save usual settings
             </SubmitButton>
           )}
         </form>
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">Payment details</h2>
         <p className="mb-4 text-sm text-ink/55">
           Where to transfer when an invoice from this vendor is paid directly rather than
@@ -378,7 +378,7 @@ async function DetailsTab({
               <div key={account.id as string} className="flex flex-wrap items-end justify-between gap-3">
                 <div className="text-sm">
                   <p className="text-ink/80">{(account.bank_account_name as string | null) || "—"}</p>
-                  <p className="font-mono text-ink/70">
+                  <p className="tabular-nums text-ink/70">
                     BSB {(account.bank_bsb as string | null) || "—"} · Acct{" "}
                     {(account.bank_account_number as string | null) || "—"}
                   </p>
@@ -391,7 +391,7 @@ async function DetailsTab({
                     <input type="hidden" name="vendor_id" value={vendor.id} />
                     <input type="hidden" name="payee_id" value={account.id as string} />
                     <input type="hidden" name="decision" value="accept" />
-                    <SubmitButton className="rounded-md bg-palm px-3 py-1.5 text-sm font-medium text-white hover:bg-palm/90">
+                    <SubmitButton className="btn btn-approve btn-sm">
                       Use these from now on
                     </SubmitButton>
                   </form>
@@ -399,7 +399,7 @@ async function DetailsTab({
                     <input type="hidden" name="vendor_id" value={vendor.id} />
                     <input type="hidden" name="payee_id" value={account.id as string} />
                     <input type="hidden" name="decision" value="discard" />
-                    <SubmitButton className="rounded-md border border-ink/20 px-3 py-1.5 text-sm text-ink/70 hover:bg-ink/5">
+                    <SubmitButton className="btn btn-secondary btn-sm">
                       Discard
                     </SubmitButton>
                   </form>
@@ -421,7 +421,7 @@ async function DetailsTab({
                 defaultValue={payment?.bsb ?? ""}
                 inputMode="numeric"
                 placeholder="082112"
-                className="input font-mono"
+                className="input tabular-nums"
               />
             </Field>
             <Field label="Account number">
@@ -429,7 +429,7 @@ async function DetailsTab({
                 name="bank_account_number"
                 defaultValue={payment?.accountNumber ?? ""}
                 inputMode="numeric"
-                className="input font-mono"
+                className="input tabular-nums"
               />
             </Field>
             <Field label="Notes">
@@ -457,7 +457,7 @@ async function DetailsTab({
               past and records the new one, so paid expenses still say where the
               money went.
             </p>
-            <SubmitButton className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
+            <SubmitButton className="btn btn-primary self-start sm:col-span-2">
               Save payment details
             </SubmitButton>
           </form>
@@ -483,7 +483,7 @@ async function DetailsTab({
             <ul className="mt-3 flex flex-col gap-2 text-sm">
               {superseded.map((account) => (
                 <li key={account.id as string} className="text-ink/60">
-                  <span className="font-mono">
+                  <span className="tabular-nums">
                     BSB {(account.bank_bsb as string | null) || "—"} · Acct{" "}
                     {(account.bank_account_number as string | null) || "—"}
                   </span>
@@ -500,7 +500,7 @@ async function DetailsTab({
         )}
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-4 section-title text-ink">Collection addresses</h2>
         <ul className="mb-4 flex flex-col gap-3">
           {(addresses ?? []).map((a) => (
@@ -535,21 +535,21 @@ async function DetailsTab({
             <input name="state" placeholder="State" className="input" />
             <input name="postcode" placeholder="Postcode" className="input" />
             <input name="country" placeholder="Country" defaultValue="Australia" className="input" />
-            <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30 sm:col-span-2">
+            <SubmitButton className="btn btn-secondary self-start sm:col-span-2">
               + Add collection address
             </SubmitButton>
           </form>
         )}
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-4 section-title text-ink">Contact persons</h2>
         <ul className="mb-4 flex flex-col gap-2">
           {(contacts ?? []).map((c) => (
             <li key={c.id} className="flex items-center justify-between rounded-md border border-ink/10 bg-white p-3 text-sm">
               <div>
                 <span className="font-medium text-ink">{c.name}</span>
-                {c.phone && <span className="ml-2 font-mono text-ink/60">{c.phone}</span>}
+                {c.phone && <span className="ml-2 tabular-nums text-ink/60">{c.phone}</span>}
               </div>
               {canEdit && (
                 <form action={removeContact}>
@@ -576,14 +576,14 @@ async function DetailsTab({
               <span className="text-ink/70">Phone</span>
               <input name="contact_phone" className="input" />
             </label>
-            <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+            <SubmitButton className="btn btn-secondary">
               + Add contact
             </SubmitButton>
           </form>
         )}
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-4 section-title text-ink">Change history</h2>
         {(changeRows ?? []).length === 0 ? (
           <p className="text-sm text-ink/50">No changes recorded yet. Changes are recorded from September 2026.</p>
@@ -799,7 +799,7 @@ async function ProductsTab({
         {canSubmit && (
           <Link
             href={`/pricelist/add-by-photo?vendor=${vendor.id}`}
-            className="self-start whitespace-nowrap rounded-md border border-ink/15 bg-white px-4 py-2 text-sm text-ink transition-colors hover:border-ink/30"
+            className="btn btn-secondary self-start"
           >
             Add by photo
           </Link>

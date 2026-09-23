@@ -245,13 +245,13 @@ export function AddByPhotoForm({
           <button
             type="button"
             onClick={startAgain}
-            className="rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep"
+            className="btn btn-primary btn-lg"
           >
             Add another
           </button>
           <Link
             href={savedVendorId ? `/vendors/${savedVendorId}?tab=products` : "/pricelist"}
-            className="rounded-md border border-ink/15 px-5 py-2.5 text-ink/70 hover:border-ink/30"
+            className="btn btn-secondary btn-lg"
           >
             Done
           </Link>
@@ -389,7 +389,7 @@ export function AddByPhotoForm({
             type="button"
             onClick={save}
             disabled={phase === "saving"}
-            className="flex-1 rounded-md bg-gold px-5 py-3 font-medium text-ink hover:bg-gold-deep disabled:opacity-60 sm:flex-none"
+            className="btn btn-primary btn-lg flex-1 sm:flex-none"
           >
             {phase === "saving"
               ? "Saving…"
@@ -399,7 +399,7 @@ export function AddByPhotoForm({
             type="button"
             onClick={startAgain}
             disabled={phase === "saving"}
-            className="rounded-md border border-ink/15 px-5 py-3 text-ink/70 hover:border-ink/30"
+            className="btn btn-secondary btn-lg"
           >
             Start again
           </button>
@@ -445,7 +445,7 @@ function DraftCard({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-palm/5 px-3 py-2 text-sm">
             <span className="text-palm">✓ Already on the Pricelist:</span>
             <span className="text-ink">{d.match.itemName}</span>
-            {d.match.itemNumber && <span className="font-mono text-xs text-ink/45">{d.match.itemNumber}</span>}
+            {d.match.itemNumber && <span className="tabular-nums text-xs text-ink/45">{d.match.itemNumber}</span>}
             <button
               type="button"
               onClick={() => onChange({ useExisting: false, packChoice: "new" })}

@@ -103,7 +103,7 @@ export function ReconciliationStrip({
 
   return (
     <div className="mt-6 rounded-lg border border-ink/15 bg-white/70 p-4">
-      <div className="flex flex-col gap-1.5 font-mono text-sm">
+      <div className="flex flex-col gap-1.5 tabular-nums text-sm">
         <Row label="Line items" value={sumLines(purchases)} count={purchases.length} />
         {charges.length > 0 && (
           <Row label="Charges and discounts" value={sumLines(charges)} count={charges.length} />
@@ -226,7 +226,7 @@ export function ReconciliationStrip({
         </div>
       </div>
 
-      <div className="mt-5 flex flex-col gap-1.5 border-t border-ink/10 pt-3 font-mono text-sm">
+      <div className="mt-5 flex flex-col gap-1.5 border-t border-ink/10 pt-3 tabular-nums text-sm">
         <Row label="GST from the lines" value={computedGst} />
         {gstGap !== null && gstGap !== 0 && (
           <p className="font-sans text-xs leading-relaxed text-ink/60">

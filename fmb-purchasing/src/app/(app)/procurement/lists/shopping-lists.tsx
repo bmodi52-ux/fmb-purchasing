@@ -95,7 +95,7 @@ export function ShoppingLists({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm print:hidden">
+      <div className="flex flex-col gap-3 card p-4 text-sm print:hidden">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-ink/55">Days:</span>
           {days.map((day) => (
@@ -158,7 +158,7 @@ export function ShoppingLists({
           <button
             type="button"
             onClick={() => window.print()}
-            className="rounded-md border border-ink/15 px-3 py-1.5 text-xs text-ink/70 hover:border-ink/30"
+            className="btn btn-secondary btn-sm"
           >
             Print
           </button>
@@ -168,7 +168,7 @@ export function ShoppingLists({
       {sections
         .filter((section) => chosenSections.has(section.key) && rows.some((r) => r.section === section.key))
         .map((section) => (
-          <section key={section.key} className="rounded-lg border border-ink/10 bg-white/60 p-4">
+          <section key={section.key} className="card p-4">
             <h2 className="mb-3 section-title text-ink">{section.label}</h2>
             <ul className="flex flex-col gap-1">
               {rows
@@ -187,7 +187,7 @@ export function ShoppingLists({
                         {row.itemName}
                       </span>
                     </label>
-                    <span className="font-mono text-base text-ink">
+                    <span className="tabular-nums text-base text-ink">
                       {row.quantity} {row.unit}
                     </span>
                     <span className="w-full text-xs text-ink/50 sm:w-auto">

@@ -37,7 +37,7 @@ export function SavedViews({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-md border border-ink/15 px-3.5 py-1.5 text-sm text-ink/75 hover:border-ink/30 hover:text-ink"
+        className="btn btn-secondary btn-sm"
       >
         {current ? <>View: {current.name}</> : <>Saved views{views.length ? ` (${views.length})` : ""}</>}
       </button>
@@ -208,7 +208,7 @@ function ViewForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep disabled:opacity-60"
+          className="btn btn-primary"
         >
           {pending ? "Saving…" : submitLabel}
         </button>

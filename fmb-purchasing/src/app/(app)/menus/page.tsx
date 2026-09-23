@@ -154,7 +154,7 @@ export default async function MenuCalendarPage({
           <form action={newEstimate}>
             <SubmitButton
               pendingLabel="Starting…"
-              className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep"
+              className="btn btn-primary"
             >
               + Add menu
             </SubmitButton>
@@ -196,16 +196,16 @@ export default async function MenuCalendarPage({
           </span>
         </h2>
         <div className="flex items-center gap-2 text-sm">
-          <Link href={monthHref(-1)} className="rounded-md border border-ink/15 px-3 py-1.5 hover:border-ink/30">
+          <Link href={monthHref(-1)} className="btn btn-secondary btn-sm">
             ← Previous
           </Link>
           <Link
             href={`/menus${kitchensQuery ? `?${kitchensQuery.slice(1)}` : ""}`}
-            className="rounded-md border border-ink/15 px-3 py-1.5 hover:border-ink/30"
+            className="btn btn-secondary btn-sm"
           >
             This month
           </Link>
-          <Link href={monthHref(1)} className="rounded-md border border-ink/15 px-3 py-1.5 hover:border-ink/30">
+          <Link href={monthHref(1)} className="btn btn-secondary btn-sm">
             Next →
           </Link>
         </div>
@@ -222,7 +222,7 @@ export default async function MenuCalendarPage({
               <li key={`${date}-${entry.kitchenId}`}>
                 <Link
                   href={`/menus/${date}?kitchen=${entry.kitchenId}`}
-                  className="flex flex-col gap-1 rounded-lg border border-ink/10 bg-white/70 p-3"
+                  className="flex flex-col gap-1 card p-3"
                 >
                   <span className="flex flex-wrap items-baseline justify-between gap-2">
                     <span className="font-medium text-ink">
@@ -241,7 +241,7 @@ export default async function MenuCalendarPage({
                     {entry.dishes.map((d) => d.dishName).join(", ") || "No dishes yet"}
                   </span>
                   {entry.cost?.perThaali != null && (
-                    <span className="font-mono text-xs text-ink/55">{money(entry.cost.perThaali)} a thaali</span>
+                    <span className="tabular-nums text-xs text-ink/55">{money(entry.cost.perThaali)} a thaali</span>
                   )}
                 </Link>
               </li>
@@ -308,7 +308,7 @@ export default async function MenuCalendarPage({
                               <span className="text-ink/50">
                                 {entry.thaalis > 0 && `${entry.thaalis} thaalis`}
                                 {entry.cost?.perThaali != null && (
-                                  <span className="block font-mono text-ink/70">
+                                  <span className="block tabular-nums text-ink/70">
                                     {money(entry.cost.perThaali)}/thaali
                                   </span>
                                 )}

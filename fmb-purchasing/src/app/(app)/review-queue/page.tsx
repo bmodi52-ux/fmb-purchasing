@@ -65,11 +65,11 @@ export default async function ReviewQueuePage() {
               <section key={group.kind}>
                 <div className="mb-1 flex items-baseline gap-3">
                   <h2 className="section-title text-ink">{group.heading}</h2>
-                  <span className="font-mono text-sm text-ink/50">{counts[group.kind]}</span>
+                  <span className="tabular-nums text-sm text-ink/50">{counts[group.kind]}</span>
                 </div>
                 <p className="page-description mb-3 max-w-2xl">{group.why}</p>
 
-                <ul className="divide-y divide-ink/5 overflow-hidden rounded-lg border border-ink/10 bg-white/60">
+                <ul className="divide-y divide-ink/5 overflow-hidden card">
                   {groupItems.map((item) => (
                     <li key={`${item.kind}-${item.id}`}>
                       <Link

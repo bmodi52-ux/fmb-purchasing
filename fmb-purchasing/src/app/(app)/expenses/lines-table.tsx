@@ -47,7 +47,7 @@ const ALL_COLUMNS: ColumnDef<LineRow>[] = [
     key: "expense_number",
     label: "Entry #",
     render: (r) => (
-      <Link href={`/expenses/${r.expenseId}`} className="font-mono text-ink underline">
+      <Link href={`/expenses/${r.expenseId}`} className="tabular-nums text-ink font-medium underline-offset-2 hover:underline">
         {r.expenseNumber ?? "View"}
       </Link>
     ),

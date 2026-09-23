@@ -178,7 +178,7 @@ export default async function ThaaliCostsPage({
             </select>
           </label>
         )}
-        <button type="submit" className="rounded-md border border-ink/15 px-4 py-2 hover:border-ink/30">
+        <button type="submit" className="btn btn-secondary">
           Show
         </button>
         <Link href={query({ from: monthsBack(today, 0), to: today })} className="px-1 py-2 text-ink/60 underline-offset-2 hover:underline">
@@ -197,7 +197,7 @@ export default async function ThaaliCostsPage({
         />
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-3 section-title text-ink">By day</h2>
         {rows.length === 0 ? (
           <p className="text-sm text-ink/55">No released days between these dates.</p>
@@ -228,12 +228,12 @@ export default async function ThaaliCostsPage({
                       </Link>
                     </td>
                     <td className="p-2 text-ink/70">{r.kitchenName}</td>
-                    <td className="p-2 text-right font-mono">{r.thaalis}</td>
-                    <td className="p-2 text-right font-mono">{money(r.planned)}</td>
-                    <td className="p-2 text-right font-mono text-ink/70">{money(r.plannedPerThaali)}</td>
-                    <td className="p-2 text-right font-mono">{r.actual > 0 ? money(r.actual) : "—"}</td>
+                    <td className="p-2 text-right tabular-nums">{r.thaalis}</td>
+                    <td className="p-2 text-right tabular-nums">{money(r.planned)}</td>
+                    <td className="p-2 text-right tabular-nums text-ink/70">{money(r.plannedPerThaali)}</td>
+                    <td className="p-2 text-right tabular-nums">{r.actual > 0 ? money(r.actual) : "—"}</td>
                     <td
-                      className={`p-2 text-right font-mono ${
+                      className={`p-2 text-right tabular-nums ${
                         r.stillToBuy === 0 && r.actualPerThaali != null && r.plannedPerThaali != null
                           ? r.actualPerThaali > r.plannedPerThaali
                             ? "text-alert"
@@ -255,7 +255,7 @@ export default async function ThaaliCostsPage({
       </section>
 
       {sections.length > 0 && (
-        <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <section className="card p-5">
           <h2 className="mb-3 section-title text-ink">By section</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -272,10 +272,10 @@ export default async function ThaaliCostsPage({
                 {sections.map((s) => (
                   <tr key={s.section} className="border-t border-ink/5">
                     <td className="p-2 text-ink">{SECTION_LABEL[s.section]}</td>
-                    <td className="p-2 text-right font-mono">{money(s.planned)}</td>
-                    <td className="p-2 text-right font-mono text-ink/70">{money(s.plannedPerThaali)}</td>
-                    <td className="p-2 text-right font-mono">{money(s.actual)}</td>
-                    <td className="p-2 text-right font-mono text-ink/70">
+                    <td className="p-2 text-right tabular-nums">{money(s.planned)}</td>
+                    <td className="p-2 text-right tabular-nums text-ink/70">{money(s.plannedPerThaali)}</td>
+                    <td className="p-2 text-right tabular-nums">{money(s.actual)}</td>
+                    <td className="p-2 text-right tabular-nums text-ink/70">
                       {totals.planned > 0 ? `${Math.round((s.planned / totals.planned) * 100)}%` : "—"}
                     </td>
                   </tr>
@@ -286,7 +286,7 @@ export default async function ThaaliCostsPage({
         </section>
       )}
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">By dish</h2>
         <p className="mb-3 text-sm text-ink/55">
           Every day each dish was on, released or not, worked out from its recipe at today&apos;s prices.
@@ -312,10 +312,10 @@ export default async function ThaaliCostsPage({
                       {d.name}
                       {d.unpriced && <span className="ml-2 text-xs text-alert">some items have no price</span>}
                     </td>
-                    <td className="p-2 text-right font-mono">{d.days}</td>
-                    <td className="p-2 text-right font-mono">{d.boxes.toLocaleString("en-AU")}</td>
-                    <td className="p-2 text-right font-mono">{money(d.cost)}</td>
-                    <td className="p-2 text-right font-mono text-ink/70">{d.boxes > 0 ? money(d.cost / d.boxes) : "—"}</td>
+                    <td className="p-2 text-right tabular-nums">{d.days}</td>
+                    <td className="p-2 text-right tabular-nums">{d.boxes.toLocaleString("en-AU")}</td>
+                    <td className="p-2 text-right tabular-nums">{money(d.cost)}</td>
+                    <td className="p-2 text-right tabular-nums text-ink/70">{d.boxes > 0 ? money(d.cost / d.boxes) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -329,9 +329,9 @@ export default async function ThaaliCostsPage({
 
 function Figure({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="rounded-lg border border-ink/10 bg-white/60 p-4">
+    <div className="card p-4">
       <p className="text-xs text-ink/55">{label}</p>
-      <p className="mt-1 font-mono text-xl text-ink">{value}</p>
+      <p className="mt-1 tabular-nums text-xl text-ink">{value}</p>
       <p className="mt-0.5 text-xs text-ink/50">{note}</p>
     </div>
   );

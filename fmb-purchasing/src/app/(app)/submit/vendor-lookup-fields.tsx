@@ -65,7 +65,7 @@ export function VendorLookupFields({
           onSelect={select}
           listLabel="Vendor numbers"
           placeholder="e.g. 5"
-          inputClassName="font-mono"
+          inputClassName="tabular-nums"
         />
       </label>
     </>
@@ -204,13 +204,13 @@ function VendorCombobox({
               >
                 {sortBy === "number" ? (
                   <>
-                    <span className="w-16 shrink-0 font-mono text-xs text-ink/60">{o.vendorNumber ?? "—"}</span>
+                    <span className="w-16 shrink-0 tabular-nums text-xs text-ink/60">{o.vendorNumber ?? "—"}</span>
                     <span className="min-w-0 truncate text-ink">{o.name}</span>
                   </>
                 ) : (
                   <>
                     <span className="min-w-0 flex-1 truncate text-ink">{o.name}</span>
-                    <span className="shrink-0 font-mono text-xs text-ink/50">{o.vendorNumber}</span>
+                    <span className="shrink-0 tabular-nums text-xs text-ink/50">{o.vendorNumber}</span>
                   </>
                 )}
               </button>
@@ -254,7 +254,7 @@ function VendorMatchNote({
 
   return (
     <span className="text-xs text-palm">
-      Matched <span className="font-mono">{resolved.vendorNumber ?? "—"}</span> {resolved.name}
+      Matched <span className="tabular-nums">{resolved.vendorNumber ?? "—"}</span> {resolved.name}
       {resolved.status !== "approved" && <span className="text-ink/50"> · awaiting review</span>}
     </span>
   );

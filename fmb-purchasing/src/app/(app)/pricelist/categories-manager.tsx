@@ -164,7 +164,7 @@ function CategoryRow({
             </select>
             <LineGroupChecks appliesTo={category.appliesTo} />
             <CapitalCheck checked={category.capitalPurchases} />
-            <SubmitButton className="rounded-md border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
+            <SubmitButton className="btn btn-secondary btn-xs">
               Save
             </SubmitButton>
           </form>
@@ -228,7 +228,7 @@ export function CategoriesManager({ categories }: { categories: ManagedCategory[
   const childrenOf = (id: string) => categories.filter((c) => c.parentCategoryId === id);
 
   return (
-    <section className="rounded-lg border border-ink/10 bg-white/60 p-5 text-sm">
+    <section className="card p-5 text-sm">
       <h2 className="mb-3 section-title text-ink">All categories ({categories.length})</h2>
 
       <ul className="flex flex-col">
@@ -287,7 +287,7 @@ export function CategoriesManager({ categories }: { categories: ManagedCategory[
             category whose use nobody has decided yet. */}
         <LineGroupChecks appliesTo={[]} />
         <CapitalCheck checked={false} />
-        <SubmitButton className="rounded-md border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
+        <SubmitButton className="btn btn-secondary btn-xs">
           + Add category
         </SubmitButton>
         {addState.error && <p className="w-full text-xs text-red-700">{addState.error}</p>}

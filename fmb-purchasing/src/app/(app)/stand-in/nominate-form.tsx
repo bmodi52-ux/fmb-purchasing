@@ -17,7 +17,7 @@ export function NominateForm({
   const [state, action, pending] = useActionState<NominateState, FormData>(nominateStandIn, { status: "idle" });
 
   return (
-    <form action={action} className="flex flex-col gap-4 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
+    <form action={action} className="flex flex-col gap-4 card p-4 text-sm">
       <fieldset className="flex flex-wrap gap-4">
         <legend className="mb-1 text-xs text-ink/55">What they&apos;ll cover</legend>
         {duties.map((d) => (
@@ -54,7 +54,7 @@ export function NominateForm({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={pending} className="rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep disabled:opacity-60">
+        <button type="submit" disabled={pending} className="btn btn-primary">
           {pending ? "Saving…" : "Name stand-in"}
         </button>
         {state.message && <p className={`text-xs ${state.status === "error" ? "text-maroon" : "text-palm"}`}>{state.message}</p>}

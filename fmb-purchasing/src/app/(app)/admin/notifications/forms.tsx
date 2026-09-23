@@ -84,7 +84,7 @@ export function AnnouncementForm({ teams, people }: { teams: Option[]; people: O
   const [audience, setAudience] = useState<"everyone" | "chosen">("everyone");
 
   return (
-    <form action={action} className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
+    <form action={action} className="flex flex-col gap-3 card p-4 text-sm">
       <label className="flex flex-col gap-1 text-xs">
         <span className="text-ink/55">Title</span>
         <input name="title" required placeholder="Ashara purchasing closes Friday" className="input text-sm" />
@@ -115,7 +115,7 @@ export function AnnouncementForm({ teams, people }: { teams: Option[]; people: O
         </div>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={pending} className="rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep disabled:opacity-60">
+        <button type="submit" disabled={pending} className="btn btn-primary">
           {pending ? "Sending…" : "Send announcement"}
         </button>
         {state.message && (
@@ -143,7 +143,7 @@ export function AlertRuleForm({
     event === "expense_submitted" || event === "expense_approved" || event === "expense_paid" || event === "unusual_spend";
 
   return (
-    <form action={action} className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
+    <form action={action} className="flex flex-col gap-3 card p-4 text-sm">
       <label className="flex flex-col gap-1 text-xs">
         <span className="text-ink/55">Name</span>
         <input name="name" required placeholder="Large event spend" className="input text-sm" />
@@ -197,7 +197,7 @@ export function AlertRuleForm({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={pending} className="rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep disabled:opacity-60">
+        <button type="submit" disabled={pending} className="btn btn-primary">
           {pending ? "Saving…" : "Save alert"}
         </button>
         {state.message && (

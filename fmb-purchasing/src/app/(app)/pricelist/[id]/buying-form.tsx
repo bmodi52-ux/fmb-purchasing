@@ -121,7 +121,7 @@ export function BuyingForm({
           <button
             type="submit"
             disabled={pending}
-            className="rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep disabled:opacity-60"
+            className="btn btn-primary btn-lg"
           >
             {pending ? "Saving…" : "Save buying details"}
           </button>

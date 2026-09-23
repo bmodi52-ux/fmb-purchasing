@@ -30,7 +30,7 @@ export default async function NotificationsPage() {
         <div className="flex flex-wrap gap-2">
           <Link
             href="/notifications/settings"
-            className="whitespace-nowrap rounded-md border border-ink/15 px-3 py-1.5 text-sm hover:border-ink/30"
+            className="btn btn-secondary btn-sm"
           >
             Settings
           </Link>
@@ -38,7 +38,7 @@ export default async function NotificationsPage() {
             <form action={markAllNotificationsRead}>
               <SubmitButton
                 pendingLabel="Marking…"
-                className="whitespace-nowrap rounded-md border border-ink/15 px-3 py-1.5 text-sm hover:border-ink/30"
+                className="btn btn-secondary btn-sm"
               >
                 Mark all read
               </SubmitButton>
@@ -48,7 +48,7 @@ export default async function NotificationsPage() {
             <form action={clearReadNotifications}>
               <SubmitButton
                 pendingLabel="Clearing…"
-                className="whitespace-nowrap rounded-md border border-ink/15 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/30 hover:text-ink"
+                className="btn btn-secondary btn-sm"
               >
                 Clear read
               </SubmitButton>

@@ -35,10 +35,10 @@ export function IssuedCredentialsPanel({
 
       <dl className="mt-3 grid gap-1 text-sm sm:grid-cols-[auto_1fr] sm:gap-x-4">
         <dt className="text-ink/60">Email address</dt>
-        <dd className="font-mono break-all">{credentials.email}</dd>
+        <dd className="tabular-nums break-all">{credentials.email}</dd>
         <dt className="text-ink/60">Temporary password</dt>
         <dd className="flex items-center gap-2">
-          <span className="font-mono select-all">{credentials.temporaryPassword}</span>
+          <span className="tabular-nums select-all">{credentials.temporaryPassword}</span>
           <button
             type="button"
             onClick={copy}

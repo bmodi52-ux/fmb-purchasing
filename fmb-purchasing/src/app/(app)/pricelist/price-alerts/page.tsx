@@ -56,7 +56,7 @@ export default async function PriceAlertsPage() {
         <h2 className="section-title text-ink">For the whole Pricelist</h2>
         <form
           action={setPriceAlertSettings}
-          className="flex flex-col gap-4 rounded-lg border border-ink/10 bg-white/60 px-4 py-4 text-sm"
+          className="flex flex-col gap-4 card px-4 py-4 text-sm"
         >
           <label className="flex items-center gap-2 font-medium text-ink">
             <input type="checkbox" name="enabled" defaultChecked={settings.enabled} />
@@ -114,7 +114,7 @@ export default async function PriceAlertsPage() {
           </p>
           <SubmitButton
             pendingLabel="Saving…"
-            className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep"
+            className="btn btn-primary self-start"
           >
             Save
           </SubmitButton>
@@ -129,7 +129,7 @@ export default async function PriceAlertsPage() {
             leave the box.
           </p>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-ink/10 bg-white/60">
+        <div className="overflow-x-auto card">
           <table className="min-w-full text-sm">
             <thead className="text-left text-xs text-ink/55">
               <tr>
@@ -183,7 +183,7 @@ export default async function PriceAlertsPage() {
         {(itemOverrides ?? []).length === 0 ? (
           <p className="text-sm text-ink/50">None yet.</p>
         ) : (
-          <ul className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60 text-sm">
+          <ul className="flex flex-col divide-y divide-ink/5 card text-sm">
             {(itemOverrides ?? []).map((i) => {
               const parts = [
                 i.price_rise_percent != null ? `rise ${pct(i.price_rise_percent)}%` : null,

@@ -75,7 +75,7 @@ export default async function AppSettingsPage() {
             six-digit number your bank issues for batch payments — ask the bank if you don&apos;t have it.
           </p>
         </div>
-        <form action={setAbaSettings} className="grid gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-4 text-sm sm:grid-cols-2">
+        <form action={setAbaSettings} className="grid gap-3 card px-4 py-4 text-sm sm:grid-cols-2">
           {(
             [
               ["bank", "Bank code (e.g. NAB, CBA, WBC, ANZ)", settings.aba.bankAbbreviation, 3],
@@ -96,7 +96,7 @@ export default async function AppSettingsPage() {
             <input type="checkbox" name="balancing" defaultChecked={settings.aba.balancing} />
             Add a balancing line taking the total from FMB&apos;s account (some banks require it, some reject it)
           </label>
-          <SubmitButton pendingLabel="Saving…" className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
+          <SubmitButton pendingLabel="Saving…" className="btn btn-primary self-start sm:col-span-2">
             Save bank file settings
           </SubmitButton>
         </form>
@@ -112,7 +112,7 @@ export default async function AppSettingsPage() {
         <h2 className="section-title text-ink">Thaali Calendar</h2>
         <form
           action={setMenuMode}
-          className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-3 card px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="max-w-xl">
             <p className="font-medium text-ink">How a day is planned</p>
@@ -133,7 +133,7 @@ export default async function AppSettingsPage() {
             </span>
             <SubmitButton
               pendingLabel="Saving…"
-              className="whitespace-nowrap rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30"
+              className="btn btn-secondary"
             >
               {settings.menu_mode === "simple" ? "Use recipes and counts" : "Use the simple way"}
             </SubmitButton>
@@ -143,7 +143,7 @@ export default async function AppSettingsPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="section-title text-ink">Budgets</h2>
-        <form action={setBudgetAlerts} className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <form action={setBudgetAlerts} className="flex flex-col gap-3 card px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="max-w-xl">
             <label className="flex items-center gap-2 font-medium text-ink">
               <input type="checkbox" name="enabled" defaultChecked={settings.budget_alerts.enabled} />
@@ -156,7 +156,7 @@ export default async function AppSettingsPage() {
           <div className="flex items-center gap-2">
             <input name="percents" defaultValue={settings.budget_alerts.percents.join(", ")} className="input w-28" aria-label="Percentages" />
             <span className="text-xs text-ink/55">%</span>
-            <SubmitButton pendingLabel="Saving…" className="rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30">
+            <SubmitButton pendingLabel="Saving…" className="btn btn-secondary">
               Save
             </SubmitButton>
           </div>
@@ -172,7 +172,7 @@ export default async function AppSettingsPage() {
             {lastRun?.last_run_at ? ` Last ran ${formatDateTime(lastRun.last_run_at as string)}.` : " Hasn't run yet."}
           </p>
         </div>
-        <form action={setReminders} className="flex flex-col gap-4 rounded-lg border border-ink/10 bg-white/60 px-4 py-4 text-sm">
+        <form action={setReminders} className="flex flex-col gap-4 card px-4 py-4 text-sm">
           <label className="flex items-center gap-2">
             <input type="checkbox" name="enabled" defaultChecked={r.enabled} />
             Send reminders
@@ -235,7 +235,7 @@ export default async function AppSettingsPage() {
               </select>
             </label>
           </div>
-          <SubmitButton pendingLabel="Saving…" className="self-start rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep">
+          <SubmitButton pendingLabel="Saving…" className="btn btn-primary self-start">
             Save reminders
           </SubmitButton>
         </form>
@@ -262,7 +262,7 @@ export default async function AppSettingsPage() {
               : "No confirmed receipts are loaded yet: run scripts/load-extraction-check.mjs with the receipts folder."}
           </p>
         </div>
-        <form action={setExtractionCheck} className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-3 text-sm">
+        <form action={setExtractionCheck} className="flex flex-col gap-3 card px-4 py-3 text-sm">
           <label className="flex items-center gap-2 font-medium text-ink">
             <input type="checkbox" name="enabled" defaultChecked={ec.enabled} />
             Check how well receipts are read
@@ -284,12 +284,12 @@ export default async function AppSettingsPage() {
               points
             </label>
           </div>
-          <SubmitButton pendingLabel="Saving…" className="self-start rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30">
+          <SubmitButton pendingLabel="Saving…" className="btn btn-secondary self-start">
             Save
           </SubmitButton>
         </form>
         {(checkRuns ?? []).length > 0 && (
-          <ul className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60 text-sm">
+          <ul className="flex flex-col divide-y divide-ink/5 card text-sm">
             {(checkRuns ?? []).map((run) => {
               const read = ((run.extraction_benchmark_results as { case_id: string }[] | null) ?? []).length;
               const pct = accuracy({ checks: Number(run.checks), passed: Number(run.passed) });
@@ -319,7 +319,7 @@ export default async function AppSettingsPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="section-title text-ink">GST</h2>
-        <div className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="max-w-xl">
             <p className="text-sm font-medium text-ink">Capital purchase threshold</p>
             <p className="mt-0.5 text-xs leading-relaxed text-ink/60">
@@ -342,7 +342,7 @@ export default async function AppSettingsPage() {
             </label>
             <SubmitButton
               pendingLabel="Saving…"
-              className="whitespace-nowrap rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30"
+              className="btn btn-secondary"
             >
               Save
             </SubmitButton>
@@ -365,7 +365,7 @@ function SettingRow({
   action: (formData: FormData) => Promise<void>;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="max-w-xl">
         <p className="text-sm font-medium text-ink">{title}</p>
         <p className="mt-0.5 text-xs leading-relaxed text-ink/60">{description}</p>
@@ -375,7 +375,7 @@ function SettingRow({
         <span className={`text-xs font-medium ${on ? "text-palm" : "text-ink/50"}`}>{on ? "On" : "Off"}</span>
         <SubmitButton
           pendingLabel="Saving…"
-          className="whitespace-nowrap rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30"
+          className="btn btn-secondary"
         >
           {on ? "Turn off" : "Turn on"}
         </SubmitButton>

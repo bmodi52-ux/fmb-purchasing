@@ -2,6 +2,7 @@
 
 import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
+import { StatusBadge } from "@/components/status-badge";
 import { ColumnsDataTable, type ColumnDef, type BulkAction } from "@/components/columns-data-table";
 import { reviewVendor, bulkReviewVendors } from "./actions";
 
@@ -24,7 +25,7 @@ function buildColumns(canApprove: boolean): ColumnDef<VendorRow>[] {
       // Entry # already is on Expenses. Reading a vendor number off paperwork
       // and then having to hunt for the name to click is the wrong way round.
       render: (v) => (
-        <Link href={`/vendors/${v.id}`} className="font-mono text-ink underline">
+        <Link href={`/vendors/${v.id}`} className="tabular-nums text-ink font-medium underline-offset-2 hover:underline">
           {v.vendor_number ?? "View"}
         </Link>
       ),
@@ -43,7 +44,7 @@ function buildColumns(canApprove: boolean): ColumnDef<VendorRow>[] {
     {
       key: "abn",
       label: "ABN",
-      render: (v) => <span className="font-mono text-ink/70">{v.abn || "—"}</span>,
+      render: (v) => <span className="tabular-nums text-ink/70">{v.abn || "—"}</span>,
       exportValue: (v) => v.abn ?? "",
     },
     { key: "billing_address", label: "Billing address", render: (v) => v.billingSummary || "—", exportValue: (v) => v.billingSummary },
@@ -57,18 +58,18 @@ function buildColumns(canApprove: boolean): ColumnDef<VendorRow>[] {
       label: "",
       render: (v) =>
         v.status === "pending" ? (
-          <div className="flex gap-2">
+          <div className="flex flex-col items-start gap-1">
             <form action={reviewVendor}>
               <input type="hidden" name="vendor_id" value={v.id} />
               <input type="hidden" name="decision" value="approved" />
-              <SubmitButton className="text-xs text-palm hover:underline">
+              <SubmitButton className="btn btn-approve btn-xs">
                 Approve
               </SubmitButton>
             </form>
             <form action={reviewVendor}>
               <input type="hidden" name="vendor_id" value={v.id} />
               <input type="hidden" name="decision" value="rejected" />
-              <SubmitButton className="text-xs text-maroon/70 hover:underline">
+              <SubmitButton className="btn btn-danger btn-xs">
                 Reject
               </SubmitButton>
             </form>
@@ -117,10 +118,4 @@ export function VendorsTable({
       bulkActions={bulkActions}
     />
   );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const color =
-    status === "approved" ? "text-palm" : status === "rejected" ? "text-maroon/70" : "text-gold-deep";
-  return <span className={color}>{status}</span>;
 }

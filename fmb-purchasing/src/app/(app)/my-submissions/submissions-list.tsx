@@ -2,6 +2,7 @@
 
 import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
+import { StatusBadge } from "@/components/status-badge";
 import { useState } from "react";
 import { withdrawExpense, bulkWithdrawExpenses } from "./actions";
 import { formatDate, formatPlainDate } from "@/lib/format";
@@ -185,12 +186,12 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                             {e.vendor_name_raw ?? "Vendor not recorded"}
                           </span>
                           <span className="block text-xs text-ink/50">
-                            <span className="font-mono">{e.expense_number ?? "—"}</span> · {formatDate(e.created_at)}
+                            <span className="tabular-nums">{e.expense_number ?? "—"}</span> · {formatDate(e.created_at)}
                           </span>
                         </span>
                         <span className="flex items-center gap-2">
-                          <span className="font-mono text-ink">{money(e.total)}</span>
-                          <StatusBadge status={e.status} />
+                          <span className="tabular-nums text-ink">{money(e.total)}</span>
+                          <StatusBadge status={e.status} label={e.status === "submitted" ? "waiting" : undefined} />
                           <span aria-hidden="true" className="text-ink/40">
                             {isOpen ? "▾" : "▸"}
                           </span>
@@ -210,7 +211,7 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                           </p>
                           <Link
                             href={`/submit?resubmit=${e.id}`}
-                            className="self-start whitespace-nowrap rounded-md bg-gold px-3 py-1.5 text-sm font-medium text-ink hover:bg-gold-deep sm:self-auto"
+                            className="btn btn-primary btn-sm self-start sm:self-auto"
                           >
                             Fix and resubmit
                           </Link>
@@ -222,7 +223,7 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                           <p className="text-ink/70">You withdrew this. It isn&apos;t counted anywhere, but stays on the record.</p>
                           <Link
                             href={`/submit?resubmit=${e.id}`}
-                            className="self-start whitespace-nowrap rounded-md border border-ink/15 px-3 py-1.5 text-sm text-ink/80 hover:border-ink/30 sm:self-auto"
+                            className="btn btn-secondary btn-sm self-start sm:self-auto"
                           >
                             Submit again
                           </Link>
@@ -333,25 +334,5 @@ function SubmissionDetails({ expense: e }: { expense: SubmissionRow }) {
         )}
       </div>
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    submitted: "bg-gold/15 text-gold-deep",
-    approved: "bg-palm/15 text-palm",
-    declined: "bg-maroon/10 text-maroon",
-    paid: "bg-ink/10 text-ink/70",
-    withdrawn: "bg-ink/5 text-ink/50",
-  };
-  const labels: Record<string, string> = {
-    submitted: "waiting",
-    approved: "approved",
-    declined: "declined",
-    paid: "paid",
-    withdrawn: "withdrawn",
-  };
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs ${styles[status] ?? ""}`}>{labels[status] ?? status}</span>
   );
 }

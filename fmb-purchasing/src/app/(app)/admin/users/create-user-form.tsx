@@ -22,7 +22,7 @@ export function CreateUserForm() {
       <form
         ref={formRef}
         action={formAction}
-        className="flex flex-wrap items-end gap-3 rounded-lg border border-ink/10 bg-white/60 p-4"
+        className="flex flex-wrap items-end gap-3 card p-4"
       >
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-ink/70">Full name</span>
@@ -43,7 +43,7 @@ export function CreateUserForm() {
         </label>
         <SubmitButton
           disabled={pending}
-          className="rounded-md bg-gold px-4 py-2 font-medium text-ink transition-colors hover:bg-gold-deep disabled:opacity-60"
+          className="btn btn-primary"
         >
           {pending ? "Creating…" : "Create user"}
         </SubmitButton>

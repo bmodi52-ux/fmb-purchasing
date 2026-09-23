@@ -80,7 +80,7 @@ export function MergePanel({
                 className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gold/30 bg-gold/5 px-3 py-2 text-sm"
               >
                 <span>
-                  <span className="font-mono text-xs text-ink/50">{c.itemNumber ?? "—"}</span>{" "}
+                  <span className="tabular-nums text-xs text-ink/50">{c.itemNumber ?? "—"}</span>{" "}
                   <span className="text-ink">{c.name}</span>
                   {c.categoryLabel && <span className="ml-1 text-xs text-ink/40">({c.categoryLabel})</span>}
                   <span className="ml-2 text-xs text-ink/40">{Math.round(c.score * 100)}% similar</span>
@@ -89,7 +89,7 @@ export function MergePanel({
                   <button
                     type="button"
                     onClick={() => setTarget({ id: c.id, label: `${c.itemNumber ?? ""} ${c.name}`.trim() })}
-                    className="rounded-md border border-ink/15 px-3 py-1 text-xs hover:border-ink/30"
+                    className="btn btn-secondary btn-xs"
                   >
                     Merge into this
                   </button>
@@ -148,7 +148,7 @@ export function MergePanel({
             <button
               type="button"
               onClick={() => setTarget(null)}
-              className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30"
+              className="btn btn-secondary"
             >
               Cancel
             </button>
@@ -192,7 +192,7 @@ export function SearchBox({
                 className="flex w-full flex-col items-start rounded-md border border-ink/10 px-3 py-2 text-left text-sm hover:border-ink/30"
               >
                 <span className="text-ink">
-                  <span className="font-mono text-xs text-ink/50">{r.itemNumber ?? "—"}</span> {r.name}
+                  <span className="tabular-nums text-xs text-ink/50">{r.itemNumber ?? "—"}</span> {r.name}
                 </span>
                 <span className="text-xs text-ink/40">
                   {r.categoryLabel ?? "no category"} · {r.packSizeCount} pack size(s)

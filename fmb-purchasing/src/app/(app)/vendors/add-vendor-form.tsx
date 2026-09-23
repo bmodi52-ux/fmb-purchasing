@@ -115,7 +115,7 @@ export function AddVendorForm({ onSuccess }: { onSuccess?: () => void }) {
                       className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-gold/10"
                     >
                       <span className="text-ink">{s.name}</span>
-                      <span className="font-mono text-xs text-ink/50">
+                      <span className="tabular-nums text-xs text-ink/50">
                         {s.abn ?? "no ABN"} ·{" "}
                         {s.source === "existing" ? `already in Vendors (${s.vendorNumber})` : "ABN Lookup"}
                       </span>
@@ -192,7 +192,7 @@ export function AddVendorForm({ onSuccess }: { onSuccess?: () => void }) {
         <p className="text-xs text-ink/40">More contacts can be added later on the vendor page.</p>
       </fieldset>
 
-      <SubmitButton disabled={pending} className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep disabled:opacity-60">
+      <SubmitButton disabled={pending} className="btn btn-primary btn-lg self-start">
         {pending ? "Adding…" : "Add vendor"}
       </SubmitButton>
 

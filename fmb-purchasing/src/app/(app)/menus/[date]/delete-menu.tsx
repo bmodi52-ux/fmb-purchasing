@@ -38,7 +38,7 @@ export function DeleteMenu({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-md border border-maroon/30 px-4 py-2 text-sm text-maroon hover:border-maroon/60 hover:bg-maroon/5"
+        className="btn btn-danger"
       >
         Delete this menu
       </button>
@@ -57,7 +57,7 @@ export function DeleteMenu({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30"
+              className="btn btn-secondary"
             >
               Keep it
             </button>

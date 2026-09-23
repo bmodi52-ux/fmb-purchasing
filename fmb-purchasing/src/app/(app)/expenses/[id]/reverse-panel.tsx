@@ -70,7 +70,7 @@ export function ReversePanel({
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="rounded-md border border-ink/15 px-3.5 py-1.5 text-sm text-ink/70 hover:border-ink/30"
+          className="btn btn-secondary btn-sm"
         >
           Cancel
         </button>

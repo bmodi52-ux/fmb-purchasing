@@ -65,7 +65,7 @@ export function AddProductModal({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="self-start whitespace-nowrap rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-gold-deep"
+        className="btn btn-primary self-start"
       >
         + Add product
       </button>
@@ -184,7 +184,7 @@ function PriceExistingForm({
                   >
                     <span className="text-ink">
                       {i.name}
-                      {i.itemNumber && <span className="ml-1.5 font-mono text-xs text-ink/45">{i.itemNumber}</span>}
+                      {i.itemNumber && <span className="ml-1.5 tabular-nums text-xs text-ink/45">{i.itemNumber}</span>}
                     </span>
                     <span className="text-xs text-ink/45">
                       {i.packs.length === 0
@@ -216,7 +216,7 @@ function PriceExistingForm({
           <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm">
             <span className="text-ink">
               {item.name}
-              {item.itemNumber && <span className="ml-1.5 font-mono text-xs text-ink/45">{item.itemNumber}</span>}
+              {item.itemNumber && <span className="ml-1.5 tabular-nums text-xs text-ink/45">{item.itemNumber}</span>}
             </span>
             <button
               type="button"
@@ -272,7 +272,7 @@ function PriceExistingForm({
                   </label>
                   <div className="flex w-36 shrink-0 flex-col gap-1 text-sm">
                     <span className="text-ink/70">Works out to</span>
-                    <div className="input flex items-center bg-ink/[0.03] font-mono text-ink/70">
+                    <div className="input flex items-center bg-ink/[0.03] tabular-nums text-ink/70">
                       {costPerUnit != null ? formatUnitCost(costPerUnit, pack.unitLabel) : "—"}
                     </div>
                   </div>
@@ -297,7 +297,7 @@ function PriceExistingForm({
 
               <SubmitButton
                 disabled={pending}
-                className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep disabled:opacity-60"
+                className="btn btn-primary btn-lg self-start"
               >
                 {pending ? "Saving…" : "Add pricing"}
               </SubmitButton>

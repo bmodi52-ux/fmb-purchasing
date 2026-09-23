@@ -405,7 +405,7 @@ export default async function ItemDetailPage({
             against the edge on a narrow screen. */}
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="page-title text-ink">{item.name}</h1>
-          <span className="font-mono text-sm text-ink/50">{item.item_number}</span>
+          <span className="tabular-nums text-sm text-ink/50">{item.item_number}</span>
           <StatusPill status={item.status as string} />
         </div>
         <p className="mt-1 text-sm text-ink/50">
@@ -437,7 +437,7 @@ export default async function ItemDetailPage({
         </p>
         {item.comments && <p className="mt-1 whitespace-pre-line text-sm text-ink/55">{item.comments}</p>}
 
-        <nav aria-label="Item sections" className="mt-5 flex gap-1 border-b border-ink/10">
+        <nav aria-label="Item sections" className="tabs mt-5">
           <TabLink href={`/pricelist/${item.id}`} active={tab === "overview"}>
             Overview
           </TabLink>
@@ -465,7 +465,7 @@ export default async function ItemDetailPage({
 
       {tab === "settings" && (
         <>
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-4 section-title text-ink">Details</h2>
         <form action={updateItem} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormResetBoundary>
@@ -510,14 +510,14 @@ export default async function ItemDetailPage({
           </label>
           </FormResetBoundary>
           {canEdit && (
-            <SubmitButton className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep sm:col-span-2">
+            <SubmitButton className="btn btn-primary btn-lg self-start sm:col-span-2">
               Save changes
             </SubmitButton>
           )}
         </form>
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">Buying</h2>
         <p className="mb-4 text-sm text-ink/50">
           {cheapestRecent
@@ -554,7 +554,7 @@ export default async function ItemDetailPage({
 
       {tab === "overview" && (
         <>
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">What we&apos;ve actually paid</h2>
         <p className="mb-4 text-sm text-ink/50">
           Derived from submitted receipts rather than quoted pricelist prices — this is the figure that will cost a
@@ -596,7 +596,7 @@ export default async function ItemDetailPage({
                           className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 rounded-md border border-ink/10 bg-white px-3 py-2"
                         >
                           <span className="text-ink">{packSizeLabelById.get(p.id)}</span>
-                          <span className="font-mono text-ink/70">
+                          <span className="tabular-nums text-ink/70">
                             most recent {formatPackPrice(prices.latest, shape)} · average{" "}
                             {formatPackPrice(prices.average, shape)}
                             <span className="ml-2 text-ink/40">
@@ -624,7 +624,7 @@ export default async function ItemDetailPage({
         )}
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-4 section-title text-ink">Pack sizes &amp; vendor offers</h2>
         <div className="flex flex-col gap-5">
           {(packSizes ?? []).map((p) => {
@@ -647,10 +647,10 @@ export default async function ItemDetailPage({
                         {o.vendor_id ? vendorNameById.get(o.vendor_id) : "— no vendor —"}
                       </span>
                       {o.brand && <span className="ml-1 text-xs text-ink/40">({o.brand})</span>}
-                      {o.vendor_sku && <span className="ml-1 font-mono text-xs text-ink/40">#{o.vendor_sku}</span>}
-                      <StatusBadge status={o.status} />
+                      {o.vendor_sku && <span className="ml-1 tabular-nums text-xs text-ink/40">#{o.vendor_sku}</span>}
+                      <OfferStatus status={o.status} />
                     </div>
-                    <span className="font-mono text-ink/70">
+                    <span className="tabular-nums text-ink/70">
                       {o.pack_price != null ? formatPackPrice(Number(o.pack_price), packShapeOf(p)) : "—"}
                       {cost?.cost_per_base_unit != null && (
                         <span className="ml-2 text-ink/50">
@@ -674,14 +674,14 @@ export default async function ItemDetailPage({
                       <form action={reviewOffer}>
                         <input type="hidden" name="offer_id" value={o.id} />
                         <input type="hidden" name="decision" value="approved" />
-                        <SubmitButton className="text-xs text-palm hover:underline">
+                        <SubmitButton className="btn btn-approve btn-xs">
                           Approve
                         </SubmitButton>
                       </form>
                       <form action={reviewOffer}>
                         <input type="hidden" name="offer_id" value={o.id} />
                         <input type="hidden" name="decision" value="rejected" />
-                        <SubmitButton className="text-xs text-maroon/70 hover:underline">
+                        <SubmitButton className="btn btn-danger btn-xs">
                           Reject
                         </SubmitButton>
                       </form>
@@ -890,7 +890,7 @@ export default async function ItemDetailPage({
                 defaults={{ soldAs: "", innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
               />
             </FormResetBoundary>
-            <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+            <SubmitButton className="btn btn-secondary self-start">
               + Add pack size
             </SubmitButton>
           </form>
@@ -901,7 +901,7 @@ export default async function ItemDetailPage({
 
       {tab === "settings" && (
         <>
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">Vendor item descriptions</h2>
         <p className="mb-4 text-sm text-ink/50">
           What receipts call this item. A submitted receipt is matched here first, so this is how the item keeps
@@ -965,7 +965,7 @@ export default async function ItemDetailPage({
                 ))}
               </select>
             </label>
-            <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+            <SubmitButton className="btn btn-secondary">
               + Add description
             </SubmitButton>
           </form>
@@ -973,7 +973,7 @@ export default async function ItemDetailPage({
       </section>
 
       {canEdit && (
-        <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <section className="card p-5">
           <h2 className="mb-1 section-title text-ink">Duplicates</h2>
           <p className="mb-4 text-sm text-ink/50">
             Receipts create a new item whenever the wording differs, so the same product can end up recorded twice with
@@ -994,7 +994,7 @@ export default async function ItemDetailPage({
       )}
 
       {tab === "history" && (
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-4 section-title text-ink">Item change history</h2>
         {(itemHistory ?? []).length === 0 ? (
           <p className="text-sm text-ink/50">No changes recorded yet.</p>
@@ -1063,11 +1063,11 @@ function DescriptionSourceLine({
       <span>
         From{" "}
         {open ? (
-          <Link href={`/expenses/${latest.expenseId}`} className="font-mono underline hover:text-ink">
+          <Link href={`/expenses/${latest.expenseId}`} className="tabular-nums font-medium underline-offset-2 hover:underline hover:text-ink">
             {label}
           </Link>
         ) : (
-          <span className="font-mono">{label}</span>
+          <span className="tabular-nums">{label}</span>
         )}
         {latest.date && <> on {formatPlainDate(latest.date.slice(0, 10))}</>}
         {expenseCount > 1 && <> · on {expenseCount} receipts in all</>}
@@ -1082,17 +1082,20 @@ function DescriptionSourceLine({
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function OfferStatus({ status }: { status: string }) {
   if (status === "approved") return null;
-  const color = status === "rejected" ? "text-maroon/70" : "text-gold-deep";
-  return <span className={`ml-2 text-xs ${color}`}>{status}</span>;
+  return (
+    <span className="ml-2">
+      <StatusPill status={status} />
+    </span>
+  );
 }
 
 function Stat({ label, value, note }: { label: string; value: string; note?: React.ReactNode }) {
   return (
     <div className="rounded-md border border-ink/10 bg-white p-3">
       <p className="text-xs uppercase tracking-wide text-ink/40">{label}</p>
-      <p className="mt-1 font-mono text-base break-words text-ink">{value}</p>
+      <p className="mt-1 tabular-nums text-base break-words text-ink">{value}</p>
       {note && <p className="text-xs text-ink/50">{note}</p>}
     </div>
   );

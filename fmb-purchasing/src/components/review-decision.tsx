@@ -63,14 +63,14 @@ export function ReviewDecision({
         <SubmitButton
           name="decision"
           value={approveValue}
-          className="rounded-md bg-palm/90 px-4 py-2 text-sm font-medium text-white hover:bg-palm"
+          className="btn btn-approve"
         >
           {approveLabel}
         </SubmitButton>
         <SubmitButton
           name="decision"
           value={rejectValue}
-          className="rounded-md border border-maroon/40 px-4 py-2 text-sm font-medium text-maroon hover:bg-maroon/5"
+          className="btn btn-danger"
         >
           {rejectLabel}
         </SubmitButton>
@@ -80,24 +80,5 @@ export function ReviewDecision({
   );
 }
 
-/** The colours every status badge in the app already uses. */
-const STATUS_CLASS: Record<string, string> = {
-  approved: "bg-palm/15 text-palm",
-  rejected: "bg-maroon/10 text-maroon",
-  declined: "bg-maroon/10 text-maroon",
-  pending: "bg-gold/20 text-gold-deep",
-  submitted: "bg-gold/20 text-gold-deep",
-};
-
-/** Where a record stands, said the same way on every page that shows one. */
-export function StatusPill({ status, label }: { status: string; label?: string }) {
-  return (
-    <span
-      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-        STATUS_CLASS[status] ?? "bg-ink/10 text-ink/70"
-      }`}
-    >
-      {label ?? status}
-    </span>
-  );
-}
+/** Kept under its old name for the record pages that import it from here. */
+export { StatusBadge as StatusPill } from "./status-badge";

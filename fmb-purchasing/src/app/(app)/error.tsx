@@ -47,7 +47,7 @@ export default function AppError({
         <button
           type="button"
           onClick={() => retry()}
-          className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-gold-deep hover:text-white"
+          className="btn btn-primary"
         >
           Try again
         </button>
@@ -59,7 +59,7 @@ export default function AppError({
       {error.digest && (
         <p className="mt-2 text-xs text-ink/45">
           If it keeps happening, quote this reference:{" "}
-          <span className="font-mono text-ink/70">{error.digest}</span>
+          <span className="tabular-nums text-ink/70">{error.digest}</span>
         </p>
       )}
     </div>

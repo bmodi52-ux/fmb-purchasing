@@ -128,7 +128,7 @@ export default async function SavedMenuPage({
       )}
 
       {canManage && (
-        <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <section className="card p-5">
           <h2 className="mb-3 section-title text-ink">{menu.saved ? "Name" : "Save to use again"}</h2>
           <form action={saveMenu} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="saved_menu_id" value={menu.id} />
@@ -149,14 +149,14 @@ export default async function SavedMenuPage({
                 </label>
               )}
             </FormResetBoundary>
-            <SubmitButton className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep">
+            <SubmitButton className="btn btn-primary">
               {menu.saved ? "Rename" : "Save menu"}
             </SubmitButton>
           </form>
         </section>
       )}
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">For how many</h2>
         <p className="mb-4 text-sm text-ink/55">
           The estimate is worked out for this count. When the menu is put on a day that has no count yet, the day starts
@@ -182,7 +182,7 @@ export default async function SavedMenuPage({
             </label>
           </FormResetBoundary>
           {canManage && (
-            <SubmitButton className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep">
+            <SubmitButton className="btn btn-primary">
               Save
             </SubmitButton>
           )}
@@ -230,7 +230,7 @@ export default async function SavedMenuPage({
         </>
       )}
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">Estimate</h2>
         <p className="mb-4 text-sm text-ink/55">
           {simple ? "What was typed in, priced." : `Worked out from the recipes for ${thaalis} ${thaalis === 1 ? "thaali" : "thaalis"}.`}{" "}
@@ -251,7 +251,7 @@ export default async function SavedMenuPage({
                   <span className="text-alert"> · {cost.unpriced} with no price, so this is less than the real cost</span>
                 )}
               </span>
-              <span className="font-mono text-lg text-ink">
+              <span className="tabular-nums text-lg text-ink">
                 {money(cost.total)}
                 {cost.perThaali != null && (
                   <span className="ml-2 text-sm text-ink/60">· {money(cost.perThaali)} a thaali</span>
@@ -263,7 +263,7 @@ export default async function SavedMenuPage({
       </section>
 
       {canManage && (
-        <section id="put-on-days" className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <section id="put-on-days" className="card p-5">
           <h2 className="mb-1 section-title text-ink">Put it on days</h2>
           <p className="mb-4 text-sm text-ink/55">
             Pick one day or several. Each gets its own copy of this menu, which can then be changed on the day.
@@ -277,7 +277,7 @@ export default async function SavedMenuPage({
       )}
 
       {canManage && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
+        <section className="flex flex-wrap items-center justify-between gap-3 card p-4 text-sm">
           <p className="text-ink/60">
             {menu.saved
               ? "Deleting this doesn't touch days already planned from it."
@@ -287,7 +287,7 @@ export default async function SavedMenuPage({
             <input type="hidden" name="saved_menu_id" value={menu.id} />
             <SubmitButton
               pendingLabel="Deleting…"
-              className="rounded-md border border-maroon/30 px-4 py-2 text-sm text-maroon hover:border-maroon/60 hover:bg-maroon/5"
+              className="btn btn-danger"
             >
               {menu.saved ? "Delete this saved menu" : "Discard"}
             </SubmitButton>

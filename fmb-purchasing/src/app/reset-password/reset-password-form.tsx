@@ -55,7 +55,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="mt-1 rounded-md bg-gold px-4 py-2 font-medium text-ink transition-colors hover:bg-gold-deep disabled:opacity-60"
+        className="btn btn-primary mt-1"
       >
         {pending ? "Saving…" : "Save password"}
       </button>

@@ -37,7 +37,7 @@ export function XeroExportButton({ period, basis }: { period: string; basis: Bas
         type="button"
         onClick={download}
         disabled={busy}
-        className="self-start rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep disabled:opacity-60"
+        className="btn btn-primary self-start"
       >
         {busy ? "Making the file…" : "Download Xero bills file"}
       </button>

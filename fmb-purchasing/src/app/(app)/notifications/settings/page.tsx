@@ -69,7 +69,7 @@ export default async function NotificationSettingsPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="section-title text-ink">Push on this device</h2>
-        <div className="rounded-lg border border-ink/10 bg-white/60 p-4">
+        <div className="card p-4">
           <PushDevices publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null} />
           {(devices ?? []).length > 0 && (
             <ul className="mt-4 flex flex-col divide-y divide-ink/5 border-t border-ink/10 pt-2 text-sm">
@@ -102,7 +102,7 @@ export default async function NotificationSettingsPage() {
             </form>
           )}
         </div>
-        <div className="overflow-x-auto rounded-lg border border-ink/10 bg-white/60">
+        <div className="overflow-x-auto card">
           <table className="min-w-full text-sm">
             <thead className="border-b border-ink/10 text-left text-xs text-ink/55">
               <tr>

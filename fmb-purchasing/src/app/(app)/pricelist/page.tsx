@@ -215,25 +215,25 @@ export default async function PricelistPage() {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Link
                 href="/pricelist/categories"
-                className="rounded-md border border-ink/15 bg-white/60 px-3 py-1.5 text-sm text-ink/80 transition-colors hover:border-ink/30 hover:text-ink"
+                className="btn btn-secondary btn-sm"
               >
                 Manage categories
               </Link>
               <Link
                 href="/pricelist/units"
-                className="rounded-md border border-ink/15 bg-white/60 px-3 py-1.5 text-sm text-ink/80 transition-colors hover:border-ink/30 hover:text-ink"
+                className="btn btn-secondary btn-sm"
               >
                 Manage units
               </Link>
               <Link
                 href="/pricelist/price-alerts"
-                className="rounded-md border border-ink/15 bg-white/60 px-3 py-1.5 text-sm text-ink/80 transition-colors hover:border-ink/30 hover:text-ink"
+                className="btn btn-secondary btn-sm"
               >
                 Price alerts
               </Link>
               <Link
                 href="/pricelist/add-by-photo"
-                className="rounded-md border border-ink/15 bg-white/60 px-3 py-1.5 text-sm text-ink/80 transition-colors hover:border-ink/30 hover:text-ink"
+                className="btn btn-secondary btn-sm"
               >
                 Import a price list
               </Link>
@@ -263,7 +263,7 @@ export default async function PricelistPage() {
             {uncategorisedItems!.map((i) => (
               <li key={i.id as string}>
                 <Link href={`/pricelist/${i.id}`} className="text-ink underline">
-                  <span className="font-mono text-xs text-ink/50">{(i.item_number as string) ?? "—"}</span>{" "}
+                  <span className="tabular-nums text-xs text-ink/50">{(i.item_number as string) ?? "—"}</span>{" "}
                   {i.name as string}
                 </Link>
               </li>

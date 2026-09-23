@@ -130,7 +130,7 @@ export function PrintButton({
               type="button"
               onClick={handleDownload}
               disabled={busy || nothingChosen}
-              className="rounded-md bg-gold px-3 py-1.5 text-xs font-medium text-ink transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="btn btn-primary btn-sm"
             >
               {busy ? "Generating…" : "Download PDF"}
             </button>

@@ -115,7 +115,7 @@ export function VendorProducts({
       </div>
 
       {live.length === 0 ? (
-        <p className="rounded-lg border border-ink/10 bg-white/60 p-5 text-sm text-ink/50">
+        <p className="card p-5 text-sm text-ink/50">
           No products recorded for {vendorName} yet.{" "}
           {actions
             ? "Add one, or photograph a price tag or their price list."
@@ -165,7 +165,7 @@ export function VendorProducts({
                   {group.items.map((packs) => {
                     const first = packs[0]!;
                     return (
-                      <li key={first.itemId} className="rounded-lg border border-ink/10 bg-white/60">
+                      <li key={first.itemId} className="card">
                         <div className="flex flex-wrap items-baseline gap-x-2 border-b border-ink/5 px-3 py-2">
                           {canViewPricelist ? (
                             <Link href={`/pricelist/${first.itemId}`} className="font-medium text-ink hover:underline">
@@ -174,7 +174,7 @@ export function VendorProducts({
                           ) : (
                             <span className="font-medium text-ink">{first.itemName}</span>
                           )}
-                          {first.itemNumber && <span className="font-mono text-xs text-ink/45">{first.itemNumber}</span>}
+                          {first.itemNumber && <span className="tabular-nums text-xs text-ink/45">{first.itemNumber}</span>}
                         </div>
                         <ul className="divide-y divide-ink/5">
                           {packs.map((r) => (
@@ -289,7 +289,7 @@ function PackLine({
                 className="input w-24 py-1"
               />
             </label>
-            <SubmitButton className="rounded-md bg-gold px-3 py-1.5 text-sm font-medium text-ink hover:bg-gold-deep">
+            <SubmitButton className="btn btn-primary btn-sm">
               Save
             </SubmitButton>
             <button type="button" onClick={onDoneEditing} className="px-1 py-1.5 text-xs text-ink/55 underline">
@@ -299,10 +299,10 @@ function PackLine({
         ) : (
           <>
             <span className="text-right">
-              <span className="block font-mono text-sm text-ink">
+              <span className="block tabular-nums text-sm text-ink">
                 {r.price ?? <span className="font-sans text-gold-deep">No price yet</span>}
               </span>
-              {r.perUnit && <span className="block font-mono text-xs text-ink/50">{r.perUnit}</span>}
+              {r.perUnit && <span className="block tabular-nums text-xs text-ink/50">{r.perUnit}</span>}
             </span>
             {canEdit && (
               <button type="button" onClick={onEdit} className="px-1 py-1.5 text-xs text-ink/60 underline hover:text-ink">
@@ -320,12 +320,12 @@ function PackLine({
                 <form action={reviewOffer}>
                   <input type="hidden" name="offer_id" value={r.offerId} />
                   <input type="hidden" name="decision" value="approved" />
-                  <SubmitButton className="px-1 py-1.5 text-xs text-palm hover:underline">Approve</SubmitButton>
+                  <SubmitButton className="btn btn-approve btn-xs">Approve</SubmitButton>
                 </form>
                 <form action={reviewOffer}>
                   <input type="hidden" name="offer_id" value={r.offerId} />
                   <input type="hidden" name="decision" value="rejected" />
-                  <SubmitButton className="px-1 py-1.5 text-xs text-maroon/70 hover:underline">Reject</SubmitButton>
+                  <SubmitButton className="btn btn-danger btn-xs">Reject</SubmitButton>
                 </form>
               </>
             )}

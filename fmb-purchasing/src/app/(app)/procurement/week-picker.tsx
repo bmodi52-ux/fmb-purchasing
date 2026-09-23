@@ -66,7 +66,7 @@ export function WeekPicker({
         {Object.entries(hidden).map(([key, value]) =>
           value ? <input key={key} type="hidden" name={key} value={value} /> : null
         )}
-        <SubmitButton className="rounded-md border border-ink/15 px-3 py-1.5 hover:border-ink/30">Show</SubmitButton>
+        <SubmitButton className="btn btn-secondary btn-sm">Show</SubmitButton>
       </form>
     </div>
   );

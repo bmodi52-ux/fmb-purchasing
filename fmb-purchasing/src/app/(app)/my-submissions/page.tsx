@@ -60,7 +60,7 @@ export default async function MySubmissionsPage() {
         </div>
         <Link
           href="/submit"
-          className="self-start whitespace-nowrap rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-gold-deep"
+          className="btn btn-primary self-start"
         >
           + Submit another expense
         </Link>
@@ -68,16 +68,16 @@ export default async function MySubmissionsPage() {
 
       {(waiting.length > 0 || unpaid.length > 0) && (
         <dl className="grid grid-cols-2 gap-3 sm:max-w-lg">
-          <div className="rounded-lg border border-ink/10 bg-white/60 p-3">
+          <div className="card p-3">
             <dt className="text-xs text-ink/55">Waiting for approval</dt>
-            <dd className="mt-0.5 font-mono text-lg font-semibold text-ink">{money(sum(waiting))}</dd>
+            <dd className="mt-0.5 tabular-nums text-lg font-semibold text-ink">{money(sum(waiting))}</dd>
             <dd className="text-xs text-ink/45">
               {waiting.length} {waiting.length === 1 ? "expense" : "expenses"}
             </dd>
           </div>
-          <div className="rounded-lg border border-ink/10 bg-white/60 p-3">
+          <div className="card p-3">
             <dt className="text-xs text-ink/55">Approved, not yet paid</dt>
-            <dd className="mt-0.5 font-mono text-lg font-semibold text-ink">{money(sum(unpaid))}</dd>
+            <dd className="mt-0.5 tabular-nums text-lg font-semibold text-ink">{money(sum(unpaid))}</dd>
             <dd className="text-xs text-ink/45">
               {unpaid.length} {unpaid.length === 1 ? "expense" : "expenses"}
             </dd>

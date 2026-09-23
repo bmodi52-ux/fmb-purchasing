@@ -63,7 +63,7 @@ export function DishesSection({
 }) {
   const onMenu = new Set(dishes.map((d) => d.dishId));
   return (
-    <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+    <section className="card p-5">
       <h2 className="mb-4 section-title text-ink">Menu</h2>
 
       {dishes.length === 0 ? (
@@ -167,7 +167,7 @@ export function DishesSection({
                 </select>
               </label>
             </FormResetBoundary>
-            <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+            <SubmitButton className="btn btn-secondary">
               Add
             </SubmitButton>
           </form>
@@ -196,7 +196,7 @@ export function ExtrasSection({
   actions: { add: Action; remove: Action; setCounts: Action };
 }) {
   return (
-    <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+    <section className="card p-5">
       <div className="mb-3">
         <h2 className="section-title text-ink">Roti, fruit and anything else in the thaali</h2>
         <p className="mt-0.5 text-sm text-ink/55">
@@ -221,7 +221,7 @@ export function ExtrasSection({
                   </span>
                   <span className="text-ink/55">
                     {extra.perThaali} {extra.unitCode} each · {count} taking it ={" "}
-                    <span className="font-mono text-ink/70">
+                    <span className="tabular-nums text-ink/70">
                       {Math.round(extra.perThaali * count * 1000) / 1000} {extra.unitCode}
                     </span>
                   </span>
@@ -309,7 +309,7 @@ export function ExtrasSection({
               <input name="per_thaali" type="number" min="0.01" step="any" defaultValue="1" className="input w-24" />
             </label>
           </FormResetBoundary>
-          <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+          <SubmitButton className="btn btn-secondary">
             Add
           </SubmitButton>
         </form>
@@ -336,7 +336,7 @@ export function CostLinesTable({ lines }: { lines: CostedLine[] }) {
           {lines.map((line) => (
             <tr key={line.itemId} className="border-t border-ink/5">
               <td className="p-2 text-ink">{line.itemName}</td>
-              <td className="p-2 font-mono whitespace-nowrap text-ink/80">
+              <td className="p-2 tabular-nums whitespace-nowrap text-ink/80">
                 {line.quantity} {line.baseUnitCode}
               </td>
               <td className="p-2 whitespace-nowrap text-ink/60">
@@ -344,14 +344,14 @@ export function CostLinesTable({ lines }: { lines: CostedLine[] }) {
                   <span className="text-alert">no price yet</span>
                 ) : (
                   <>
-                    <span className="font-mono">
+                    <span className="tabular-nums">
                       {money(line.perUnit)}/{line.baseUnitCode}
                     </span>
                     <span className="block text-xs text-ink/45">{PRICE_BASIS_LABEL[line.basis]}</span>
                   </>
                 )}
               </td>
-              <td className="p-2 font-mono whitespace-nowrap text-ink/80">
+              <td className="p-2 tabular-nums whitespace-nowrap text-ink/80">
                 {line.cost == null ? "—" : money(line.cost)}
               </td>
               <td className="p-2 text-xs text-ink/50">{line.fromDishes.join(", ")}</td>

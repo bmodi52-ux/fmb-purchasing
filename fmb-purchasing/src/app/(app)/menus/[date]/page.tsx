@@ -208,7 +208,7 @@ export default async function MenuDayPage({
         )}
       </div>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">How many</h2>
         <p className="mb-4 text-sm text-ink/55">
           Buying is based on the planned count. The confirmed count arrives closer to the day; both are kept, so the
@@ -248,7 +248,7 @@ export default async function MenuDayPage({
             </label>
           </FormResetBoundary>
           {canManage && (
-            <SubmitButton className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep">
+            <SubmitButton className="btn btn-primary">
               Save
             </SubmitButton>
           )}
@@ -272,7 +272,7 @@ export default async function MenuDayPage({
       {canManage &&
         day &&
         ((dishes.length > 0 && thaalis > 0) || extras.length > 0 || typedLines.length > 0) && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
+        <section className="flex flex-wrap items-center justify-between gap-3 card p-4 text-sm">
           <div>
             <p className="text-ink">
               {day.status === "released"
@@ -291,7 +291,7 @@ export default async function MenuDayPage({
             <form action={releaseDay}>
               <input type="hidden" name="menu_day_id" value={day.id as string} />
               <input type="hidden" name="date" value={date} />
-              <SubmitButton className="rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep">
+              <SubmitButton className="btn btn-primary">
                 {day.status === "released" ? "Release again" : "Release"}
               </SubmitButton>
             </form>
@@ -299,14 +299,14 @@ export default async function MenuDayPage({
               <>
                 <Link
                   href={`/procurement?from=${date}&to=${date}&who=all`}
-                  className="rounded-md border border-ink/15 px-4 py-2 hover:border-ink/30"
+                  className="btn btn-secondary"
                 >
                   What to buy
                 </Link>
                 <form action={unreleaseDay}>
                   <input type="hidden" name="menu_day_id" value={day.id as string} />
                   <input type="hidden" name="date" value={date} />
-                  <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-ink/60 hover:border-ink/30">
+                  <SubmitButton className="btn btn-secondary">
                     Back to draft
                   </SubmitButton>
                 </form>
@@ -365,7 +365,7 @@ export default async function MenuDayPage({
                 </select>
               </label>
             </FormResetBoundary>
-            <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+            <SubmitButton className="btn btn-secondary">
               Copy here
             </SubmitButton>
           </form>
@@ -384,7 +384,7 @@ export default async function MenuDayPage({
       )}
 
       {canManage && (
-        <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <section className="card p-5">
           <h2 className="mb-1 section-title text-ink">Saved menus</h2>
           <p className="mb-4 text-sm text-ink/55">
             Use a menu kept for days like this one, or keep this day&apos;s menu to use again.{" "}
@@ -415,7 +415,7 @@ export default async function MenuDayPage({
                     </select>
                   </label>
                 </FormResetBoundary>
-                <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+                <SubmitButton className="btn btn-secondary">
                   {dayHasMenu ? "Add to this day" : "Use it"}
                 </SubmitButton>
               </form>
@@ -432,7 +432,7 @@ export default async function MenuDayPage({
                     <input type="checkbox" name="favourite" /> Favourite
                   </label>
                 </FormResetBoundary>
-                <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+                <SubmitButton className="btn btn-secondary">
                   Save
                 </SubmitButton>
               </form>
@@ -444,7 +444,7 @@ export default async function MenuDayPage({
         </section>
       )}
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">What it needs, and what it costs</h2>
         <p className="mb-4 text-sm text-ink/55">
           {simple ? (
@@ -493,7 +493,7 @@ export default async function MenuDayPage({
                   </span>
                 )}
               </span>
-              <span className="font-mono text-lg text-ink">
+              <span className="tabular-nums text-lg text-ink">
                 {money(cost.total)}
                 {cost.perThaali != null && (
                   <span className="ml-2 text-sm text-ink/60">· {money(cost.perThaali)} a thaali</span>
@@ -506,7 +506,7 @@ export default async function MenuDayPage({
 
       {/* Who changed what, and whether the lists had gone out yet (#15). */}
       {history.length > 0 && (
-        <details className="rounded-lg border border-ink/10 bg-white/60 p-4 text-sm" open={changedSinceRelease > 0}>
+        <details className="card p-4 text-sm" open={changedSinceRelease > 0}>
           <summary className="cursor-pointer text-ink">
             History
             <span className="ml-2 text-ink/50">
@@ -545,7 +545,7 @@ export default async function MenuDayPage({
       )}
 
       {canManage && day && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
+        <section className="flex flex-wrap items-center justify-between gap-3 card p-4 text-sm">
           <p className="text-ink/60">Start this day again, or take it off the calendar.</p>
           <DeleteMenu
             dayId={day.id as string}

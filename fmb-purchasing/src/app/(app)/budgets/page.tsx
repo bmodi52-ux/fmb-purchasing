@@ -149,7 +149,7 @@ export default async function BudgetsPage({
         <PeriodPicker value={period.code} today={today} earliest={earliest} />
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-8 gap-y-2 rounded-xl border border-ink/10 bg-white/60 px-5 py-4">
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-2 card px-5 py-4">
         <Figure label="Budgeted" value={totalBudget > 0 ? money(totalBudget) : "Not set"} />
         <Figure label="Paid" value={money(rows.reduce((s, r) => s + r.paid, 0))} />
         <Figure label="Committed" value={money(rows.reduce((s, r) => s + r.committed, 0))} />
@@ -181,7 +181,7 @@ export default async function BudgetsPage({
       {canCopy && (
         <form action={copyBudgetsFromPrevious}>
           <input type="hidden" name="period" value={period.code} />
-          <SubmitButton className="rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30">
+          <SubmitButton className="btn btn-secondary">
             Start from {previous.label}&rsquo;s budgets
           </SubmitButton>
         </form>
@@ -192,7 +192,7 @@ export default async function BudgetsPage({
       {(changeRows ?? []).length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="section-title text-ink">Recent budget changes</h2>
-          <ol className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60 text-sm">
+          <ol className="flex flex-col divide-y divide-ink/5 card text-sm">
             {(changeRows ?? []).map((c) => (
               <li key={c.id} className="flex flex-col gap-0.5 px-4 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
                 <span className="text-ink">
@@ -201,7 +201,7 @@ export default async function BudgetsPage({
                   {c.kind === "moved_by_override" && c.caused_by_label ? ` ${c.caused_by_label}` : ""}
                   {c.kind === "set" && c.caused_by_label ? ` (${c.caused_by_label})` : ""}
                   {" — "}
-                  <span className="font-mono">
+                  <span className="tabular-nums">
                     {c.from_amount != null ? money(Number(c.from_amount)) : "none"} →{" "}
                     {c.to_amount != null ? money(Number(c.to_amount)) : "none"}
                   </span>

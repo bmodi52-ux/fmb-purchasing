@@ -90,7 +90,7 @@ export default async function PaymentsPage() {
         </div>
         <a
           href="/payments/reconcile"
-          className="self-start whitespace-nowrap rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/75 hover:border-ink/30"
+          className="btn btn-secondary self-start"
         >
           Check against a bank statement
         </a>

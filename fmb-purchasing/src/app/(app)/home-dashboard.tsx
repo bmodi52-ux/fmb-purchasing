@@ -116,7 +116,7 @@ export function HomeDashboard({
       </div>
 
       {ordered.length === 0 ? (
-        <p className="rounded-xl border border-ink/10 bg-white/60 px-4 py-8 text-center text-sm text-ink/55">
+        <p className="card px-4 py-8 text-center text-sm text-ink/55">
           Nothing pinned yet. Add a chart or table to build your own view of Reports.
         </p>
       ) : (
@@ -176,7 +176,7 @@ function SortableWidgetCard({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
-      className="rounded-xl border border-ink/10 bg-white/60 p-4"
+      className="card p-4"
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-2">

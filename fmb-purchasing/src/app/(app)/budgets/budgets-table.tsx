@@ -103,7 +103,7 @@ export function BudgetsTable({
                     placeholder={derived ? money(row.budget!) : "—"}
                   />
                 ) : (
-                  <span className="font-mono text-ink/70">{row.budget === null ? "—" : money(row.budget)}</span>
+                  <span className="tabular-nums text-ink/70">{row.budget === null ? "—" : money(row.budget)}</span>
                 )}
                 <BudgetNote share={share} exact={!!share?.exact} />
                 {canEdit && share?.exact && canPhase(share.exact.periodCode) && period.calendar && period.year !== null && (
@@ -114,10 +114,10 @@ export function BudgetsTable({
                   />
                 )}
               </td>
-              <td className="px-4 py-2.5 text-right font-mono tabular-figures text-ink/80">{money(row.paid)}</td>
-              <td className="px-4 py-2.5 text-right font-mono tabular-figures text-ink/60">{money(row.committed)}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums tabular-figures text-ink/80">{money(row.paid)}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums tabular-figures text-ink/60">{money(row.committed)}</td>
               <td
-                className={`px-4 py-2.5 text-right font-mono tabular-figures ${over ? "text-maroon" : "text-ink/80"}`}
+                className={`px-4 py-2.5 text-right tabular-nums tabular-figures ${over ? "text-maroon" : "text-ink/80"}`}
               >
                 {row.budget === null ? "—" : money(row.budget - row.spent)}
               </td>
@@ -169,7 +169,7 @@ function UsageBar({ pct }: { pct: number | null }) {
       <div className="h-1.5 w-24 overflow-hidden rounded-full bg-ink/10" aria-hidden="true">
         <div className={`h-full rounded-full ${over ? "bg-maroon" : "bg-gold-deep"}`} style={{ width: `${width}%` }} />
       </div>
-      <span className={`font-mono text-xs ${over ? "text-maroon" : "text-ink/55"}`}>{Math.round(pct * 100)}%</span>
+      <span className={`tabular-nums text-xs ${over ? "text-maroon" : "text-ink/55"}`}>{Math.round(pct * 100)}%</span>
     </div>
   );
 }

@@ -94,7 +94,7 @@ export function ColumnFilterBar<T>({
         <button
           type="button"
           onClick={() => setFilters({})}
-          className="ml-1 rounded-md border border-ink/15 px-2 py-1 hover:border-ink/30"
+          className="btn btn-secondary btn-xs ml-1"
         >
           Clear {active} {active === 1 ? "filter" : "filters"}
         </button>

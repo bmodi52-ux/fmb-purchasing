@@ -75,7 +75,7 @@ export default async function NotificationsAdminPage() {
         <h2 className="section-title text-ink">Send an announcement</h2>
         <AnnouncementForm teams={teamOptions} people={peopleOptions} />
         {(announcements ?? []).length > 0 && (
-          <ul className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60 text-sm">
+          <ul className="flex flex-col divide-y divide-ink/5 card text-sm">
             {(announcements ?? []).map((a) => (
               <li key={a.id} className="flex flex-col gap-0.5 px-4 py-2 sm:flex-row sm:items-baseline sm:justify-between">
                 <span className="text-ink">{a.title}</span>
@@ -92,7 +92,7 @@ export default async function NotificationsAdminPage() {
       <section className="flex flex-col gap-3">
         <h2 className="section-title text-ink">Alerts</h2>
         {(rules ?? []).length > 0 && (
-          <ul className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60 text-sm">
+          <ul className="flex flex-col divide-y divide-ink/5 card text-sm">
             {(rules ?? []).map((r) => {
               const c = (r.conditions ?? {}) as { minAmount?: number; categoryIds?: string[]; vendorIds?: string[]; budgetPercent?: number };
               const rec = (r.recipients ?? {}) as { teamIds?: string[]; userIds?: string[] };
@@ -149,7 +149,7 @@ export default async function NotificationsAdminPage() {
           </p>
         </div>
         {teamOptions.map((team) => (
-          <details key={team.id} className="rounded-lg border border-ink/10 bg-white/60">
+          <details key={team.id} className="card">
             <summary className="cursor-pointer px-4 py-2.5 text-sm font-medium text-ink">{team.label}</summary>
             <div className="overflow-x-auto border-t border-ink/10">
               <table className="min-w-full text-sm">

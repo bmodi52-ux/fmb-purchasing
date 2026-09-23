@@ -113,7 +113,7 @@ export function OfferForm({
           </label>
           <div className="flex w-36 shrink-0 flex-col gap-1 text-sm">
             <span className="text-ink/70">Works out to</span>
-            <div className="input flex items-center bg-ink/[0.03] font-mono text-ink/70">
+            <div className="input flex items-center bg-ink/[0.03] tabular-nums text-ink/70">
               {costPerUnit != null ? formatUnitCost(costPerUnit, innerUnitLabel) : "—"}
             </div>
           </div>
@@ -125,7 +125,7 @@ export function OfferForm({
         <textarea name="comments" defaultValue={comments ?? ""} rows={2} className="input" />
       </label>
 
-      <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+      <SubmitButton className="btn btn-secondary self-start">
         {submitLabel}
       </SubmitButton>
       </FormResetBoundary>

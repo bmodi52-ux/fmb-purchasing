@@ -123,7 +123,7 @@ function MatchSummary({
                 className="rounded border border-ink/15 bg-white px-2 py-0.5 text-ink hover:border-ink/40"
               >
                 {a.itemName}
-                {a.itemNumber && <span className="ml-1 font-mono text-ink/40">{a.itemNumber}</span>}
+                {a.itemNumber && <span className="ml-1 tabular-nums text-ink/40">{a.itemNumber}</span>}
               </button>
             ))}
           </>
@@ -139,7 +139,7 @@ function MatchSummary({
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className={`font-medium ${sure ? "text-palm" : "text-gold-deep"}`}>{sure ? "✓ Pricelist:" : "Check:"}</span>
       <span className="text-ink">{match.itemName}</span>
-      {match.itemNumber && <span className="font-mono text-ink/45">{match.itemNumber}</span>}
+      {match.itemNumber && <span className="tabular-nums text-ink/45">{match.itemNumber}</span>}
 
       {/* A dropdown even when the item has one pack: the pack it has may not
           be the one on this line, and that used to be filed silently against
