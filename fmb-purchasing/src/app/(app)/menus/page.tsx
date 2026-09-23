@@ -282,7 +282,7 @@ export default async function MenuCalendarPage({
                           <span className={`font-medium ${cell.inCurrentMonth ? "text-ink" : ""}`}>
                             {cell.gregorian.getDate()}
                           </span>
-                          <span className="text-[0.65rem] text-ink/45">{formatHijri(cell.hijri)}</span>
+                          <span className="text-[0.7rem] text-ink/45">{formatHijri(cell.hijri)}</span>
                         </Link>
                         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-1">
                           {entries.length === 0 && cell.inCurrentMonth && (
@@ -300,7 +300,7 @@ export default async function MenuCalendarPage({
                               className="rounded border border-ink/10 bg-cream/60 px-1.5 py-1 hover:border-ink/30"
                             >
                               {showing.length > 1 && (
-                                <span className="block truncate text-[0.65rem] text-ink/45">{entry.kitchenName}</span>
+                                <span className="block truncate text-[0.7rem] text-ink/45">{entry.kitchenName}</span>
                               )}
                               <span className="line-clamp-2 text-ink/75">
                                 {entry.dishes.map((d) => d.dishName).join(", ") || "No dishes yet"}

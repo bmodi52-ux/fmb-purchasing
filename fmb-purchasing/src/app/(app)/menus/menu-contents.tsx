@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
+import { PickByName } from "@/components/pick-by-name";
 import {
   batchesFor,
   boxesFor,
@@ -64,10 +65,10 @@ export function DishesSection({
   const onMenu = new Set(dishes.map((d) => d.dishId));
   return (
     <section className="card p-5">
-      <h2 className="mb-4 section-title text-ink">Menu</h2>
+      <h2 className="mb-4 section-title text-ink">Dishes</h2>
 
       {dishes.length === 0 ? (
-        <p className="text-sm text-ink/55">No dishes yet.</p>
+        <p className="text-sm text-ink/55">No dishes yet.{canManage && " Add the first below."}</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {dishes.map((dish) => {
@@ -132,7 +133,7 @@ export function DishesSection({
                         />
                       </label>
                     </FormResetBoundary>
-                    <SubmitButton className="rounded border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
+                    <SubmitButton className="btn btn-secondary btn-xs">
                       Save
                     </SubmitButton>
                     <span className="text-xs text-ink/40">
@@ -153,18 +154,13 @@ export function DishesSection({
             <FormResetBoundary>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-ink/70">Add a dish</span>
-                <select name="dish_id" required defaultValue="" className="input">
-                  <option value="" disabled>
-                    — choose —
-                  </option>
-                  {allDishes
-                    .filter((d) => !onMenu.has(d.id))
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                </select>
+                <PickByName
+                  name="dish_id"
+                  required
+                  placeholder="Start typing a dish"
+                  options={allDishes.filter((d) => !onMenu.has(d.id))}
+                  className="input w-64"
+                />
               </label>
             </FormResetBoundary>
             <SubmitButton className="btn btn-secondary">
@@ -198,11 +194,9 @@ export function ExtrasSection({
   return (
     <section className="card p-5">
       <div className="mb-3">
-        <h2 className="section-title text-ink">Roti, fruit and anything else in the thaali</h2>
+        <h2 className="section-title text-ink">Roti, fruit and extras</h2>
         <p className="mt-0.5 text-sm text-ink/55">
-          Parts that are bought rather than cooked. How much goes in a thaali is set here and is the same for everyone
-          who takes it: a day of half a roti is half a roti, and somebody takes that or takes none. Only the number of
-          takers varies.
+          Bought, not cooked. Set how much goes in one thaali; only how many take it varies.
         </p>
       </div>
 
@@ -268,7 +262,7 @@ export function ExtrasSection({
                         />
                       </label>
                     </FormResetBoundary>
-                    <SubmitButton className="rounded border border-ink/15 px-2 py-1 text-xs hover:border-ink/30">
+                    <SubmitButton className="btn btn-secondary btn-xs">
                       Save
                     </SubmitButton>
                   </form>
@@ -293,16 +287,13 @@ export function ExtrasSection({
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-ink/70">Item</span>
-              <select name="item_id" required defaultValue="" className="input max-w-xs">
-                <option value="" disabled>
-                  — choose —
-                </option>
-                {allItems.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name}
-                  </option>
-                ))}
-              </select>
+              <PickByName
+                name="item_id"
+                required
+                placeholder="Start typing an item"
+                options={allItems}
+                className="input w-64"
+              />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-ink/70">How much each</span>

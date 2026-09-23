@@ -38,7 +38,7 @@ export function DeleteMenu({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="btn btn-danger"
+        className="btn btn-quiet btn-xs text-maroon"
       >
         Delete this menu
       </button>
