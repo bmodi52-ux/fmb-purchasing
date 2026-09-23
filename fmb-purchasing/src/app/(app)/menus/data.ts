@@ -269,3 +269,31 @@ function one<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
 }
+
+/**
+ * Whether a day's menu can be deleted, and if not, why (#21).
+ *
+ * A released day hands lists to people, and what they have ordered, had
+ * delivered or put a receipt against is a fact about the world rather than a
+ * line on a plan — the same rule releasing again and "Back to draft" follow.
+ * Deleting the day would take those records with it, so a day with any of
+ * them stays; its dishes can still be taken off one by one.
+ */
+export async function menuDayBlockers(
+  admin: SupabaseClient,
+  dayId: string
+): Promise<{ bought: number; allocated: number }> {
+  const { data: requirements } = await admin
+    .from("menu_requirements")
+    .select("id, status")
+    .eq("menu_day_id", dayId);
+  const bought = (requirements ?? []).filter((r) => r.status === "ordered" || r.status === "delivered").length;
+  const ids = (requirements ?? []).map((r) => r.id as string);
+  const { count } = ids.length
+    ? await admin
+        .from("expense_line_allocations")
+        .select("id", { count: "exact", head: true })
+        .in("menu_requirement_id", ids)
+    : { count: 0 };
+  return { bought, allocated: count ?? 0 };
+}

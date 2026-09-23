@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { isSection } from "@/lib/menu-sections";
+import { menuDayBlockers } from "./data";
 
 /**
  * Planning a day: what is being cooked, and for how many (#70).
@@ -353,4 +354,29 @@ export async function removeMenuLine(formData: FormData) {
 
   await createAdminClient().from("menu_day_lines").delete().eq("id", id);
   refresh(date);
+}
+
+/**
+ * Delete a day's whole menu in one kitchen: its dishes, roti and fruit, typed
+ * lines, counts and notes, and — if it was released — the lists nobody has
+ * bought against yet. The other kitchen's day is a separate row and is not
+ * touched.
+ */
+export async function deleteMenuDay(formData: FormData) {
+  await requirePlanner();
+  const dayId = String(formData.get("menu_day_id") ?? "");
+  const date = String(formData.get("date") ?? "");
+  const kitchenId = String(formData.get("kitchen_id") ?? "");
+  if (!dayId) return;
+
+  const admin = createAdminClient();
+  const { bought, allocated } = await menuDayBlockers(admin, dayId);
+  if (bought > 0 || allocated > 0) return;
+
+  // Everything hanging off the day cascades with it.
+  await admin.from("menu_days").delete().eq("id", dayId);
+
+  refresh(date);
+  revalidatePath("/procurement");
+  redirect(kitchenId ? `/menus?kitchen=${kitchenId}` : "/menus");
 }

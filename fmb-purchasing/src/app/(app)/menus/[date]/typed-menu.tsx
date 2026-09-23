@@ -3,6 +3,7 @@ import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { SECTIONS, SECTION_LABEL, type SectionKey } from "@/lib/menu-sections";
 import type { MenuLine } from "@/lib/menu-costing";
 import { addMenuLine, removeMenuLine, setMenuLine, setMenuText } from "../actions";
+import { REMOVE_BUTTON } from "./styles";
 
 /**
  * A day planned the way the Google Sheet plans it (#77).
@@ -157,7 +158,7 @@ export function TypedMenu({
                           <form action={removeMenuLine}>
                             <input type="hidden" name="line_id" value={line.lineId} />
                             <input type="hidden" name="date" value={date} />
-                            <SubmitButton className="text-xs text-maroon/70 hover:underline">remove</SubmitButton>
+                            <SubmitButton className={REMOVE_BUTTON} pendingLabel="Removing…">Remove</SubmitButton>
                           </form>
                         )}
                       </li>
