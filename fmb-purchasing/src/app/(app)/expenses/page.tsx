@@ -189,8 +189,8 @@ export default async function AllExpensesPage({
             {linesView
               ? "Every line item across these expenses — what was bought, at what price, under which category."
               : showAllYears
-                ? "Every expense across FMB, with status, vendor, amounts and GST breakdown."
-                : `Expenses dated in ${period.label}, with status, vendor, amounts and GST breakdown. An expense is dated by its receipt, or by when it was submitted if the receipt had no date.`}
+                ? "Every expense across FMB."
+                : `Expenses dated in ${period.label}, by receipt date.`}
           </p>
           <div className="mt-3">
             <ViewToggle linesView={linesView} />

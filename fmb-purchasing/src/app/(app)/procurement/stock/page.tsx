@@ -95,8 +95,7 @@ export default async function StockCountPage({
       <div>
         <h1 className="page-title text-ink">Procurement</h1>
         <p className="page-description mt-1 max-w-2xl">
-          A count of the high-value stock in the store, once a month: what is on the shelf, and what it is worth at
-          what was last paid. It&apos;s a record only, and doesn&apos;t change what the lists ask for.
+          A monthly count of the high-value stock on the shelf, and what it is worth.
         </p>
       </div>
 

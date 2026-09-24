@@ -47,8 +47,7 @@ export default async function PriceAlertsPage() {
         </Link>
         <h1 className="page-title mt-1 text-ink">Price alerts</h1>
         <p className="page-description mt-1 max-w-2xl">
-          When a purchase costs more or less per kg, litre or each than the last one by more than the limit, it is
-          flagged on Approvals and on the expense. So is an expense far above what its vendor usually costs.
+          How far a price may move from the last one before Approvals flags it.
         </p>
       </div>
 

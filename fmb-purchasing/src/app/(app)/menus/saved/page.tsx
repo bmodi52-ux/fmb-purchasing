@@ -36,8 +36,7 @@ export default async function SavedMenusPage() {
       <div>
         <h1 className="page-title text-ink">Thaali Calendar</h1>
         <p className="page-description mt-1 max-w-2xl">
-          Menus kept to use again. Estimate what one costs for any number of thaalis, then put it on as many days as
-          you like.
+          Menus kept to use again, on as many days as you like.
         </p>
       </div>
 

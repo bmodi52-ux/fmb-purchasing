@@ -40,7 +40,7 @@ const ALL_COLUMNS: ColumnDef<ExpenseRow>[] = [
     ),
     exportValue: (r) => r.expenseNumber ?? "",
   },
-  { key: "vendor", label: "Vendor", render: (r) => r.vendor_name_raw ?? "—", exportValue: (r) => r.vendor_name_raw ?? "" },
+  { key: "vendor", label: "Vendor", render: (r) => r.vendor_name_raw ?? "—", exportValue: (r) => r.vendor_name_raw ?? "", onPhone: true },
   {
     key: "vendor_number",
     label: "Vendor #",
@@ -48,9 +48,9 @@ const ALL_COLUMNS: ColumnDef<ExpenseRow>[] = [
     exportValue: (r) => r.vendorNumber ?? "",
   },
   { key: "submitted_by", label: "Submitted by", render: (r) => r.submittedByName, exportValue: (r) => r.submittedByName },
-  { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} />, exportValue: (r) => r.status },
+  { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} />, exportValue: (r) => r.status, onPhone: true },
   { key: "invoice_number", label: "Invoice #", render: (r) => r.invoice_number ?? "—", exportValue: (r) => r.invoice_number ?? "" },
-  { key: "receipt_date", label: "Receipt date", render: (r) => r.receipt_date ?? "—", exportValue: (r) => r.receipt_date ?? "" },
+  { key: "receipt_date", label: "Receipt date", render: (r) => r.receipt_date ?? "—", exportValue: (r) => r.receipt_date ?? "", onPhone: true },
   {
     key: "receipt",
     label: "Receipt",
@@ -59,7 +59,7 @@ const ALL_COLUMNS: ColumnDef<ExpenseRow>[] = [
   },
   { key: "subtotal", label: "Subtotal", render: (r) => `$${r.subtotal.toFixed(2)}`, exportValue: (r) => r.subtotal },
   { key: "gst_amount", label: "GST", render: (r) => `$${r.gst_amount.toFixed(2)}`, exportValue: (r) => r.gst_amount },
-  { key: "total", label: "Total", render: (r) => `$${r.total.toFixed(2)}`, exportValue: (r) => r.total },
+  { key: "total", label: "Total", render: (r) => `$${r.total.toFixed(2)}`, exportValue: (r) => r.total, onPhone: true },
   {
     key: "fiscal_year",
     label: "Fiscal year (H)",

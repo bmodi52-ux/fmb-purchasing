@@ -141,9 +141,7 @@ export default async function BudgetsPage({
         <div>
           <h1 className="page-title text-ink">Budgets</h1>
           <p className="page-description mt-1 max-w-2xl">
-            What was set aside for {period.label}, against what has been spent. Set a budget for any period — it
-            carries into every other: a financial year shows the part of each Hijri year&rsquo;s budget that
-            falls inside it. Amounts include GST, the same as the totals on every receipt.
+            What was set aside for {period.label}, against what has been spent. Amounts include GST.
           </p>
         </div>
         <PeriodPicker value={period.code} today={today} earliest={earliest} />

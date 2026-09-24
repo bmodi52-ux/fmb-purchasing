@@ -61,8 +61,7 @@ export default async function AccountingPage({
         <div>
           <h1 className="page-title text-ink">Accounting</h1>
           <p className="page-description mt-1 max-w-2xl">
-            GST for the return, the Xero bills file, account codes, and periods whose return has been lodged. Opens on
-            the current financial year.
+            GST for the return, the Xero bills file, and account codes.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-x-6 gap-y-3">

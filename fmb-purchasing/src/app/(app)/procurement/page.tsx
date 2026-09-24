@@ -78,8 +78,7 @@ export default async function ProcurementPage({
       <div>
         <h1 className="page-title text-ink">Procurement</h1>
         <p className="page-description mt-1 max-w-2xl">
-          What released menus need, by day and section. Quantities come from the menus; what to order is rounded to a
-          pack the supplier sells.
+          What released menus need, by day and section, rounded to packs the supplier sells.
         </p>
       </div>
 

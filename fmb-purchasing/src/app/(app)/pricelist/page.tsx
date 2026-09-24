@@ -203,9 +203,7 @@ export default async function PricelistPage() {
         <div>
           <h1 className="page-title text-ink">Pricelist</h1>
           <p className="page-description mt-1 max-w-xl">
-            Each item can have several pack sizes, and each pack size several
-            vendor offers. Click an item for the full breakdown, its pack
-            sizes and offers, and change history.
+            Every item, its pack sizes and vendor offers. Open one for the full breakdown and history.
           </p>
           {/* The reference lists behind the pricelist. Their own pages rather
               than disclosures here: Categories has grown into real master data

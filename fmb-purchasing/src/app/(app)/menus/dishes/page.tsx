@@ -61,8 +61,7 @@ export default async function DishesPage() {
       <div>
         <h1 className="page-title text-ink">Thaali Calendar</h1>
         <p className="page-description mt-1 max-w-2xl">
-          What each dish takes to make. A recipe is written once — per batch, as the kitchen cooks, or per thaali — and
-          every day that serves the dish works out its own quantities from the number of thaalis expected.
+          What each dish takes to make. Each day works out its own quantities from its thaali count.
         </p>
       </div>
 

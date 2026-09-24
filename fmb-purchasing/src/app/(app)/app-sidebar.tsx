@@ -4,9 +4,11 @@ import { SubmitButton } from "@/components/submit-button";
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { NAV_GROUPS, type NavGroup } from "@/lib/nav";
 import { NavLink } from "./nav-link";
 
-type NavItem = { key: string; href: string; label: string };
+type NavItem = { key: string; href: string; label: string; group: NavGroup };
 
 export function AppSidebar({
   navItems,
@@ -23,6 +25,8 @@ export function AppSidebar({
   canNameStandIn: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const inAdmin = navItems.some((i) => i.group === "Admin" && (pathname === i.href || pathname.startsWith(`${i.href}/`)));
 
   return (
     // Pinned on a phone: the menu is the only way around the app there, and on
@@ -37,6 +41,8 @@ export function AppSidebar({
               being dwarfed by the title beneath it. */}
           <span className="brand-wordmark text-[1.15rem] font-semibold leading-none text-ink">FMB Sydney</span>
         </Link>
+        <div className="flex items-center gap-1">
+          <NotificationsBell count={unreadCount} onNavigate={() => setOpen(false)} />
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -46,6 +52,7 @@ export function AppSidebar({
         >
           {open ? <CloseIcon /> : <MenuIcon />}
         </button>
+        </div>
       </div>
 
       {/* Backdrop: closes the menu on tap, mobile only, never renders at md:.
@@ -63,36 +70,60 @@ export function AppSidebar({
       )}
 
       <aside
-        className={`${open ? "absolute flex" : "hidden"} inset-x-0 top-full z-40 max-h-[calc(100dvh-4rem)] overflow-y-auto shadow-lg w-full shrink-0 flex-col gap-6 border-b border-gold/20 bg-cream px-6 py-8 md:static md:flex md:z-auto md:max-h-none md:w-64 md:overflow-visible md:border-b-0 md:border-r md:bg-gradient-to-b md:from-gold/10 md:via-cream md:to-cream md:shadow-none`}
+        className={`${open ? "absolute flex" : "hidden"} inset-x-0 top-full z-40 max-h-[calc(100dvh-4rem)] overflow-y-auto shadow-lg w-full shrink-0 flex-col gap-6 border-b border-gold/20 bg-cream px-6 py-8 md:sticky md:top-0 md:flex md:z-auto md:h-screen md:max-h-none md:w-64 md:overflow-y-auto md:border-b-0 md:border-r md:bg-gradient-to-b md:from-gold/10 md:via-cream md:to-cream md:shadow-none`}
       >
-        <Link href="/" className="hidden items-center gap-3 md:flex">
-          <Image src="/fmb-logo.png" alt="FMB" width={40} height={40} className="rounded" />
-          <div>
-            <p className="brand-wordmark text-lg font-semibold leading-tight text-ink">FMB Sydney</p>
-            <p className="text-xs text-ink/60">Faiz ul Mawaid il Burhaniyah</p>
-          </div>
-        </Link>
+        <div className="hidden items-start justify-between gap-2 md:flex">
+          <Link href="/" className="flex items-center gap-3">
+            <Image src="/fmb-logo.png" alt="FMB" width={40} height={40} className="rounded" />
+            <div>
+              <p className="brand-wordmark text-lg font-semibold leading-tight text-ink">FMB Sydney</p>
+              <p className="text-xs text-ink/60">Faiz ul Mawaid il Burhaniyah</p>
+            </div>
+          </Link>
+          <NotificationsBell count={unreadCount} />
+        </div>
 
         <div className="hidden md:block">
           <PalmDivider />
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1 text-sm">
-          {navItems.map((item) => (
-            // Keyed by href, not key: `key` is the permission page, and more
-            // than one nav entry can sit behind the same grant.
-            <NavLink key={item.href} href={item.href} label={item.label} onNavigate={() => setOpen(false)} />
-          ))}
-          <NavLink
-            href="/notifications"
-            label="Notifications"
-            badge={unreadCount}
-            onNavigate={() => setOpen(false)}
-          />
+        <nav className="flex flex-1 flex-col gap-4 text-sm">
+          {NAV_GROUPS.map((group) => {
+            const items = navItems.filter((i) => i.group === group);
+            if (items.length === 0) return null;
+            const links = items.map((item) => (
+              // Keyed by href, not key: `key` is the permission page, and more
+              // than one nav entry can sit behind the same grant.
+              <NavLink key={item.href} href={item.href} label={item.label} onNavigate={() => setOpen(false)} />
+            ));
+            // Admin is visited rarely and by few, so it folds away unless
+            // you are on one of its pages.
+            if (group === "Admin") {
+              return (
+                <details key={group} open={inAdmin} className="group/admin">
+                  <summary className="nav-group-label flex cursor-pointer list-none items-center justify-between">
+                    {group}
+                    <span aria-hidden="true" className="transition-transform group-open/admin:rotate-90">›</span>
+                  </summary>
+                  <div className="mt-1 flex flex-col gap-0.5">{links}</div>
+                </details>
+              );
+            }
+            return (
+              <div key={group} className="flex flex-col gap-0.5">
+                <p className="nav-group-label">{group}</p>
+                {links}
+              </div>
+            );
+          })}
         </nav>
 
-        <div className="flex flex-col gap-1 border-t border-ink/10 pt-4 text-sm">
-          <p className="px-3 text-ink/60">{userName}</p>
+        <details className="group/account border-t border-ink/10 pt-3 text-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 text-ink/70 hover:bg-gold/15 hover:text-ink">
+            <span className="truncate">{userName}</span>
+            <span aria-hidden="true" className="transition-transform group-open/account:-rotate-90">‹</span>
+          </summary>
+          <div className="mt-1 flex flex-col gap-0.5">
           <Link
             href="/notifications/settings"
             onClick={() => setOpen(false)}
@@ -121,9 +152,41 @@ export function AppSidebar({
               Sign out
             </SubmitButton>
           </form>
-        </div>
+          </div>
+        </details>
       </aside>
     </div>
+  );
+}
+
+/** Unread notifications, where people look for them: at the top, not in the list (#25). */
+function NotificationsBell({ count, onNavigate }: { count: number; onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const active = pathname === "/notifications";
+  return (
+    <Link
+      href="/notifications"
+      prefetch={false}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      aria-label={count > 0 ? `Notifications, ${count} unread` : "Notifications"}
+      className={`relative rounded-md p-2 text-ink/70 hover:bg-gold/15 hover:text-ink ${active ? "bg-gold/15 text-ink" : ""}`}
+    >
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path
+          d="M10 3a4.5 4.5 0 0 0-4.5 4.5v2.7L4 13h12l-1.5-2.8V7.5A4.5 4.5 0 0 0 10 3ZM8.2 15.5a1.9 1.9 0 0 0 3.6 0"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {count > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-gold-deep px-1 py-0.5 text-center text-[0.6rem] leading-none font-medium text-cream">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </Link>
   );
 }
 

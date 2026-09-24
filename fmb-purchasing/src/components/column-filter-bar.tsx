@@ -61,11 +61,23 @@ export function ColumnFilterBar<T>({
   setFilters: React.Dispatch<React.SetStateAction<ColumnFilters>>;
   text: (row: T, key: string) => string;
 }) {
+  // On a phone the chips took three rows before the first record (#26), so
+  // they wait behind a button there.
+  const [shown, setShown] = useState(false);
   if (columns.length === 0) return null;
   const active = activeCount(filters);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-ink/60">
+    <div className="flex flex-col gap-2">
+    <button
+      type="button"
+      onClick={() => setShown((s) => !s)}
+      aria-expanded={shown}
+      className="btn btn-secondary btn-xs self-start md:hidden"
+    >
+      {shown ? "Hide filters" : active > 0 ? `Filters (${active})` : "Filters"}
+    </button>
+    <div className={`${shown ? "flex" : "hidden"} flex-wrap items-center gap-x-1 gap-y-1 text-xs text-ink/60 md:flex`}>
       <span className="mr-1 text-ink/45">Filter:</span>
       {columns.map((column) => (
         <span
@@ -99,6 +111,7 @@ export function ColumnFilterBar<T>({
           Clear {active} {active === 1 ? "filter" : "filters"}
         </button>
       )}
+    </div>
     </div>
   );
 }

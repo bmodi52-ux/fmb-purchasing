@@ -398,10 +398,35 @@ input[type="radio"] {
   justify-content: space-between;
   gap: 0.5rem;
   border-radius: 0.375rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.375rem 0.75rem;
   color: rgb(43 33 28 / 0.7);
   transition: background-color 120ms ease, color 120ms ease;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Sort and filter marks on a table heading show when the heading is pointed
+   at, or when they are doing something (#26). Every column wearing them all
+   the time made the header row read as noise. Touch screens can't point, so
+   they keep them. */
+@media (hover: hover) {
+  .col-head .col-hint {
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .col-head:hover .col-hint,
+  .col-head:focus-within .col-hint {
+    opacity: 1;
+  }
+}
+
+/* A heading over a group of sidebar links (#25). */
+.nav-group-label {
+  padding: 0 0.75rem 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(43 33 28 / 0.45);
 }
 
 .nav-link:hover {

@@ -54,9 +54,7 @@ export default async function RecordsPage() {
       <div>
         <h1 className="page-title text-ink">Backups &amp; records</h1>
         <p className="page-description mt-1 max-w-2xl">
-          The ATO expects FMB&apos;s records kept for five years. This is where to check they could be got back: when each
-          backup last ran, and when a restore was last tried. How to take and restore them is in
-          docs/backup-and-restore.md.
+          When each backup last ran and a restore was last tried. The ATO expects five years of records.
         </p>
       </div>
 

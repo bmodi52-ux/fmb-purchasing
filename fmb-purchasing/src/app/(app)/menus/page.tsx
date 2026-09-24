@@ -145,8 +145,7 @@ export default async function MenuCalendarPage({
         <div>
           <h1 className="page-title text-ink">Thaali Calendar</h1>
           <p className="page-description mt-1 max-w-2xl">
-            What is being cooked, for how many, and what that costs a thaali. A day&apos;s quantities come from its
-            dishes and its thaali count, so changing either works the rest out.
+            What is being cooked, for how many, and what it costs a thaali.
           </p>
         </div>
         {/* One menu, then as many days as it is wanted for (#20). */}

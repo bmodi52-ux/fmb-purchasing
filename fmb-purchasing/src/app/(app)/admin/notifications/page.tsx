@@ -66,8 +66,7 @@ export default async function NotificationsAdminPage() {
       <div>
         <h1 className="page-title text-ink">Announcements &amp; alerts</h1>
         <p className="page-description mt-1 max-w-2xl">
-          Send an announcement, build alerts, and choose what each team&apos;s notifications start as — or make them
-          required, so members can&apos;t turn them off.
+          Announcements, alerts, and what each team&apos;s notifications start as.
         </p>
       </div>
 

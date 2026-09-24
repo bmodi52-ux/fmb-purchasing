@@ -183,8 +183,7 @@ export function ReportsView({
         <div>
           <h1 className="page-title text-ink">Reports</h1>
           <p className="page-description mt-1">
-            Any period: the Hijri year (Shawwal → Ramadan, Fatimi/Misri calendar), the Australian financial year,
-            a calendar year, a quarter, a month or your own dates.
+            Spending over any period — Hijri year, financial year, quarter, month or your own dates.
           </p>
         </div>
 

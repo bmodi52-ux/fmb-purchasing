@@ -64,9 +64,7 @@ export default async function ErrorsPage() {
       <div>
         <h1 className="page-title text-ink">System errors</h1>
         <p className="page-description mt-1 max-w-xl">
-          Failures the app caught and handled without telling anyone at the time —
-          a receipt that wouldn&apos;t extract, an email that didn&apos;t send. Repeats of
-          the same fault are counted on one line rather than listed separately.
+          Things that failed quietly — a receipt that wouldn&apos;t read, an email that didn&apos;t send.
         </p>
       </div>
 

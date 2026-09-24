@@ -17,6 +17,9 @@ import {
   type ColumnFilters,
 } from "./column-filter";
 
+/** How many labelled fields a phone card shows before "more". */
+const PHONE_FIELDS = 4;
+
 export type ColumnDef<T> = {
   key: string;
   label: string;
@@ -29,6 +32,11 @@ export type ColumnDef<T> = {
    * Falls back to exportValue.
    */
   sortValue?: (row: T) => string | number;
+  /**
+   * Shown on a phone card before "more". When no column says, the first few
+   * are shown (#27).
+   */
+  onPhone?: boolean;
   /**
    * Value the column filter groups and compares by, when the exported text is
    * the wrong thing to tick in a list — a date column that exports
@@ -107,6 +115,8 @@ export function ColumnsDataTable<T extends { id: string }>({
   // can't see them — report their own busy flag instead.
   useReportPending(busyAction !== null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Phone cards whose remaining fields have been asked for (#27).
+  const [showingAll, setShowingAll] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<SortState>(null);
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
   const [, startTransition] = useTransition();
@@ -441,6 +451,15 @@ export function ColumnsDataTable<T extends { id: string }>({
         <ul className="flex flex-col gap-2 md:hidden">
           {filteredRows.map((row) => {
             const [titleColumn, ...detailColumns] = visibleColumns;
+            // Four labelled fields are a card; nine were a form (#27). The
+            // rest are a tap away, and unlabelled columns — row actions —
+            // always show.
+            const labelled = detailColumns.filter((c) => c.label);
+            const chosen = labelled.some((c) => c.onPhone)
+              ? labelled.filter((c) => c.onPhone)
+              : labelled.slice(0, PHONE_FIELDS);
+            const all = showingAll.has(row.id) || labelled.length <= chosen.length;
+            const shownColumns = all ? detailColumns : detailColumns.filter((c) => !c.label || chosen.includes(c));
             return (
               <li key={row.id} className="card p-3 text-sm">
                 <div className="flex items-start gap-2">
@@ -455,7 +474,7 @@ export function ColumnsDataTable<T extends { id: string }>({
                     {titleColumn && <div className="font-medium break-words text-ink">{titleColumn.render(row)}</div>}
                     {detailColumns.length > 0 && (
                       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
-                        {detailColumns.map((c) =>
+                        {shownColumns.map((c) =>
                           c.label ? (
                             <div key={c.key} className="min-w-0">
                               <dt className="text-xs text-ink/45">{c.label}</dt>
@@ -468,6 +487,22 @@ export function ColumnsDataTable<T extends { id: string }>({
                           )
                         )}
                       </dl>
+                    )}
+                    {labelled.length > chosen.length && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowingAll((current) => {
+                            const next = new Set(current);
+                            if (next.has(row.id)) next.delete(row.id);
+                            else next.add(row.id);
+                            return next;
+                          })
+                        }
+                        className="mt-2 text-xs text-ink/55 underline underline-offset-2 hover:text-ink"
+                      >
+                        {all ? "Show less" : `${labelled.length - chosen.length} more`}
+                      </button>
                     )}
                   </div>
                   {renderExpanded && (
@@ -526,7 +561,7 @@ export function ColumnsDataTable<T extends { id: string }>({
                         setDraggingKey(null);
                         setDropKey(null);
                       }}
-                      className={`p-0 ${draggingKey === c.key ? "opacity-40" : ""} ${
+                      className={`col-head p-0 ${draggingKey === c.key ? "opacity-40" : ""} ${
                         dropKey === c.key ? "bg-gold/15 shadow-[inset_2px_0_0_var(--color-gold-deep)]" : ""
                       }`}
                     >
@@ -538,7 +573,7 @@ export function ColumnsDataTable<T extends { id: string }>({
                           className="flex min-w-0 flex-1 items-center gap-1 p-2 text-left font-medium hover:text-ink"
                         >
                           <span className="truncate">{c.label}</span>
-                          <span className={sorted ? "text-gold-deep" : "text-ink/25"}>
+                          <span className={sorted ? "text-gold-deep" : "col-hint text-ink/25"}>
                             {sorted === "asc" ? "▲" : sorted === "desc" ? "▼" : "↕"}
                           </span>
                         </button>

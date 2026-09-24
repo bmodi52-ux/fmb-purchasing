@@ -153,8 +153,7 @@ export default async function MenuSheetPage({
       <div>
         <h1 className="page-title text-ink">Thaali Calendar</h1>
         <p className="page-description mt-1 max-w-2xl">
-          Every day side by side, with what each one needs under Meat, Fresh produce and Dry goods — the planning
-          sheet, with the quantities worked out rather than typed.
+          Every day side by side, with what each needs under Meat, Fresh produce and Dry goods.
         </p>
       </div>
 

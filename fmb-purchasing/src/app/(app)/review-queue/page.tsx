@@ -46,8 +46,7 @@ export default async function ReviewQueuePage() {
       <div>
         <h1 className="page-title text-ink">Needs attention</h1>
         <p className="page-description mt-1 max-w-2xl">
-          Everything currently waiting on a person&rsquo;s judgement. Each of these was visible
-          somewhere already — this is the list you can actually work through and finish.
+          Everything waiting on someone&rsquo;s judgement, in one list to work through.
         </p>
       </div>
 
