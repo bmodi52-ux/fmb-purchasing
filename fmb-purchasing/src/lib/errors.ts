@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify, userIdsWithPermission } from "@/lib/notifications-inapp";
+import { describeFailure } from "@/lib/failure-words";
 
 /**
  * Records a failure where someone will actually see it.
@@ -50,14 +51,17 @@ export async function reportError({
     }
     if (!isNew) return;
 
+    // The notice says what broke in words; the raw message stays on the
+    // error row for System errors (#22).
+    const { title, body } = describeFailure(source, message);
     const adminIds = await userIdsWithPermission(admin, "admin_users", "manage_users");
     await notify(
       admin,
       adminIds.map((id) => ({
         userId: id,
         kind: "system_error" as const,
-        title: "Something failed in the background",
-        body: `${source}: ${message}`,
+        title,
+        body,
         link: "/admin/errors",
       }))
     );
