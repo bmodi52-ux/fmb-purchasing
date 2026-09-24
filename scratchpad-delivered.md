@@ -9,6 +9,22 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 29. Add items and prices from a link
+
+Raised and delivered 2026-09-24 (PR #89, migration 0076). Add item by photo
+became Add item by photo or link: a shop's product page reads into the same
+review screen, the store is recognised by its website, and the link and date
+read are kept on the price. A page with no price for its product (Costco)
+falls back to a screenshot, which keeps the link.
+
+Decisions built in: the cheapest price wins in costing and the buying list
+(any store, paid or quoted, even never bought); prices never expire, the
+date is shown; a special keeps both prices and switches by its end date (the
+next Tuesday at Woolworths and Coles, a week elsewhere, when not shown);
+GST is always asked, never assumed; a preferred brand per item. Shopping
+lists show the cheapest store and can be grouped by it. Old prices are left
+for #30.
+
 ### 22. Receipt reading failing, and the error shown raw in notifications
 
 Raised and delivered 2026-09-24 (PR #88). The failure itself — the
