@@ -9,6 +9,16 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 22. Receipt reading failing, and the error shown raw in notifications
+
+Raised and delivered 2026-09-24 (PR #88). The failure itself — the
+extraction schema at 19 union-typed parameters against the API's 16 — was
+fixed on 22/09 in 85a6df1; no receipt-reading errors since. What PR #88
+added: failure notices say what broke in words ("Reading a receipt
+failed") with the raw error left on System errors, and a test fails the
+build if the receipt schema goes past 16. The 7 error records from 22/09
+were marked resolved on live.
+
 ### 23–28. Design and UI overhaul
 
 Raised and delivered 2026-09-24 (PR #87), from a design review of the whole

@@ -20,15 +20,6 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 
 <!-- What happened, where, and what you expected instead. -->
 
-### 22. Receipt reading failing, and the error shown raw in notifications
-
-Raised 2026-09-24, seen during the design review. Notifications holds 29
-unread "Something failed in the background" entries from 22/09, each the raw
-JSON of a 400 from receipt extraction: "Schema contains too many parameters
-with union types (19 parameters…, limit: 16)". Two things: the extraction
-schema needs fewer nullable/union fields, and a failure notice should say what
-failed in words, with the raw error kept for System errors.
-
 ## Improvements
 
 <!-- Existing things that should work better. -->
@@ -166,3 +157,85 @@ Two-factor sign-in is #3.
 ## Ideas
 
 <!-- Worth considering, not yet decided. -->
+
+### 29. Add items and prices from a link
+
+Raised 2026-09-24. Paste a product page link (or share it from a phone) and
+the app reads the product, matches it to an existing item or proposes a new
+one, and adds the price as that vendor's offer — the same review screen as
+Add item by photo, which a link would join as a third source beside photos
+and price-list files.
+
+Suggested shape:
+- Read the page's structured product data first (the schema.org Product
+  block most shops publish: name, brand, price, GTIN, pack), then its text,
+  then fall back to asking for a screenshot when a site blocks reading.
+- Vendor from the domain, matched to a vendor whose website is on file.
+- A category page gives many products, capped like price-list files.
+- The link and the date read are kept on the offer.
+- **Cheapest wins (decided 2026-09-24).** The point of collecting prices from
+  several stores is to buy at the cheapest, so costing and the buying list
+  both use the cheapest price available — paid or quoted, from any store —
+  even for something never bought. Today costing prefers last paid, then
+  cheapest paid lately, and only uses a quote when nothing was ever paid
+  (`loadItemPrices` / `pickPrice` in menu-costing); the buying list picks
+  the pack that overbuys least and ignores price and store
+  (`suggestPacks`). Both change:
+  - Costing: cheapest per base unit across every store's offer and what
+    was last paid at each store, labelled with where it is from ("cheapest: Costco, quoted
+    12/09").
+  - Buying list: for each line, the store and pack that cost least for the
+    quantity needed (a dearer-per-kg small pack can still win when a big
+    one would be mostly waste), with the store shown so the list can be
+    split by where to buy.
+  - No expiry: a price counts until it is replaced, however old. The date it
+    was read or paid is shown beside it ("cheapest: Costco, quoted 12/09"),
+    so an old price is visible rather than hidden.
+- **To come back to: old prices.** An old web price can make a thaali look
+  cheaper than it is. Expiring prices was proposed and turned down
+  (2026-09-24). Other ways, to weigh later: flag rather than drop an old
+  price (a faint "6 months old" beside it); re-read saved links on a
+  schedule so prices refresh themselves; let a new receipt from the same
+  store replace its quote; or list the oldest prices on Needs attention to
+  be checked.
+- Later: "Check again" on an offer, and optionally a weekly re-read of saved
+  links feeding price alerts.
+- Server-side fetch of http(s) only, no private addresses, with a timeout
+  and a size cap.
+
+**Shops (decided 2026-09-24):** mostly Woolworths, Coles and Costco — the
+hardest to read, since their pages load the price after opening and often
+block anything that isn't a person's browser. So this is built as "paste a
+link; if it can't be read, share a screenshot", and the screenshot path is
+made smooth first: one tap from the failed link to the photo reader, with
+the link kept on the offer either way. Before building, try a real product
+link from each of the three and note which read and which don't.
+
+**Sale and regular price (decided 2026-09-24):** both are kept on the offer,
+with the sale's end date, and the app picks by date so nobody updates
+anything. While the sale runs the buying list uses the sale price ("on
+special until 30/09"); after it, the regular price is already there.
+Costing always uses the regular price, showing the special beside it. This
+isn't expiry: the regular price never lapses, only the sale does, on the
+shop's own date. With no end date on the page: Woolworths and Coles run
+Wednesday to Tuesday, so the next Tuesday; Costco prints one; anywhere else
+7 days, marked "end date assumed". Reading the link or a screenshot again
+replaces both; a page with one price has no sale.
+
+**GST (decided 2026-09-24): never assumed.** Prices are stored including GST,
+like receipts. A page that says "inc. GST", "ex GST" or "+GST" is taken at
+its word (an ex-GST taxable price gets 10% added, marked "+GST added"). A
+page or screenshot that doesn't say leaves a required choice on the review
+screen — includes GST / excludes GST / GST-free item — and nothing saves
+until it is made. Whether an item is taxable comes from its receipt lines'
+GST treatment; an item never on a receipt is asked too. A shop's last answer
+is pre-selected next time, still shown and confirmed.
+
+**Brand (decided 2026-09-24): any brand by default, a preferred brand per
+item where it matters.** With none set, the cheapest of any brand counts.
+Set one (Rice → Tilda) and costing and the buying list consider only that
+brand, still at the cheapest store; the list names both ("Tilda Basmati
+10kg — Costco, $32.99"). A preference per dish (Tilda only for biryani)
+is left for later, if the per-item one proves too blunt.
+
+No open questions left; ready to build when picked up.
