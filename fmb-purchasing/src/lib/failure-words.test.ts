@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { describeFailure } from "./failure-words";
 import { buildTool } from "./receipt-extraction";
+import { buildTool as buildProductTool } from "./product-extraction";
 
 describe("describeFailure (#22)", () => {
   test("says what broke, not the raw error", () => {
@@ -34,16 +35,21 @@ describe("describeFailure (#22)", () => {
  * took it to 19 and nothing was read until the next evening. This fails the
  * build instead.
  */
-test("the receipt schema stays within the API's 16 union-typed parameters (#22)", () => {
-  let unions = 0;
-  const walk = (node: unknown) => {
-    if (Array.isArray(node)) return node.forEach(walk);
-    if (!node || typeof node !== "object") return;
-    const n = node as Record<string, unknown>;
-    if (Array.isArray(n.type) && n.type.length > 1) unions++;
-    if (Array.isArray(n.anyOf)) unions++;
-    Object.values(n).forEach(walk);
-  };
-  walk(buildTool(["Meat", "Produce"]).input_schema);
-  assert.ok(unions <= 16, `${unions} union-typed parameters; the API allows 16`);
-});
+for (const [name, tool] of [
+  ["receipt", buildTool],
+  ["product", buildProductTool],
+] as const) {
+  test(`the ${name} schema stays within the API's 16 union-typed parameters (#22)`, () => {
+    let unions = 0;
+    const walk = (node: unknown) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== "object") return;
+      const n = node as Record<string, unknown>;
+      if (Array.isArray(n.type) && n.type.length > 1) unions++;
+      if (Array.isArray(n.anyOf)) unions++;
+      Object.values(n).forEach(walk);
+    };
+    walk(tool(["Meat", "Produce"]).input_schema);
+    assert.ok(unions <= 16, `${unions} union-typed parameters; the API allows 16`);
+  });
+}
