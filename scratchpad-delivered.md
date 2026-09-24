@@ -9,6 +9,15 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 31–32. Fold any sidebar group; select all on Payments
+
+Raised and delivered 2026-09-24 (PR #90). Every sidebar group folds, is
+remembered in the browser, and opens when you go to one of its pages; group
+names are maroon; only the closest entry lights up. Payments has Select all
+and a heading tick box, both taking only what the filters show ("Select all
+3 shown"); Approvals' Select all reads the same way. Payments' entry numbers
+no longer wrap.
+
 ### 29. Add items and prices from a link
 
 Raised and delivered 2026-09-24 (PR #89, migration 0076). Add item by photo
