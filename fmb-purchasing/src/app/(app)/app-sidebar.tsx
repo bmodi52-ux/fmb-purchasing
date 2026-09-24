@@ -1,7 +1,7 @@
 "use client";
 
 import { SubmitButton } from "@/components/submit-button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -9,6 +9,8 @@ import { NAV_GROUPS, type NavGroup } from "@/lib/nav";
 import { NavLink } from "./nav-link";
 
 type NavItem = { key: string; href: string; label: string; group: NavGroup };
+
+const FOLDED_KEY = "fmb.sidebar.folded";
 
 export function AppSidebar({
   navItems,
@@ -26,7 +28,45 @@ export function AppSidebar({
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const inAdmin = navItems.some((i) => i.group === "Admin" && (pathname === i.href || pathname.startsWith(`${i.href}/`)));
+
+  // The one entry you are on: the longest address that matches, so
+  // /pricelist/add-by-photo lights up its own entry and not Pricelist too.
+  const activeHref =
+    navItems
+      .filter((i) => (i.href === "/" ? pathname === "/" : pathname === i.href || pathname.startsWith(`${i.href}/`)))
+      .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
+  const activeGroup = navItems.find((i) => i.href === activeHref)?.group ?? null;
+
+  // Any group folds (#31). What is folded is remembered in this browser;
+  // Admin starts folded, being visited rarely and by few. Going to a page
+  // opens its group, so where you are is never hidden.
+  const [folded, setFolded] = useState<Set<NavGroup>>(() => new Set<NavGroup>(["Admin"]));
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? "null");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the browser after hydration
+      if (Array.isArray(saved)) setFolded(new Set(saved.filter((g): g is NavGroup => NAV_GROUPS.includes(g))));
+    } catch {
+      // No storage: every group starts as the defaults say.
+    }
+  }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the group of the page just navigated to
+    if (activeGroup) setFolded((f) => (f.has(activeGroup) ? new Set([...f].filter((g) => g !== activeGroup)) : f));
+  }, [activeGroup]);
+  function toggleGroup(group: NavGroup) {
+    setFolded((current) => {
+      const next = new Set(current);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      try {
+        localStorage.setItem(FOLDED_KEY, JSON.stringify([...next]));
+      } catch {
+        // Remembering is a convenience; folding still works without it.
+      }
+      return next;
+    });
+  }
 
   return (
     // Pinned on a phone: the menu is the only way around the app there, and on
@@ -70,7 +110,7 @@ export function AppSidebar({
       )}
 
       <aside
-        className={`${open ? "absolute flex" : "hidden"} inset-x-0 top-full z-40 max-h-[calc(100dvh-4rem)] overflow-y-auto shadow-lg w-full shrink-0 flex-col gap-6 border-b border-gold/20 bg-cream px-6 py-8 md:sticky md:top-0 md:flex md:z-auto md:h-screen md:max-h-none md:w-64 md:overflow-y-auto md:border-b-0 md:border-r md:bg-gradient-to-b md:from-gold/10 md:via-cream md:to-cream md:shadow-none`}
+        className={`${open ? "absolute flex" : "hidden"} inset-x-0 top-full z-40 max-h-[calc(100dvh-4rem)] overflow-y-auto shadow-lg w-full shrink-0 flex-col gap-6 border-b border-gold/20 bg-cream px-6 py-8 md:sticky md:top-0 md:flex md:z-auto md:h-screen md:max-h-none md:w-64 md:overflow-y-auto md:[scrollbar-width:thin] md:border-b-0 md:border-r md:bg-gradient-to-b md:from-gold/10 md:via-cream md:to-cream md:shadow-none`}
       >
         <div className="hidden items-start justify-between gap-2 md:flex">
           <Link href="/" className="flex items-center gap-3">
@@ -91,28 +131,35 @@ export function AppSidebar({
           {NAV_GROUPS.map((group) => {
             const items = navItems.filter((i) => i.group === group);
             if (items.length === 0) return null;
-            const links = items.map((item) => (
-              // Keyed by href, not key: `key` is the permission page, and more
-              // than one nav entry can sit behind the same grant.
-              <NavLink key={item.href} href={item.href} label={item.label} onNavigate={() => setOpen(false)} />
-            ));
-            // Admin is visited rarely and by few, so it folds away unless
-            // you are on one of its pages.
-            if (group === "Admin") {
-              return (
-                <details key={group} open={inAdmin} className="group/admin">
-                  <summary className="nav-group-label flex cursor-pointer list-none items-center justify-between">
-                    {group}
-                    <span aria-hidden="true" className="transition-transform group-open/admin:rotate-90">›</span>
-                  </summary>
-                  <div className="mt-1 flex flex-col gap-0.5">{links}</div>
-                </details>
-              );
-            }
+            const isOpen = !folded.has(group);
+            const listId = `nav-group-${group.toLowerCase()}`;
             return (
               <div key={group} className="flex flex-col gap-0.5">
-                <p className="nav-group-label">{group}</p>
-                {links}
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group)}
+                  aria-expanded={isOpen}
+                  aria-controls={listId}
+                  className="nav-group-label flex w-full items-center justify-between text-left"
+                >
+                  {group}
+                  <span aria-hidden="true" className={`transition-transform ${isOpen ? "rotate-90" : ""}`}>
+                    ›
+                  </span>
+                </button>
+                <div id={listId} hidden={!isOpen} className="flex flex-col gap-0.5">
+                  {items.map((item) => (
+                    // Keyed by href, not key: `key` is the permission page, and more
+                    // than one nav entry can sit behind the same grant.
+                    <NavLink
+                      key={item.href}
+                      href={item.href}
+                      label={item.label}
+                      active={item.href === activeHref}
+                      onNavigate={() => setOpen(false)}
+                    />
+                  ))}
+                </div>
               </div>
             );
           })}

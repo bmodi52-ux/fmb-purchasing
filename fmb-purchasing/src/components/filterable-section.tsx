@@ -11,6 +11,10 @@ export type SelectionApi = {
   isSelected: (id: string) => boolean;
   toggle: (id: string) => void;
   selectedCount: number;
+  /** Whether every row the filters leave showing is ticked — for a header tick box (#32). */
+  allShownSelected: boolean;
+  /** Tick every row showing, or untick them if they all are. Hidden rows are never touched. */
+  toggleAllShown: () => void;
 };
 
 export type BulkAction<T> = {
@@ -51,6 +55,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
   placeholder = "Filter…",
   getRowId,
   bulkActions,
+  selectable,
   amountOf,
   filterValue,
   sortOptions,
@@ -64,6 +69,11 @@ export function FilterableSection<T extends Record<string, unknown>>({
   placeholder?: string;
   getRowId?: (row: T) => string;
   bulkActions?: BulkAction<T>[];
+  /**
+   * Rows can be ticked even without bulk actions here — Payments ticks rows
+   * for its own bar — so Select all is offered too (#32).
+   */
+  selectable?: boolean;
   /** What one row adds to the selection's total (#69); left out where there is no money. */
   amountOf?: (row: T) => number | null;
   /**
@@ -131,17 +141,6 @@ export function FilterableSection<T extends Record<string, unknown>>({
   const selectedRows = useMemo(() => rows.filter((r) => selected.has(rowId(r))), [rows, selected, rowId]);
   const exportSourceRows = selected.size > 0 ? selectedRows : filtered;
 
-  const selection: SelectionApi = {
-    isSelected: (id) => selected.has(id),
-    toggle: (id) => {
-      const next = new Set(selected);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      setSelected(next);
-    },
-    selectedCount: selected.size,
-  };
-
   // Everything in view, so a run of routine expenses is one tap rather than a
   // tap per row. Honours the filter: it selects what is showing, not what is
   // hidden behind it.
@@ -154,6 +153,19 @@ export function FilterableSection<T extends Record<string, unknown>>({
     }
     setSelected(next);
   }
+
+  const selection: SelectionApi = {
+    isSelected: (id) => selected.has(id),
+    toggle: (id) => {
+      const next = new Set(selected);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      setSelected(next);
+    },
+    selectedCount: selected.size,
+    allShownSelected: allFilteredSelected,
+    toggleAllShown: toggleAllFiltered,
+  };
 
   // A bulk action runs outside a form, so a failure never reaches the error
   // page — without catching it here the click simply appeared to do nothing.
@@ -209,13 +221,17 @@ export function FilterableSection<T extends Record<string, unknown>>({
               )}
             </>
           )}
-          {bulkActions && bulkActions.length > 0 && filtered.length > 0 && (
+          {(selectable || (bulkActions && bulkActions.length > 0)) && filtered.length > 0 && (
             <button
               type="button"
               onClick={toggleAllFiltered}
               className="btn btn-secondary btn-sm"
             >
-              {allFilteredSelected ? "Select none" : `Select all (${filtered.length})`}
+              {allFilteredSelected
+                ? "Select none"
+                : filtered.length < rows.length
+                  ? `Select all ${filtered.length} shown`
+                  : `Select all (${filtered.length})`}
             </button>
           )}
         </div>

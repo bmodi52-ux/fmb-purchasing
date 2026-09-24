@@ -421,12 +421,22 @@ input[type="radio"] {
 
 /* A heading over a group of sidebar links (#25). */
 .nav-group-label {
-  padding: 0 0.75rem 0.25rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.375rem;
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgb(43 33 28 / 0.45);
+  /* Maroon, so the groups read as headings rather than faint print (#31). */
+  color: var(--color-maroon);
+  cursor: pointer;
+}
+.nav-group-label:hover {
+  background-color: rgb(74 22 10 / 0.05);
+}
+.nav-group-label:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 1px;
 }
 
 .nav-link:hover {

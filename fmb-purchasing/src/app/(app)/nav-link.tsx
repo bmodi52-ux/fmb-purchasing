@@ -24,16 +24,20 @@ export function NavLink({
   label,
   onNavigate,
   badge,
+  active,
 }: {
   href: string;
   label: string;
   onNavigate?: () => void;
   /** Unread count; hidden when zero. */
   badge?: number;
+  /** Set by the sidebar, which knows every entry and picks the closest match. */
+  active?: boolean;
 }) {
   const pathname = usePathname();
   // "/" would otherwise prefix-match every route
-  const isActive = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+  const isActive =
+    active ?? (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
 
   return (
     <Link
