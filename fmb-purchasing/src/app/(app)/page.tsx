@@ -15,7 +15,7 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const firstName = (user.fullName || user.email).split(/[s@]/)[0];
+  const firstName = (user.fullName || user.email).split(/[\s@]/)[0];
   const welcome = (
     <>
       <div>
