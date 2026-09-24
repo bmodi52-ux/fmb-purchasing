@@ -332,7 +332,7 @@ export function AddWidgetDialog({
             type="button"
             onClick={handleSave}
             disabled={saving || !previewData || !title.trim()}
-            className="rounded-md bg-gold px-4 py-1.5 text-sm font-medium text-ink transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="btn btn-primary btn-sm"
           >
             {saving ? "Saving…" : editing ? "Save changes" : "Add to dashboard"}
           </button>

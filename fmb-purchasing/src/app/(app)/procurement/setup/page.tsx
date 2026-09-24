@@ -50,7 +50,7 @@ export default async function ProcurementSetupPage() {
 
       <ProcurementTabs active="setup" canManage />
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">Who buys each list</h2>
         <p className="mb-4 text-sm text-ink/55">
           Releasing a menu hands its lists to these people. A kitchen can name someone of its own; otherwise the
@@ -95,7 +95,7 @@ export default async function ProcurementSetupPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">Which list a category is on</h2>
         <p className="mb-4 text-sm text-ink/55">
           Left alone, a category is read from its name: anything meat or poultry is Meat, anything produce is Fresh
@@ -148,7 +148,7 @@ export default async function ProcurementSetupPage() {
       </section>
 
       {(overridden ?? []).length > 0 && (
-        <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <section className="card p-5">
           <h2 className="mb-1 section-title text-ink">Items on a different list from their category</h2>
           <p className="mb-4 text-sm text-ink/55">
             Set from an item&apos;s own page. Clearing one puts it back with the rest of its category.
@@ -158,7 +158,7 @@ export default async function ProcurementSetupPage() {
               <li key={item.id as string} className="flex flex-wrap items-center gap-2 border-b border-ink/5 py-2 last:border-0">
                 <span className="min-w-48 flex-1 text-ink">
                   {item.name as string}
-                  {item.item_number && <span className="ml-1.5 font-mono text-xs text-ink/40">{item.item_number as string}</span>}
+                  {item.item_number && <span className="ml-1.5 tabular-nums text-xs text-ink/40">{item.item_number as string}</span>}
                 </span>
                 <span className="text-ink/60">{SECTION_LABEL[item.menu_section as "meat" | "produce" | "dry"]}</span>
                 <form action={setItemSection}>

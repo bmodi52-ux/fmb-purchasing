@@ -202,7 +202,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
                   type="button"
                   onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
                   title={sortDir === "asc" ? "Ascending" : "Descending"}
-                  className="rounded-md border border-ink/15 px-2 py-1 text-xs text-ink/70 hover:border-ink/30"
+                  className="btn btn-secondary btn-xs"
                 >
                   {sortDir === "asc" ? "▲ asc" : "▼ desc"}
                 </button>
@@ -213,7 +213,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
             <button
               type="button"
               onClick={toggleAllFiltered}
-              className="rounded-md border border-ink/15 px-2.5 py-1.5 text-xs text-ink/70 hover:border-ink/30"
+              className="btn btn-secondary btn-sm"
             >
               {allFilteredSelected ? "Select none" : `Select all (${filtered.length})`}
             </button>
@@ -246,8 +246,8 @@ export function FilterableSection<T extends Record<string, unknown>>({
               onClick={() => runBulkAction(action)}
               className={
                 action.variant === "danger"
-                  ? "rounded-md border border-maroon/40 px-3 py-1 text-xs font-medium text-maroon hover:bg-maroon/5 disabled:opacity-50"
-                  : "rounded-md bg-gold px-3 py-1 text-xs font-medium text-ink hover:bg-gold-deep disabled:opacity-50"
+                  ? "btn btn-danger btn-xs"
+                  : "btn btn-primary btn-xs"
               }
             >
               {busyAction === action.label ? "…" : action.label}

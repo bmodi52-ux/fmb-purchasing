@@ -62,14 +62,14 @@ export function MoveOfferPanel({
             <div className="mt-3 flex gap-3">
               <SubmitButton
                 disabled={pending}
-                className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep disabled:opacity-50"
+                className="btn btn-primary"
               >
                 {pending ? "Moving…" : "Move offer"}
               </SubmitButton>
               <button
                 type="button"
                 onClick={() => setTarget(null)}
-                className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30"
+                className="btn btn-secondary"
               >
                 Cancel
               </button>

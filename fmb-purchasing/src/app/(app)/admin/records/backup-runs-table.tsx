@@ -48,7 +48,7 @@ export function BackupRunsTable({ runs }: { runs: BackupRun[] }) {
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-ink/10 bg-white/60">
+      <div className="overflow-x-auto card">
         <table className="min-w-full text-sm">
           <thead className="text-left text-xs text-ink/55">
             <tr>
@@ -69,7 +69,7 @@ export function BackupRunsTable({ runs }: { runs: BackupRun[] }) {
                     : `${r.itemCount.toLocaleString("en-AU")} files, ${r.newCount.toLocaleString("en-AU")} new · ${formatBytes(r.bytes)}`}
                   {r.problems > 0 && <span className="ml-2 text-maroon">{r.problems} problems</span>}
                 </td>
-                <td className="px-4 py-2 font-mono text-xs text-ink/60">{r.destination ?? "—"}</td>
+                <td className="px-4 py-2 tabular-nums text-xs text-ink/60">{r.destination ?? "—"}</td>
               </tr>
             ))}
           </tbody>

@@ -18,7 +18,7 @@ export function ForgotPasswordForm() {
         </p>
         <a
           href="/login"
-          className="rounded-md bg-gold px-4 py-2 text-center font-medium text-ink transition-colors hover:bg-gold-deep"
+          className="btn btn-primary"
         >
           Back to sign in
         </a>
@@ -45,7 +45,7 @@ export function ForgotPasswordForm() {
       <button
         type="submit"
         disabled={pending}
-        className="mt-1 rounded-md bg-gold px-4 py-2 font-medium text-ink transition-colors hover:bg-gold-deep disabled:opacity-60"
+        className="btn btn-primary mt-1"
       >
         {pending ? "Sending…" : "Send reset link"}
       </button>

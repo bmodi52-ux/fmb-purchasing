@@ -84,13 +84,12 @@ export default async function PaymentsPage() {
             Approved expenses waiting to be paid, oldest approval first.
             {(expenses ?? []).length > 0 &&
               ` ${(expenses ?? []).length} · ${unpaidTotal.toLocaleString("en-AU", { style: "currency", currency: "AUD" })} · oldest approved ${oldestDays < 1 ? "today" : `${oldestDays} ${oldestDays === 1 ? "day" : "days"} ago`}.`}{" "}
-            Select expenses to download a bank file for them, then mark them paid once the bank has the transfers — no
-            money moves from here.
+            Download a bank file, then mark them paid — no money moves from here.
           </p>
         </div>
         <a
           href="/payments/reconcile"
-          className="self-start whitespace-nowrap rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/75 hover:border-ink/30"
+          className="btn btn-secondary self-start"
         >
           Check against a bank statement
         </a>

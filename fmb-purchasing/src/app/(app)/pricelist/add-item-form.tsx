@@ -179,7 +179,7 @@ export function AddItemForm({
             </label>
             <div className="flex w-36 shrink-0 flex-col gap-1 text-sm">
               <span className="text-ink/70">Works out to</span>
-              <div className="input flex items-center bg-ink/[0.03] font-mono text-ink/70">
+              <div className="input flex items-center bg-ink/[0.03] tabular-nums text-ink/70">
                 {costPerUnit != null ? formatUnitCost(costPerUnit, innerUnitLabel) : "—"}
               </div>
             </div>
@@ -192,7 +192,7 @@ export function AddItemForm({
         </label>
       </div>
 
-      <SubmitButton disabled={pending} className="self-start rounded-md bg-gold px-5 py-2.5 font-medium text-ink hover:bg-gold-deep disabled:opacity-60">
+      <SubmitButton disabled={pending} className="btn btn-primary btn-lg self-start">
         {pending ? "Adding…" : "Add item"}
       </SubmitButton>
 

@@ -27,7 +27,7 @@ export function PayeeAccount({
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-ink">{instruction.displayName}</span>
-      {hasNumbers && <span className="font-mono text-xs text-ink/60">{account}</span>}
+      {hasNumbers && <span className="tabular-nums text-xs text-ink/60">{account}</span>}
 
       {unconfirmed && (
         <span
@@ -51,7 +51,7 @@ export function PayeeAccount({
               {instruction.disagreesWith.bsb || instruction.disagreesWith.accountNumber ? (
                 <>
                   {" "}
-                  (<span className="font-mono">{formatAccount(instruction.disagreesWith)}</span>)
+                  (<span className="tabular-nums">{formatAccount(instruction.disagreesWith)}</span>)
                 </>
               ) : null}
               . Confirm them before transferring.

@@ -2,6 +2,7 @@
 
 import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
+import { StatusBadge } from "@/components/status-badge";
 import { ColumnsDataTable, type ColumnDef, type BulkAction } from "@/components/columns-data-table";
 import { formatPackPrice, formatUnitCost, packTitle, type PackDescriptionInput } from "@/lib/pack-description";
 import { reviewOffer, bulkReviewOffers } from "./actions";
@@ -74,7 +75,7 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
       // Followable, like Entry # on Expenses and Vendor # on Vendors. Item
       // numbers get written on order sheets and read back here.
       render: (r) => (
-        <Link href={`/pricelist/${r.itemId}`} className="font-mono text-ink underline">
+        <Link href={`/pricelist/${r.itemId}`} className="tabular-nums text-ink font-medium underline-offset-2 hover:underline">
           {r.itemNumber ?? "View"}
         </Link>
       ),
@@ -123,7 +124,7 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
       key: "pack_size",
       label: "Pack size",
       render: (r) => (
-        <span className="font-mono text-ink/70">
+        <span className="tabular-nums text-ink/70">
           {formatPackSize(r)}
           {!r.contentsConfirmed && (
             <Link
@@ -141,14 +142,14 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
     {
       key: "vendor_sku",
       label: "Vendor code",
-      render: (r) => <span className="font-mono text-ink/60">{r.vendorSku ?? "—"}</span>,
+      render: (r) => <span className="tabular-nums text-ink/60">{r.vendorSku ?? "—"}</span>,
       exportValue: (r) => r.vendorSku ?? "",
     },
     {
       key: "pack_price",
       label: "Price",
       render: (r) => (
-        <span className="font-mono text-ink/70">
+        <span className="tabular-nums text-ink/70">
           {r.packPrice != null ? formatPackPrice(r.packPrice, shapeOf(r)) : "—"}
         </span>
       ),
@@ -158,7 +159,7 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
       key: "cost_per_unit",
       label: "Per unit",
       render: (r) => (
-        <span className={`font-mono ${r.contentsConfirmed ? "text-ink/70" : "text-ink/40 italic"}`}>
+        <span className={`tabular-nums ${r.contentsConfirmed ? "text-ink/70" : "text-ink/40 italic"}`}>
           {formatCostPerUnit(r)}
         </span>
       ),
@@ -173,7 +174,7 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
       render: (r) =>
         r.cheapestRecent ? (
           <span title={`Paid on ${r.cheapestRecent.date}`}>
-            <span className="font-mono text-ink/70">{r.cheapestRecent.price}</span>
+            <span className="tabular-nums text-ink/70">{r.cheapestRecent.price}</span>
             {r.cheapestRecent.vendorLabel && <span className="block text-xs text-ink/50">{r.cheapestRecent.vendorLabel}</span>}
           </span>
         ) : (
@@ -192,18 +193,18 @@ function buildColumns(canApprove: boolean): ColumnDef<OfferRow>[] {
       label: "",
       render: (r) =>
         r.status === "pending" ? (
-          <div className="flex gap-2">
+          <div className="flex flex-col items-start gap-1">
             <form action={reviewOffer}>
               <input type="hidden" name="offer_id" value={r.id} />
               <input type="hidden" name="decision" value="approved" />
-              <SubmitButton className="text-xs text-palm hover:underline">
+              <SubmitButton className="btn btn-approve btn-xs">
                 Approve
               </SubmitButton>
             </form>
             <form action={reviewOffer}>
               <input type="hidden" name="offer_id" value={r.id} />
               <input type="hidden" name="decision" value="rejected" />
-              <SubmitButton className="text-xs text-maroon/70 hover:underline">
+              <SubmitButton className="btn btn-danger btn-xs">
                 Reject
               </SubmitButton>
             </form>
@@ -272,12 +273,12 @@ export function ItemsTable({
         <ul className="flex flex-col gap-1">
           {itemOffers.map((o, index) => (
             <li key={o.id} className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-ink/70">{formatPackSize(o)}</span>
+              <span className="tabular-nums text-ink/70">{formatPackSize(o)}</span>
               <span className="text-ink/40">—</span>
               <span className="text-ink">{o.vendorLabel}</span>
               {o.brand && <span className="text-xs text-ink/40">({o.brand})</span>}
-              <span className="font-mono text-ink/70">{o.packPrice != null ? `$${o.packPrice}` : "—"}</span>
-              <span className="font-mono text-ink/50">{formatCostPerUnit(o)}</span>
+              <span className="tabular-nums text-ink/70">{o.packPrice != null ? `$${o.packPrice}` : "—"}</span>
+              <span className="tabular-nums text-ink/50">{formatCostPerUnit(o)}</span>
               {index === 0 && o.costPerBaseUnit != null && itemOffers.length > 1 && (
                 <span className="rounded-full bg-palm/15 px-2 py-0.5 text-xs text-palm">cheapest</span>
               )}
@@ -316,10 +317,4 @@ export function ItemsTable({
 
 function PreferredBadge() {
   return <span className="ml-1.5 rounded-full bg-gold/20 px-2 py-0.5 text-xs text-gold-deep">preferred</span>;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const color =
-    status === "approved" ? "text-palm" : status === "rejected" ? "text-maroon/70" : "text-gold-deep";
-  return <span className={color}>{status}</span>;
 }

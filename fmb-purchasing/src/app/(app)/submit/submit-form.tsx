@@ -849,7 +849,7 @@ export function SubmitForm({
                   return (
                     <li
                       key={step.id}
-                      className={`flex items-center gap-2 font-mono text-sm ${
+                      className={`flex items-center gap-2 tabular-nums text-sm ${
                         state === "done"
                           ? "text-ink/40"
                           : state === "current"
@@ -886,14 +886,14 @@ export function SubmitForm({
                     blurry.onRejected?.();
                     setBlurry(null);
                   }}
-                  className="rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep"
+                  className="btn btn-primary"
                 >
                   Take it again
                 </button>
                 <button
                   type="button"
                   onClick={() => void readReceiptFile(blurry.file, blurry.onRejected, true)}
-                  className="rounded-md border border-ink/15 px-4 py-2 text-ink/70 hover:border-ink/30"
+                  className="btn btn-secondary"
                 >
                   Use it anyway
                 </button>
@@ -1451,7 +1451,7 @@ function ReviewForm(props: {
   }
 
   return (
-    <div className="rounded-lg border border-ink/10 bg-white/60 p-6">
+    <div className="card p-6">
       <h2 className="section-title text-ink">Review details</h2>
       <p className="mb-5 text-sm text-ink/60">Check and correct anything before submitting.</p>
 
@@ -1477,7 +1477,7 @@ function ReviewForm(props: {
           <ul className="mt-2 flex flex-col gap-1 text-sm text-ink/75">
             {duplicates.map((d) => (
               <li key={d.expenseId}>
-                <span className="font-mono text-xs text-ink/60">{d.expenseNumber ?? "—"}</span>{" "}
+                <span className="tabular-nums text-xs text-ink/60">{d.expenseNumber ?? "—"}</span>{" "}
                 {d.vendorName} ·{" "}
                 {d.total.toLocaleString("en-AU", { style: "currency", currency: "AUD" })} ·{" "}
                 {d.status} · submitted by {d.submittedByName}
@@ -1544,7 +1544,7 @@ function ReviewForm(props: {
               type="button"
               onClick={handleAbnLookup}
               disabled={lookingUpAbn}
-              className="whitespace-nowrap rounded-md border border-ink/15 px-3 py-2 text-sm hover:border-ink/30 disabled:opacity-60"
+              className="btn btn-secondary"
             >
               {lookingUpAbn ? "Looking up…" : "Look up vendor"}
             </button>
@@ -1670,7 +1670,7 @@ function ReviewForm(props: {
                     value={item.discountPercent ?? ""}
                     onChange={(e) => setDiscountPercent(item.key, e.target.value)}
                     placeholder="%"
-                    className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink"
+                    className="w-full rounded border border-ink/10 bg-white px-2 py-1 tabular-nums text-ink"
                   />
                 ) : (
                   <input
@@ -1681,7 +1681,7 @@ function ReviewForm(props: {
                     onChange={(e) =>
                       updateItem(item.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })
                     }
-                    className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink disabled:bg-ink/5"
+                    className="w-full rounded border border-ink/10 bg-white px-2 py-1 tabular-nums text-ink disabled:bg-ink/5"
                   />
                 )}
               </label>
@@ -1695,7 +1695,7 @@ function ReviewForm(props: {
                   onChange={(e) =>
                     updateItem(item.key, { unitPrice: e.target.value === "" ? null : Number(e.target.value) })
                   }
-                  className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink disabled:bg-ink/5"
+                  className="w-full rounded border border-ink/10 bg-white px-2 py-1 tabular-nums text-ink disabled:bg-ink/5"
                 />
               </label>
               <label className="flex flex-col gap-0.5 text-xs text-ink/55">
@@ -1706,7 +1706,7 @@ function ReviewForm(props: {
                   step="0.01"
                   value={item.lineTotal}
                   onChange={(e) => updateItem(item.key, { lineTotal: Number(e.target.value), discountPercent: null })}
-                  className="w-full rounded border border-ink/10 bg-white px-2 py-1 font-mono text-ink"
+                  className="w-full rounded border border-ink/10 bg-white px-2 py-1 tabular-nums text-ink"
                 />
               </label>
             </div>
@@ -1729,7 +1729,7 @@ function ReviewForm(props: {
                 Not on this receipt
               </label>
               {item.normalizedQuantity != null && (
-                <span className="font-mono">
+                <span className="tabular-nums">
                   {item.normalizedQuantity} {item.normalizedUnit ?? ""}
                 </span>
               )}
@@ -1843,7 +1843,7 @@ function ReviewForm(props: {
                         onChange={(e) => setDiscountPercent(item.key, e.target.value)}
                         placeholder="%"
                         title={"Percentage off " + formatMoney(percentBase) + " of goods and services"}
-                        className="w-14 rounded border border-ink/10 bg-white px-2 py-1 font-mono"
+                        className="w-14 rounded border border-ink/10 bg-white px-2 py-1 tabular-nums"
                         aria-label="Discount percentage"
                       />
                       <span className="text-xs text-ink/40">%</span>
@@ -1856,7 +1856,7 @@ function ReviewForm(props: {
                       onChange={(e) =>
                         updateItem(item.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })
                       }
-                      className="w-16 rounded border border-ink/10 bg-white px-2 py-1 font-mono disabled:bg-ink/5"
+                      className="w-16 rounded border border-ink/10 bg-white px-2 py-1 tabular-nums disabled:bg-ink/5"
                       aria-label="Quantity"
                     />
                   )}
@@ -1869,7 +1869,7 @@ function ReviewForm(props: {
                     onChange={(e) =>
                       updateItem(item.key, { unitPrice: e.target.value === "" ? null : Number(e.target.value) })
                     }
-                    className="w-20 rounded border border-ink/10 bg-white px-2 py-1 font-mono disabled:bg-ink/5"
+                    className="w-20 rounded border border-ink/10 bg-white px-2 py-1 tabular-nums disabled:bg-ink/5"
                     aria-label="Unit price"
                   />
                 </td>
@@ -1879,7 +1879,7 @@ function ReviewForm(props: {
                     step="0.01"
                     value={item.lineTotal}
                     onChange={(e) => updateItem(item.key, { lineTotal: Number(e.target.value), discountPercent: null })}
-                    className="w-24 rounded border border-ink/10 bg-white px-2 py-1 font-mono"
+                    className="w-24 rounded border border-ink/10 bg-white px-2 py-1 tabular-nums"
                     aria-label="Line total"
                   />
                 </td>
@@ -1899,7 +1899,7 @@ function ReviewForm(props: {
                     aria-label={`${item.description || "This line"} is not on the receipt`}
                   />
                 </td>
-                <td className="p-1 whitespace-nowrap font-mono text-xs text-ink/60">
+                <td className="p-1 whitespace-nowrap tabular-nums text-xs text-ink/60">
                   {item.normalizedQuantity != null ? `${item.normalizedQuantity} ${item.normalizedUnit ?? ""}` : "—"}
                 </td>
                 <td className="p-1">
@@ -1947,21 +1947,21 @@ function ReviewForm(props: {
         <button
           type="button"
           onClick={() => props.setItems([...props.items, blankItem()])}
-          className="rounded-md border border-dashed border-ink/20 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/40"
+          className="btn btn-secondary btn-sm"
         >
           + Add line item
         </button>
         <button
           type="button"
           onClick={() => addCharge("service", 0)}
-          className="rounded-md border border-dashed border-ink/20 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/40"
+          className="btn btn-secondary btn-sm"
         >
           + Add a service
         </button>
         <button
           type="button"
           onClick={() => addCharge("surcharge", 0)}
-          className="rounded-md border border-dashed border-ink/20 px-3 py-1.5 text-sm text-ink/60 hover:border-ink/40"
+          className="btn btn-secondary btn-sm"
         >
           + Add a charge or discount
         </button>
@@ -2025,14 +2025,14 @@ function ReviewForm(props: {
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="flex-1 rounded-md bg-gold px-5 py-2.5 font-medium text-ink transition-colors hover:bg-gold-deep disabled:opacity-60 md:flex-none"
+            className="btn btn-primary btn-lg flex-1 md:flex-none"
           >
             {submitting ? "Saving…" : props.editExpenseId ? "Save changes" : "Submit expense"}
           </button>
           <button
             type="button"
             onClick={props.onDiscard}
-            className="rounded-md border border-ink/15 px-5 py-2.5 text-ink/70 hover:border-ink/30"
+            className="btn btn-secondary btn-lg"
           >
             Discard
           </button>
@@ -2140,7 +2140,7 @@ function Attachments({
         />
         <SubmitButton
           disabled={uploading}
-          className="rounded-md border border-ink/15 px-3 py-1 text-xs hover:border-ink/30 disabled:opacity-60"
+          className="btn btn-secondary btn-xs"
         >
           {uploading ? "Attaching…" : "Attach"}
         </SubmitButton>

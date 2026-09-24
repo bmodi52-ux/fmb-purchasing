@@ -138,7 +138,7 @@ export function ApprovalsList({ expenses, showSubmitter }: { expenses: ApprovalR
                 type="button"
                 onClick={() => rows[0] && setReviewingId(rows[0].id)}
                 disabled={rows.length === 0}
-                className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep disabled:opacity-50"
+                className="btn btn-primary"
               >
                 Review one by one
               </button>
@@ -154,7 +154,7 @@ export function ApprovalsList({ expenses, showSubmitter }: { expenses: ApprovalR
                   aria-label={`Select ${e.expense_number ?? "expense"}`}
                   className="mt-5"
                 />
-                <div className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white/60 p-4">
+                <div className="min-w-0 flex-1 card p-4">
                   <ExpenseSummary expense={e} showSubmitter={showSubmitter} />
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -162,7 +162,7 @@ export function ApprovalsList({ expenses, showSubmitter }: { expenses: ApprovalR
                     <button
                       type="button"
                       onClick={() => setReviewingId(e.id)}
-                      className="rounded-md border border-ink/15 px-3 py-2 text-sm text-ink/70 hover:border-ink/30"
+                      className="btn btn-secondary"
                     >
                       Review
                     </button>
@@ -228,13 +228,13 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
         <div className="min-w-0">
           <p className="flex flex-wrap items-baseline gap-x-2">
             <span className="font-medium break-words text-ink">{e.vendor_name_raw ?? "Vendor not recorded"}</span>
-            <Link href={`/expenses/${e.id}`} className="font-mono text-xs text-ink/60 underline">
+            <Link href={`/expenses/${e.id}`} className="tabular-nums text-xs text-ink/60 font-medium underline-offset-2 hover:underline">
               {e.expense_number ?? "View"}
             </Link>
           </p>
           <p className="mt-0.5 text-sm text-ink/55">{facts.join(" · ")}</p>
         </div>
-        <span className="font-mono text-lg font-semibold text-ink">{money(e.total)}</span>
+        <span className="tabular-nums text-lg font-semibold text-ink">{money(e.total)}</span>
       </div>
 
       {flags.length > 0 && (
@@ -242,7 +242,7 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
           {flags.map((f) => (
             <span
               key={f.label}
-              className={`rounded-full px-2 py-0.5 text-xs ${
+              className={`rounded-md px-2 py-1 text-xs leading-snug ${
                 f.alert
                   ? "bg-alert/10 font-medium text-alert"
                   : f.serious
@@ -293,7 +293,7 @@ function DecisionButtons({ expenseId, approveLabel = "Approve" }: { expenseId: s
           <span className="text-ink/70">Reason for declining</span>
           <input name="comment" required placeholder="Sent to whoever submitted it" className="input" />
         </label>
-        <SubmitButton className="rounded-md border border-maroon/40 bg-white px-4 py-2 text-sm font-medium text-maroon hover:bg-maroon/5">
+        <SubmitButton className="btn btn-danger">
           Decline
         </SubmitButton>
         <button
@@ -312,14 +312,14 @@ function DecisionButtons({ expenseId, approveLabel = "Approve" }: { expenseId: s
       <form action={reviewExpense}>
         <input type="hidden" name="expense_id" value={expenseId} />
         <input type="hidden" name="decision" value="approved" />
-        <SubmitButton className="rounded-md bg-palm/90 px-4 py-2 text-sm font-medium text-white hover:bg-palm">
+        <SubmitButton className="btn btn-approve">
           {approveLabel}
         </SubmitButton>
       </form>
       <button
         type="button"
         onClick={() => setDeclining(true)}
-        className="rounded-md border border-maroon/40 px-4 py-2 text-sm font-medium text-maroon hover:bg-maroon/5"
+        className="btn btn-danger"
       >
         Decline
       </button>
@@ -348,9 +348,9 @@ function LineItemsTable({ lines }: { lines: ApprovalLineItem[] }) {
             <tr key={i} className="border-t border-ink/5">
               <td className="p-1">{li.description_raw}</td>
               <td className="p-1 text-ink/60">{li.categoryName}</td>
-              <td className="p-1 text-right font-mono">{li.quantity ?? "—"}</td>
-              <td className="p-1 text-right font-mono">{li.unit_price != null ? money(li.unit_price) : "—"}</td>
-              <td className="p-1 text-right font-mono">{money(li.line_total)}</td>
+              <td className="p-1 text-right tabular-nums">{li.quantity ?? "—"}</td>
+              <td className="p-1 text-right tabular-nums">{li.unit_price != null ? money(li.unit_price) : "—"}</td>
+              <td className="p-1 text-right tabular-nums">{money(li.line_total)}</td>
             </tr>
           ))}
         </tbody>
@@ -361,7 +361,7 @@ function LineItemsTable({ lines }: { lines: ApprovalLineItem[] }) {
 
 function Totals({ expense: e }: { expense: ApprovalRow }) {
   return (
-    <div className="flex flex-wrap justify-end gap-x-6 gap-y-1 border-t border-ink/10 pt-2 font-mono text-sm text-ink/70">
+    <div className="flex flex-wrap justify-end gap-x-6 gap-y-1 border-t border-ink/10 pt-2 tabular-nums text-sm text-ink/70">
       <span>Subtotal: {money(e.subtotal)}</span>
       <span>GST: {money(e.gst_amount)}</span>
       <span className="font-semibold text-ink">Total: {money(e.total)}</span>
@@ -430,7 +430,7 @@ function ReviewSession({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep"
+            className="btn btn-primary"
           >
             Back to Approvals
           </button>
@@ -463,7 +463,7 @@ function ReviewSession({
                 type="button"
                 onClick={() => go(index - 1)}
                 disabled={index === 0}
-                className="rounded-md border border-ink/15 px-3 py-2 text-sm text-ink/70 hover:border-ink/30 disabled:opacity-40"
+                className="btn btn-secondary"
               >
                 ← Previous
               </button>
@@ -471,7 +471,7 @@ function ReviewSession({
                 type="button"
                 onClick={() => go(index + 1)}
                 disabled={index >= rows.length - 1}
-                className="rounded-md border border-ink/15 px-3 py-2 text-sm text-ink/70 hover:border-ink/30 disabled:opacity-40"
+                className="btn btn-secondary"
               >
                 Skip →
               </button>

@@ -60,7 +60,7 @@ export function PackSizeForm({
         </p>
       )}
 
-      <SubmitButton className="self-start rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
+      <SubmitButton className="btn btn-secondary self-start">
         Save pack size
       </SubmitButton>
       </FormResetBoundary>

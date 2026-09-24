@@ -68,10 +68,7 @@ export default async function VendorsPage() {
         <div>
           <h1 className="page-title text-ink">Vendors</h1>
           <p className="page-description mt-1 max-w-xl">
-            Vendors typed or extracted on the submit form appear here as
-            pending until reviewed — that never blocks the expense they came
-            from. Click a vendor for billing address, collection addresses,
-            and contacts.
+            Every vendor. New ones from receipts wait here for review; open one for addresses and contacts.
           </p>
         </div>
         {canEdit && <AddVendorModal />}

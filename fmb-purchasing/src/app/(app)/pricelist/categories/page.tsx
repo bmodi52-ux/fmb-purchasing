@@ -56,9 +56,7 @@ export default async function PricelistCategoriesPage() {
         </Link>
         <h1 className="page-title mt-1 text-ink">Categories</h1>
         <p className="page-description mt-1 max-w-2xl">
-          Categories classify every item, and a category&rsquo;s code is the prefix on
-          the item numbers filed under it — an item in Chicken reads CHK-0042.
-          Subcategories without their own code borrow their parent&rsquo;s.
+          A category&rsquo;s code prefixes the item numbers under it — an item in Chicken reads CHK-0042.
         </p>
       </div>
 

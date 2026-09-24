@@ -43,11 +43,11 @@ const ALL_COLUMNS: ColumnDef<PurchaseRow>[] = [
     label: "Entry #",
     render: (r) =>
       r.canOpen ? (
-        <Link href={`/expenses/${r.expenseId}`} className="font-mono text-ink underline">
+        <Link href={`/expenses/${r.expenseId}`} className="tabular-nums text-ink font-medium underline-offset-2 hover:underline">
           {r.expenseNumber ?? "View"}
         </Link>
       ) : (
-        <span className="font-mono">{r.expenseNumber ?? "—"}</span>
+        <span className="tabular-nums">{r.expenseNumber ?? "—"}</span>
       ),
     exportValue: (r) => r.expenseNumber ?? "",
   },
@@ -86,7 +86,7 @@ const ALL_COLUMNS: ColumnDef<PurchaseRow>[] = [
   {
     key: "cost_per_unit",
     label: "Cost per unit",
-    render: (r) => <span className="font-mono">{r.costPerUnit ?? "—"}</span>,
+    render: (r) => <span className="tabular-nums">{r.costPerUnit ?? "—"}</span>,
     exportValue: (r) => r.costPerUnit ?? "",
     sortValue: (r) => r.costPerUnitValue ?? -1,
   },

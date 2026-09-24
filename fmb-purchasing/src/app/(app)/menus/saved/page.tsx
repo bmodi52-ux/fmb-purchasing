@@ -36,8 +36,7 @@ export default async function SavedMenusPage() {
       <div>
         <h1 className="page-title text-ink">Thaali Calendar</h1>
         <p className="page-description mt-1 max-w-2xl">
-          Menus kept to use again. Estimate what one costs for any number of thaalis, then put it on as many days as
-          you like.
+          Menus kept to use again, on as many days as you like.
         </p>
       </div>
 
@@ -47,7 +46,7 @@ export default async function SavedMenusPage() {
         <form action={newEstimate}>
           <SubmitButton
             pendingLabel="Starting…"
-            className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep"
+            className="btn btn-primary"
           >
             + New menu
           </SubmitButton>
@@ -103,7 +102,7 @@ function MenuList({ title, menus, canManage }: { title: string; menus: SavedMenu
       <h2 className="section-title text-ink">{title}</h2>
       <ul className="grid gap-2 md:grid-cols-2">
         {menus.map((m) => (
-          <li key={m.id} className="flex flex-col gap-2 rounded-lg border border-ink/10 bg-white/70 p-4 text-sm">
+          <li key={m.id} className="flex flex-col gap-2 card p-4 text-sm">
             <div className="flex items-start justify-between gap-3">
               <Link href={`/menus/saved/${m.id}`} className="font-medium text-ink underline-offset-2 hover:underline">
                 {m.name}
@@ -125,11 +124,11 @@ function MenuList({ title, menus, canManage }: { title: string; menus: SavedMenu
             </div>
             <p className="line-clamp-2 text-ink/70">{describeContents(m)}</p>
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink/55">
-              <span className="font-mono">{summaryOf(m)}</span>
+              <span className="tabular-nums">{summaryOf(m)}</span>
               {canManage && (
                 <Link
                   href={`/menus/saved/${m.id}#put-on-days`}
-                  className="rounded-md border border-ink/15 px-3 py-1 text-ink hover:border-ink/30"
+                  className="btn btn-secondary btn-xs"
                 >
                   Put on days
                 </Link>

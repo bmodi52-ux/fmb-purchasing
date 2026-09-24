@@ -76,7 +76,7 @@ export function ReconcileForm() {
             {result.matches.length === 0 ? (
               <p className="text-sm text-ink/55">None of the payments recorded as made appear in this statement.</p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-ink/10 bg-white/60">
+              <div className="overflow-x-auto card">
                 <table className="min-w-full text-sm">
                   <thead className="text-left text-xs text-ink/55">
                     <tr>
@@ -110,7 +110,7 @@ export function ReconcileForm() {
                           {formatPlainDate(m.paymentDate)}
                           {m.reference ? ` · ${m.reference}` : ""}
                         </td>
-                        <td className="px-3 py-2 text-right font-mono">{money(m.amountCents)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{money(m.amountCents)}</td>
                         <td className="px-3 py-2 text-ink/70">
                           {formatPlainDate(m.statementDate)} · {m.statementText}
                           {m.byReference && <span className="ml-2 rounded-full bg-palm/15 px-2 py-0.5 text-xs text-palm">reference matches</span>}
@@ -126,7 +126,7 @@ export function ReconcileForm() {
                 type="button"
                 onClick={confirm}
                 disabled={busy || chosen.size === 0}
-                className="self-start rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep disabled:opacity-50"
+                className="btn btn-primary self-start"
               >
                 Confirm {chosen.size} {chosen.size === 1 ? "payment" : "payments"}
               </button>
@@ -144,7 +144,7 @@ export function ReconcileForm() {
                       {p.payeeName} · {formatPlainDate(p.paymentDate)}
                       {p.reference ? ` · ${p.reference}` : ""}
                     </span>
-                    <span className="font-mono">{money(p.amountCents)}</span>
+                    <span className="tabular-nums">{money(p.amountCents)}</span>
                   </li>
                 ))}
               </ul>

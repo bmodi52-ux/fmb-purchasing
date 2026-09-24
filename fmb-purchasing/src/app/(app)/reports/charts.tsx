@@ -147,7 +147,7 @@ export function StatTile({
     // Stacked rather than value-beside-sparkline: three of these share a row,
     // and at that width a 96px sparkline sitting next to the number pushed
     // itself over the delta text underneath.
-    <div className="flex flex-col rounded-xl border border-ink/10 bg-white/60 p-4">
+    <div className="flex flex-col card p-4">
       <p className="text-xs text-ink/55">{label}</p>
       <p className="mt-1.5 text-2xl leading-none font-semibold text-ink">{value}</p>
 
@@ -448,7 +448,7 @@ export function StackedColumnChart({
               style={{ background: CATEGORICAL[i % CATEGORICAL.length] }}
             />
             {s.label}
-            <span className="font-mono text-ink/45 tabular-nums">
+            <span className="tabular-nums text-ink/45 tabular-nums">
               {formatCompact(s.values.reduce((a, b) => a + b, 0))}
             </span>
           </span>
@@ -473,7 +473,7 @@ export function StackedColumnChart({
                   className="inline-block h-2 w-2 shrink-0 rounded-sm"
                   style={{ background: CATEGORICAL[i % CATEGORICAL.length] }}
                 />
-                <span className="font-mono tabular-nums">{valueFormat(s.values[hover])}</span>
+                <span className="tabular-nums tabular-nums">{valueFormat(s.values[hover])}</span>
                 <span className="text-ink/45">{s.label}</span>
               </p>
             ) : null
@@ -621,7 +621,7 @@ export function BarChart({
               style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%`, background: GOLD, opacity: 0.85 }}
             />
           </div>
-          <span className="w-16 shrink-0 text-right font-mono text-xs text-ink/70 tabular-nums">
+          <span className="w-16 shrink-0 text-right tabular-nums text-xs text-ink/70 tabular-nums">
             {valueFormat(r.value)}
           </span>
 
@@ -822,7 +822,7 @@ export function LineChart({
             const pt = s.points.find((p) => p.x === allX[hoverIdx]);
             if (!pt) return null;
             return (
-              <p key={s.name} className="flex items-center gap-1.5 font-mono text-ink">
+              <p key={s.name} className="flex items-center gap-1.5 tabular-nums text-ink">
                 <span className="inline-block h-0.5 w-2.5 shrink-0" style={{ background: colors[i % colors.length] }} />
                 {valueFormat(pt.y)}
               </p>
@@ -895,7 +895,7 @@ export function StackedBar({ data }: { data: StackDatum[] }) {
               style={{ background: CATEGORICAL[d.slot % CATEGORICAL.length] }}
             />
             {d.label}
-            <span className="font-mono text-ink/45 tabular-nums">{d.detail ?? d.value}</span>
+            <span className="tabular-nums text-ink/45 tabular-nums">{d.detail ?? d.value}</span>
           </span>
         ))}
       </div>

@@ -61,8 +61,7 @@ export default async function DishesPage() {
       <div>
         <h1 className="page-title text-ink">Thaali Calendar</h1>
         <p className="page-description mt-1 max-w-2xl">
-          What each dish takes to make. A recipe is written once — per batch, as the kitchen cooks, or per thaali — and
-          every day that serves the dish works out its own quantities from the number of thaalis expected.
+          What each dish takes to make. Each day works out its own quantities from its thaali count.
         </p>
       </div>
 
@@ -76,7 +75,7 @@ export default async function DishesPage() {
         ) : (
           <ul className="flex flex-col gap-2">
             {live.map((d) => (
-              <li key={d.id} className="rounded-lg border border-ink/10 bg-white/60 p-4">
+              <li key={d.id} className="card p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <Link href={`/menus/dishes/${d.id}`} className="font-medium text-ink underline-offset-2 hover:underline">
                     {d.name}

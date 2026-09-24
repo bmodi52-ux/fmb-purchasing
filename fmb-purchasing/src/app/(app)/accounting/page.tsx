@@ -61,15 +61,14 @@ export default async function AccountingPage({
         <div>
           <h1 className="page-title text-ink">Accounting</h1>
           <p className="page-description mt-1 max-w-2xl">
-            GST for the return, the Xero bills file, account codes, and periods whose return has been lodged. Opens on
-            the current financial year.
+            GST for the return, the Xero bills file, and account codes.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
           <PeriodPicker value={period.code} today={today} earliest={earliest} />
           <div className="flex flex-col gap-1 text-xs">
             <span className="text-ink/55">Count expenses by</span>
-            <div className="inline-flex rounded-md border border-ink/15 p-0.5">
+            <div className="segmented">
               {(
                 [
                   ["receipt", "Receipt date (approved and paid)"],
@@ -80,7 +79,7 @@ export default async function AccountingPage({
                   key={b}
                   href={basisHref(b)}
                   aria-current={basis === b ? "true" : undefined}
-                  className={`rounded px-3 py-1 ${basis === b ? "bg-gold/20 font-medium text-ink" : "text-ink/60 hover:text-ink"}`}
+                  className="segment"
                 >
                   {label}
                 </Link>
@@ -113,7 +112,7 @@ export default async function AccountingPage({
             <ul className="mt-2 flex flex-col gap-1 text-sm">
               {gst.concerns.map(({ expense, reasons }) => (
                 <li key={expense.id}>
-                  <Link href={`/expenses/${expense.id}`} className="font-mono text-xs underline">
+                  <Link href={`/expenses/${expense.id}`} className="tabular-nums text-xs font-medium underline-offset-2 hover:underline">
                     {expense.expenseNumber ?? "Expense"}
                   </Link>{" "}
                   {expense.vendorName} · GST {money(expense.gst)} — {reasons.join("; ")}
@@ -129,7 +128,7 @@ export default async function AccountingPage({
             <ul className="mt-2 flex flex-col gap-1 text-sm">
               {gst.adjustments.map((e) => (
                 <li key={e.id}>
-                  <Link href={`/expenses/${e.id}`} className="font-mono text-xs underline">
+                  <Link href={`/expenses/${e.id}`} className="tabular-nums text-xs font-medium underline-offset-2 hover:underline">
                     {e.expenseNumber ?? "Expense"}
                   </Link>{" "}
                   {e.vendorName} · {money(e.total)} · GST {money(e.gst)}
@@ -157,7 +156,7 @@ export default async function AccountingPage({
           <h2 className="section-title text-ink">Account codes</h2>
           <p className="mt-0.5 text-xs text-ink/60">The account in FMB&apos;s chart of accounts each category&apos;s spend goes to. Saved when you leave the field.</p>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-ink/10 bg-white/60">
+        <div className="overflow-x-auto card">
           <table className="min-w-full text-sm">
             <tbody>
               {leaves.map((c) => (
@@ -171,7 +170,7 @@ export default async function AccountingPage({
                         defaultValue={((categoryRows ?? []).find((r) => r.id === c.id)?.account_code as string | null) ?? ""}
                         placeholder="e.g. 400"
                         aria-label={`Account code for ${labels.get(c.id) ?? c.name}`}
-                        className="input w-28 py-1 text-right font-mono"
+                        className="input w-28 py-1 text-right tabular-nums"
                       />
                       <SubmitButton className="sr-only">Save</SubmitButton>
                     </form>
@@ -193,19 +192,19 @@ export default async function AccountingPage({
           </p>
         </div>
         {!alreadyLocked && (
-          <form action={lockPeriod} className="flex flex-wrap items-end gap-2 rounded-lg border border-ink/10 bg-white/60 p-3 text-sm">
+          <form action={lockPeriod} className="flex flex-wrap items-end gap-2 card p-3 text-sm">
             <input type="hidden" name="period" value={period.code} />
             <label className="flex flex-col gap-1 text-xs">
               <span className="text-ink/55">Note (optional)</span>
               <input name="note" placeholder="Lodged 28 July" className="input w-56 text-sm" />
             </label>
-            <SubmitButton pendingLabel="Locking…" className="rounded-md border border-maroon/40 px-3.5 py-2 text-sm font-medium text-maroon hover:bg-maroon/5">
+            <SubmitButton pendingLabel="Locking…" className="btn btn-danger">
               Lock {period.label}
             </SubmitButton>
           </form>
         )}
         {(locks ?? []).length > 0 && (
-          <ul className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60 text-sm">
+          <ul className="flex flex-col divide-y divide-ink/5 card text-sm">
             {(locks ?? []).map((l) => (
               <li key={l.id} className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <span className={l.unlocked_at ? "text-ink/45 line-through" : "text-ink"}>
@@ -230,9 +229,9 @@ export default async function AccountingPage({
 
 function Tile({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <div className="rounded-lg border border-ink/10 bg-white/60 p-4">
+    <div className="card p-4">
       <dt className="text-xs text-ink/55">{label}</dt>
-      <dd className="mt-0.5 font-mono text-xl font-semibold text-ink">{value}</dd>
+      <dd className="mt-0.5 tabular-nums text-xl font-semibold text-ink">{value}</dd>
       <dd className="text-xs text-ink/45">{hint}</dd>
     </div>
   );

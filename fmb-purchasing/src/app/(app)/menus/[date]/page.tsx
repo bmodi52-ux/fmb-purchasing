@@ -12,6 +12,8 @@ import { CostLinesTable, DishesSection, ExtrasSection } from "../menu-contents";
 import { loadDishes, loadExtras, loadItemPrices, loadKitchens, loadMenuLines, loadSections, withDayCounts } from "../data";
 import { getSetting } from "@/lib/app-settings";
 import { TypedMenu } from "./typed-menu";
+import { MenuLayout, MenuSummary } from "../menu-layout";
+import { StatusBadge } from "@/components/status-badge";
 import { DeleteMenu } from "./delete-menu";
 import { releaseDay, unreleaseDay } from "../release-actions";
 import { applySavedMenu, saveDayAsMenu } from "../saved/actions";
@@ -175,45 +177,103 @@ export default async function MenuDayPage({
 
   const hijri = formatHijri(gregorianToHijri(new Date(`${date}T00:00:00`)));
 
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <Link href={`/menus?kitchen=${kitchen.id}`} className="text-sm text-ink/50 hover:text-ink">
-          ← Thaali Calendar
-        </Link>
-        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="page-title text-ink">{formatPlainDate(date)}</h1>
-          <span className="text-sm text-ink/55">{hijri}</span>
-          {day?.status === "released" && (
-            <span className="rounded-full bg-palm/15 px-2 py-0.5 text-xs text-palm">released</span>
+  const longDate = new Date(`${date}T00:00:00`).toLocaleDateString("en-AU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const releasable =
+    canManage && day && ((dishes.length > 0 && thaalis > 0) || extras.length > 0 || typedLines.length > 0);
+  const items = (allItems ?? []).map((i) => ({ id: i.id as string, name: i.name as string }));
+
+  const aside = (
+    <MenuSummary
+      cost={cost}
+      thaalis={thaalis}
+      emptyHint={simple ? "List what to buy to see what it costs." : "Add dishes and a thaali count to see what it costs."}
+    >
+      {/* A day is releasable once it holds anything to buy: dishes cooked for a
+          count, roti somebody has to order, or a list typed straight in (#77). */}
+      {releasable && day && (
+        <div className="flex flex-col gap-2 text-sm">
+          <p className="text-ink/70">
+            {day.status === "released"
+              ? "Released — what this day needs is somebody's to buy."
+              : "Releasing works out what the day needs and hands each list to whoever buys it."}
+          </p>
+          {day.status === "released" && (requirements ?? []).length > 0 && (
+            <p className="text-xs text-ink/55">
+              {(requirements ?? []).length} items · planned {money(plannedTotal)}
+              {actualTotal > 0 && ` · spent ${money(actualTotal)}`}
+              {stillToBuy > 0 && ` · ${stillToBuy} still to buy`}
+            </p>
+          )}
+          <form action={releaseDay}>
+            <input type="hidden" name="menu_day_id" value={day.id as string} />
+            <input type="hidden" name="date" value={date} />
+            <SubmitButton className={`btn w-full ${day.status === "released" ? "btn-secondary" : "btn-primary"}`}>
+              {day.status === "released" ? "Release again" : "Release"}
+            </SubmitButton>
+          </form>
+          {day.status === "released" && (
+            <div className="grid grid-cols-2 gap-2">
+              <Link href={`/procurement?from=${date}&to=${date}&who=all`} className="btn btn-primary">
+                What to buy
+              </Link>
+              <form action={unreleaseDay} className="flex">
+                <input type="hidden" name="menu_day_id" value={day.id as string} />
+                <input type="hidden" name="date" value={date} />
+                <SubmitButton className="btn btn-secondary flex-1">Back to draft</SubmitButton>
+              </form>
+            </div>
           )}
         </div>
-        {kitchens.length > 1 && (
-          <nav aria-label="Kitchen" className="mt-3 flex flex-wrap gap-1 border-b border-ink/10">
-            {kitchens.map((k) => (
-              <Link
-                key={k.id}
-                href={`/menus/${date}?kitchen=${k.id}`}
-                aria-current={k.id === kitchen.id ? "page" : undefined}
-                className={`-mb-px border-b-2 px-4 py-2.5 text-sm transition-colors ${
-                  k.id === kitchen.id
-                    ? "border-gold-deep font-medium text-ink"
-                    : "border-transparent text-ink/60 hover:text-ink"
-                }`}
-              >
-                {k.name}
-              </Link>
-            ))}
-          </nav>
-        )}
-      </div>
+      )}
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-1 section-title text-ink">How many</h2>
-        <p className="mb-4 text-sm text-ink/55">
-          Buying is based on the planned count. The confirmed count arrives closer to the day; both are kept, so the
-          difference between them is visible.
+      {canManage && day && dayHasMenu && (
+        <form action={saveDayAsMenu} className="flex flex-col gap-2">
+          <input type="hidden" name="menu_day_id" value={day.id as string} />
+          <FormResetBoundary>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-ink/70">Save to use again</span>
+              <input name="name" required placeholder="e.g. Friday biryani" className="input" />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink/70">
+              <input type="checkbox" name="favourite" /> Mark as a favourite
+            </label>
+          </FormResetBoundary>
+          <SubmitButton className="btn btn-secondary w-full">Save menu</SubmitButton>
+        </form>
+      )}
+
+      {canManage && day && (
+        <div className="flex items-center justify-between gap-3 text-xs text-ink/50">
+          {!deleteBlockedBecause && <span>Start the day again, or take it off the calendar.</span>}
+          <DeleteMenu
+            dayId={day.id as string}
+            date={date}
+            dateLabel={formatPlainDate(date)}
+            kitchenId={kitchen.id}
+            kitchenName={kitchen.name}
+            released={day.status === "released"}
+            blockedBecause={deleteBlockedBecause}
+          />
+        </div>
+      )}
+    </MenuSummary>
+  );
+
+  const main = (
+    <>
+      {done && (
+        <p role="status" className="rounded-md border border-palm/30 bg-palm/10 px-4 py-3 text-sm text-ink">
+          {done}
         </p>
+      )}
+
+      <section className="card p-5">
+        <h2 className="mb-3 section-title text-ink">How many</h2>
         <form action={setDayCounts} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="kitchen_id" value={kitchen.id} />
           <input type="hidden" name="date" value={date} />
@@ -226,7 +286,7 @@ export default async function MenuDayPage({
                 min="0"
                 defaultValue={planned}
                 disabled={!canManage}
-                className="input w-32"
+                className="input w-28"
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
@@ -239,82 +299,27 @@ export default async function MenuDayPage({
                 min="0"
                 defaultValue={confirmed ?? ""}
                 disabled={!canManage}
-                className="input w-32"
+                className="input w-28"
               />
             </label>
             <label className="flex min-w-48 flex-1 flex-col gap-1 text-sm">
-              <span className="text-ink/70">Notes</span>
+              <span className="text-ink/70">
+                Notes <span className="text-ink/40">(optional)</span>
+              </span>
               <input name="notes" defaultValue={day?.notes ?? ""} disabled={!canManage} className="input" />
             </label>
           </FormResetBoundary>
-          {canManage && (
-            <SubmitButton className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep">
-              Save
-            </SubmitButton>
-          )}
+          {canManage && <SubmitButton className="btn btn-secondary">Save</SubmitButton>}
         </form>
-        {confirmed != null && confirmed !== planned && (
+        {confirmed != null && confirmed !== planned ? (
           <p className="mt-2 text-sm text-alert">
             Confirmed is {Math.abs(confirmed - planned)} {confirmed > planned ? "more" : "fewer"} than planned —
-            quantities below follow the confirmed count.
+            quantities follow the confirmed count.
           </p>
+        ) : (
+          <p className="mt-2 text-xs text-ink/50">Buying follows the planned count until a confirmed one is entered.</p>
         )}
       </section>
-
-      {done && (
-        <p role="status" className="rounded-md border border-palm/30 bg-palm/10 px-4 py-3 text-sm text-ink">
-          {done}
-        </p>
-      )}
-
-      {/* A day is releasable once it holds anything to buy: dishes cooked for a
-          count, roti somebody has to order, or a list typed straight in (#77). */}
-      {canManage &&
-        day &&
-        ((dishes.length > 0 && thaalis > 0) || extras.length > 0 || typedLines.length > 0) && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
-          <div>
-            <p className="text-ink">
-              {day.status === "released"
-                ? "Released — what this day needs is somebody's to buy."
-                : "Not released yet. Releasing works out what the day needs and hands each list to whoever buys it."}
-            </p>
-            {day.status === "released" && (requirements ?? []).length > 0 && (
-              <p className="mt-1 text-xs text-ink/55">
-                {(requirements ?? []).length} items · planned {money(plannedTotal)}
-                {actualTotal > 0 && ` · spent so far ${money(actualTotal)}`}
-                {stillToBuy > 0 && ` · ${stillToBuy} still to buy`}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <form action={releaseDay}>
-              <input type="hidden" name="menu_day_id" value={day.id as string} />
-              <input type="hidden" name="date" value={date} />
-              <SubmitButton className="rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep">
-                {day.status === "released" ? "Release again" : "Release"}
-              </SubmitButton>
-            </form>
-            {day.status === "released" && (
-              <>
-                <Link
-                  href={`/procurement?from=${date}&to=${date}&who=all`}
-                  className="rounded-md border border-ink/15 px-4 py-2 hover:border-ink/30"
-                >
-                  What to buy
-                </Link>
-                <form action={unreleaseDay}>
-                  <input type="hidden" name="menu_day_id" value={day.id as string} />
-                  <input type="hidden" name="date" value={date} />
-                  <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-ink/60 hover:border-ink/30">
-                    Back to draft
-                  </SubmitButton>
-                </form>
-              </>
-            )}
-          </div>
-        </section>
-      )}
 
       {simple ? (
         <TypedMenu
@@ -323,76 +328,24 @@ export default async function MenuDayPage({
           actions={{ setText: setMenuText, addLine: addMenuLine, setLine: setMenuLine, removeLine: removeMenuLine }}
           menuText={(day?.menu_text as string | null) ?? null}
           lines={typedLines}
-          items={(allItems ?? []).map((i) => ({ id: i.id as string, name: i.name as string }))}
+          items={items}
           units={(allUnits ?? []).map((u) => ({ id: u.id as string, code: u.code as string, label: (u.label as string | null) ?? null }))}
           sectionFor={(itemId) => sectionByItem.get(itemId) ?? "dry"}
           canManage={canManage}
         />
       ) : (
         <>
-        <DishesSection
-          dishes={dishes}
-          rowIdFor={(dishId) => onDay.find((d) => d.dish_id === dishId)?.id as string | undefined}
-          rowField="menu_day_dish_id"
-          thaalis={thaalis}
-          canManage={canManage}
-          allDishes={(allDishes ?? []).map((d) => ({ id: d.id as string, name: d.name as string }))}
-          hidden={{ kitchen_id: kitchen.id, date }}
-          rowHidden={{ date }}
-          actions={{ add: addDishToDay, remove: removeDishFromDay, setCounts: setDishCounts }}
-        >
-          <form action={copyMenuFromDay} className="flex flex-wrap items-end gap-2">
-            <input type="hidden" name="kitchen_id" value={kitchen.id} />
-            <input type="hidden" name="date" value={date} />
-            <FormResetBoundary>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-ink/70">Or copy a past menu</span>
-                <select name="source_day_id" required defaultValue="" className="input max-w-xs">
-                  <option value="" disabled>
-                    — choose a day —
-                  </option>
-                  {(pastDays ?? [])
-                    .filter((d) => (d.menu_day_dishes ?? []).length > 0)
-                    .map((d) => {
-                      const k = Array.isArray(d.kitchens) ? d.kitchens[0] : d.kitchens;
-                      return (
-                        <option key={d.id as string} value={d.id as string}>
-                          {formatPlainDate(d.service_date as string)} · {(k as { name: string } | null)?.name} ·{" "}
-                          {(d.menu_day_dishes ?? []).length} dishes
-                        </option>
-                      );
-                    })}
-                </select>
-              </label>
-            </FormResetBoundary>
-            <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
-              Copy here
-            </SubmitButton>
-          </form>
-        </DishesSection>
-
-        <ExtrasSection
-          extras={extras}
-          thaalis={thaalis}
-          canManage={canManage}
-          allItems={(allItems ?? []).map((i) => ({ id: i.id as string, name: i.name as string }))}
-          hidden={{ kitchen_id: kitchen.id, date }}
-          rowHidden={{ date }}
-          actions={{ add: addExtraToDay, remove: removeExtraFromDay, setCounts: setExtraCounts }}
-        />
-        </>
-      )}
-
-      {canManage && (
-        <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-          <h2 className="mb-1 section-title text-ink">Saved menus</h2>
-          <p className="mb-4 text-sm text-ink/55">
-            Use a menu kept for days like this one, or keep this day&apos;s menu to use again.{" "}
-            <Link href="/menus/saved" className="underline underline-offset-2">
-              See them all
-            </Link>
-          </p>
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <DishesSection
+            dishes={dishes}
+            rowIdFor={(dishId) => onDay.find((d) => d.dish_id === dishId)?.id as string | undefined}
+            rowField="menu_day_dish_id"
+            thaalis={thaalis}
+            canManage={canManage}
+            allDishes={(allDishes ?? []).map((d) => ({ id: d.id as string, name: d.name as string }))}
+            hidden={{ kitchen_id: kitchen.id, date }}
+            rowHidden={{ date }}
+            actions={{ add: addDishToDay, remove: removeDishFromDay, setCounts: setDishCounts }}
+          >
             {(savedMenus ?? []).length > 0 && (
               <form action={applySavedMenu} className="flex flex-wrap items-end gap-2">
                 <input type="hidden" name="kitchen" value={kitchen.id} />
@@ -401,7 +354,12 @@ export default async function MenuDayPage({
                 <input type="hidden" name="return_to" value={`/menus/${date}?kitchen=${kitchen.id}`} />
                 <FormResetBoundary>
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="text-ink/70">Use a saved menu</span>
+                    <span className="text-ink/70">
+                      Or use a saved menu{" "}
+                      <Link href="/menus/saved" className="text-xs text-ink/45 underline underline-offset-2">
+                        see all
+                      </Link>
+                    </span>
                     <select name="saved_menu_id" required defaultValue="" className="input max-w-xs">
                       <option value="" disabled>
                         — choose —
@@ -415,98 +373,82 @@ export default async function MenuDayPage({
                     </select>
                   </label>
                 </FormResetBoundary>
-                <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
-                  {dayHasMenu ? "Add to this day" : "Use it"}
-                </SubmitButton>
+                <SubmitButton className="btn btn-secondary">{dayHasMenu ? "Add" : "Use it"}</SubmitButton>
               </form>
             )}
-            {day && dayHasMenu && (
-              <form action={saveDayAsMenu} className="flex flex-wrap items-end gap-2">
-                <input type="hidden" name="menu_day_id" value={day.id as string} />
-                <FormResetBoundary>
-                  <label className="flex flex-col gap-1 text-sm">
-                    <span className="text-ink/70">Save this menu as</span>
-                    <input name="name" required placeholder="a name" className="input w-56" />
-                  </label>
-                  <label className="flex items-center gap-2 pb-2 text-sm">
-                    <input type="checkbox" name="favourite" /> Favourite
-                  </label>
-                </FormResetBoundary>
-                <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">
-                  Save
-                </SubmitButton>
-              </form>
-            )}
-            {(savedMenus ?? []).length === 0 && !dayHasMenu && (
-              <p className="text-sm text-ink/50">None saved yet.</p>
-            )}
-          </div>
+            <form action={copyMenuFromDay} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="kitchen_id" value={kitchen.id} />
+              <input type="hidden" name="date" value={date} />
+              <FormResetBoundary>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-ink/70">Or copy a past day</span>
+                  <select name="source_day_id" required defaultValue="" className="input max-w-xs">
+                    <option value="" disabled>
+                      — choose a day —
+                    </option>
+                    {(pastDays ?? [])
+                      .filter((d) => (d.menu_day_dishes ?? []).length > 0)
+                      .map((d) => {
+                        const k = Array.isArray(d.kitchens) ? d.kitchens[0] : d.kitchens;
+                        return (
+                          <option key={d.id as string} value={d.id as string}>
+                            {formatPlainDate(d.service_date as string)} · {(k as { name: string } | null)?.name} ·{" "}
+                            {(d.menu_day_dishes ?? []).length} dishes
+                          </option>
+                        );
+                      })}
+                  </select>
+                </label>
+              </FormResetBoundary>
+              <SubmitButton className="btn btn-secondary">Copy here</SubmitButton>
+            </form>
+          </DishesSection>
+
+          <ExtrasSection
+            extras={extras}
+            thaalis={thaalis}
+            canManage={canManage}
+            allItems={items}
+            hidden={{ kitchen_id: kitchen.id, date }}
+            rowHidden={{ date }}
+            actions={{ add: addExtraToDay, remove: removeExtraFromDay, setCounts: setExtraCounts }}
+          />
+        </>
+      )}
+
+      {cost.lines.length > 0 && (
+        <section className="card p-5">
+          <h2 className="mb-1 section-title text-ink">What it needs</h2>
+          <p className="mb-4 text-sm text-ink/55">
+            {simple
+              ? "What was typed in, priced."
+              : `From the recipes, for ${thaalis} ${thaalis === 1 ? "thaali" : "thaalis"}, in each item's own unit.`}{" "}
+            Priced at what was last paid, else the cheapest lately, else a quote.
+          </p>
+          <CostLinesTable lines={cost.lines} />
+
+          {actualTotal > 0 && (
+            <div className="mt-4 rounded-md border border-ink/10 bg-cream/60 p-3 text-sm">
+              <p className="text-ink">
+                Planned {money(plannedTotal)} · spent {money(actualTotal)}{" "}
+                <span className={actualTotal > plannedTotal ? "text-alert" : "text-palm"}>
+                  ({actualTotal > plannedTotal ? "+" : ""}
+                  {money(actualTotal - plannedTotal)})
+                </span>
+              </p>
+              <p className="mt-0.5 text-xs text-ink/55">
+                From the receipts allocated to this day.
+                {stillToBuy > 0 &&
+                  ` ${stillToBuy} of ${(requirements ?? []).length} items are still to buy, so this is not the final figure.`}
+              </p>
+            </div>
+          )}
         </section>
       )}
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-1 section-title text-ink">What it needs, and what it costs</h2>
-        <p className="mb-4 text-sm text-ink/55">
-          {simple ? (
-            <>What was typed in, priced.</>
-          ) : (
-            <>
-              Worked out from the recipes and {thaalis} {thaalis === 1 ? "thaali" : "thaalis"}, in each item&apos;s own
-              unit.
-            </>
-          )}{" "}
-          Prices are what was last actually paid where there is any, then the cheapest paid lately, then a
-          vendor&apos;s quote.
-        </p>
-
-        {cost.lines.length === 0 ? (
-          <p className="text-sm text-ink/55">
-            {simple ? "List what to buy to see this." : "Add dishes and a thaali count to see this."}
-          </p>
-        ) : (
-          <>
-            <CostLinesTable lines={cost.lines} />
-
-            {actualTotal > 0 && (
-              <div className="mt-4 rounded-md border border-ink/10 bg-cream/60 p-3 text-sm">
-                <p className="text-ink">
-                  Planned {money(plannedTotal)} · spent {money(actualTotal)}{" "}
-                  <span className={actualTotal > plannedTotal ? "text-alert" : "text-palm"}>
-                    ({actualTotal > plannedTotal ? "+" : ""}
-                    {money(actualTotal - plannedTotal)})
-                  </span>
-                </p>
-                <p className="mt-0.5 text-xs text-ink/55">
-                  From the receipts allocated to this day.
-                  {stillToBuy > 0 && ` ${stillToBuy} of ${(requirements ?? []).length} items are still to buy, so this is not the final figure.`}
-                </p>
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3 border-t border-ink/10 pt-3">
-              <span className="text-sm text-ink/60">
-                {cost.lines.length} {cost.lines.length === 1 ? "item" : "items"}
-                {cost.unpriced > 0 && (
-                  <span className="text-alert">
-                    {" "}
-                    · {cost.unpriced} with no price, so this is less than the real cost
-                  </span>
-                )}
-              </span>
-              <span className="font-mono text-lg text-ink">
-                {money(cost.total)}
-                {cost.perThaali != null && (
-                  <span className="ml-2 text-sm text-ink/60">· {money(cost.perThaali)} a thaali</span>
-                )}
-              </span>
-            </div>
-          </>
-        )}
-      </section>
-
       {/* Who changed what, and whether the lists had gone out yet (#15). */}
       {history.length > 0 && (
-        <details className="rounded-lg border border-ink/10 bg-white/60 p-4 text-sm" open={changedSinceRelease > 0}>
+        <details className="card p-4 text-sm" open={changedSinceRelease > 0}>
           <summary className="cursor-pointer text-ink">
             History
             <span className="ml-2 text-ink/50">
@@ -543,21 +485,37 @@ export default async function MenuDayPage({
           </ul>
         </details>
       )}
+    </>
+  );
 
-      {canManage && day && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
-          <p className="text-ink/60">Start this day again, or take it off the calendar.</p>
-          <DeleteMenu
-            dayId={day.id as string}
-            date={date}
-            dateLabel={formatPlainDate(date)}
-            kitchenId={kitchen.id}
-            kitchenName={kitchen.name}
-            released={day.status === "released"}
-            blockedBecause={deleteBlockedBecause}
-          />
-        </section>
-      )}
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <Link href={`/menus?kitchen=${kitchen.id}`} className="text-sm text-ink/50 hover:text-ink">
+          ← Thaali Calendar
+        </Link>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className="page-title text-ink">{longDate}</h1>
+          <span className="text-sm text-ink/55">{hijri}</span>
+          {day?.status === "released" && <StatusBadge status="approved" label="Released" />}
+        </div>
+        {kitchens.length > 1 && (
+          <nav aria-label="Kitchen" className="tabs mt-3">
+            {kitchens.map((k) => (
+              <Link
+                key={k.id}
+                href={`/menus/${date}?kitchen=${k.id}`}
+                aria-current={k.id === kitchen.id ? "page" : undefined}
+                className="tab"
+              >
+                {k.name}
+              </Link>
+            ))}
+          </nav>
+        )}
+      </div>
+
+      <MenuLayout main={main} aside={aside} cost={cost} />
     </div>
   );
 }

@@ -95,8 +95,7 @@ export default async function StockCountPage({
       <div>
         <h1 className="page-title text-ink">Procurement</h1>
         <p className="page-description mt-1 max-w-2xl">
-          A count of the high-value stock in the store, once a month: what is on the shelf, and what it is worth at
-          what was last paid. It&apos;s a record only, and doesn&apos;t change what the lists ask for.
+          A monthly count of the high-value stock on the shelf, and what it is worth.
         </p>
       </div>
 
@@ -108,7 +107,7 @@ export default async function StockCountPage({
         </p>
       )}
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <h2 className="mb-1 section-title text-ink">Count</h2>
         <p className="mb-4 text-sm text-ink/55">
           Fill in what is there now. Leave an item blank to skip it; counting it again on the same date corrects it.
@@ -175,7 +174,7 @@ export default async function StockCountPage({
             </ul>
             <SubmitButton
               pendingLabel="Saving…"
-              className="self-start rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep"
+              className="btn btn-primary self-start"
             >
               Save count
             </SubmitButton>
@@ -184,7 +183,7 @@ export default async function StockCountPage({
       </section>
 
       {dates.length > 0 && (
-        <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <section className="card p-5">
           <h2 className="mb-1 section-title text-ink">The last {dates.length === 1 ? "count" : `${dates.length} counts`}</h2>
           <p className="mb-3 text-sm text-ink/55">Valued at what was last paid, so the columns compare like with like.</p>
           <div className="overflow-x-auto">
@@ -211,7 +210,7 @@ export default async function StockCountPage({
                       {dates.map((d) => {
                         const c = counts.find((x) => x.itemId === item.id && x.countedOn === d);
                         return (
-                          <td key={d} className="p-2 text-right font-mono whitespace-nowrap text-ink/80" title={c?.note ?? undefined}>
+                          <td key={d} className="p-2 text-right tabular-nums whitespace-nowrap text-ink/80" title={c?.note ?? undefined}>
                             {c ? `${c.quantity} ${c.unitCode}` : "—"}
                             {c && canManage && (
                               <form action={removeStockCount} className="inline">
@@ -228,13 +227,13 @@ export default async function StockCountPage({
                         );
                       })}
                       <td
-                        className={`p-2 text-right font-mono whitespace-nowrap ${
+                        className={`p-2 text-right tabular-nums whitespace-nowrap ${
                           change == null ? "text-ink/40" : change < 0 ? "text-ink/80" : "text-palm"
                         }`}
                       >
                         {change == null ? "—" : `${change > 0 ? "+" : ""}${change} ${baseOf(item.id)}`}
                       </td>
-                      <td className="p-2 text-right font-mono whitespace-nowrap">
+                      <td className="p-2 text-right tabular-nums whitespace-nowrap">
                         {latest ? money(valueOf(latest, priceOf(item.id))) : "—"}
                       </td>
                     </tr>
@@ -245,14 +244,14 @@ export default async function StockCountPage({
                   {dates.map((d) => {
                     const t = totalValue(counts, d, priceOf);
                     return (
-                      <td key={d} className="p-2 text-right font-mono whitespace-nowrap">
+                      <td key={d} className="p-2 text-right tabular-nums whitespace-nowrap">
                         {money(t.value)}
                         {t.unpriced > 0 && <span className="block text-xs font-normal text-alert">{t.unpriced} unpriced</span>}
                       </td>
                     );
                   })}
                   <td />
-                  <td className="p-2 text-right font-mono whitespace-nowrap">
+                  <td className="p-2 text-right tabular-nums whitespace-nowrap">
                     {money(
                       items.reduce((sum, item) => {
                         const latest = latestOf(item.id);
@@ -271,7 +270,7 @@ export default async function StockCountPage({
       )}
 
       {canManage && (
-        <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+        <section className="card p-5">
           <h2 className="mb-1 section-title text-ink">What is counted</h2>
           <p className="mb-3 text-sm text-ink/55">
             The items worth counting: the expensive ones bought in bulk. Taking one off keeps its past counts.
@@ -311,7 +310,7 @@ export default async function StockCountPage({
                 </select>
               </label>
             </FormResetBoundary>
-            <SubmitButton className="rounded-md border border-ink/15 px-4 py-2 text-sm hover:border-ink/30">Add</SubmitButton>
+            <SubmitButton className="btn btn-secondary">Add</SubmitButton>
           </form>
         </section>
       )}

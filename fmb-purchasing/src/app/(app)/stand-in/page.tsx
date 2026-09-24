@@ -92,7 +92,7 @@ export default async function StandInPage() {
       {(mine ?? []).length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="section-title text-ink">Your stand-ins</h2>
-          <ul className="flex flex-col divide-y divide-ink/5 rounded-lg border border-ink/10 bg-white/60 text-sm">
+          <ul className="flex flex-col divide-y divide-ink/5 card text-sm">
             {((mine ?? []) as StandInRow[]).map((r) => (
               <li key={r.id} className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <span className={r.cancelled_at || r.ends_on < today ? "text-ink/50" : "text-ink"}>

@@ -13,7 +13,7 @@ export function ProcurementTabs({
   canManage: boolean;
 }) {
   return (
-    <nav aria-label="Procurement sections" className="flex flex-wrap gap-x-1 border-b border-ink/10">
+    <nav aria-label="Procurement sections" className="tabs">
       <TabLink href="/procurement" active={active === "buy"}>
         To buy
       </TabLink>

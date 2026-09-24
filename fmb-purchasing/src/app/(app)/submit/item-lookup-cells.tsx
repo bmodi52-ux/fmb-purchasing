@@ -65,7 +65,7 @@ export function ItemLookupCells({
         autoComplete="off"
         placeholder="Item #"
         aria-label="Item number"
-        className={`${stacked ? "w-full" : "w-20"} rounded border border-ink/10 bg-white px-2 py-1 font-mono`}
+        className={`${stacked ? "w-full" : "w-20"} rounded border border-ink/10 bg-white px-2 py-1 tabular-nums`}
       />
       <AnchoredPopover anchorRef={numberRef} open={open === "number" && (searching || suggestions.length > 0)}>
         <SuggestionList suggestions={suggestions} searching={searching} onSelect={select} />

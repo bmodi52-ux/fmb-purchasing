@@ -127,7 +127,7 @@ function BulkPayBar({
         type="button"
         disabled={pending}
         onClick={submit}
-        className="rounded-md bg-gold px-3 py-1 text-xs font-medium text-ink hover:bg-gold-deep disabled:opacity-50"
+        className="btn btn-primary btn-xs"
       >
         {pending ? "…" : `Mark ${ids.length} paid`}
       </button>
@@ -135,7 +135,7 @@ function BulkPayBar({
         type="button"
         disabled={pending}
         onClick={downloadBankFile}
-        className="rounded-md border border-ink/20 px-3 py-1 text-xs font-medium text-ink/80 hover:border-ink/40 disabled:opacity-50"
+        className="btn btn-secondary btn-xs"
       >
         Download bank file
       </button>
@@ -205,7 +205,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                 and Mark paid sat at the far right of it. */}
             <ul className="flex flex-col gap-3 md:hidden">
               {rows.map((e) => (
-                <li key={e.id} className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
+                <li key={e.id} className="flex flex-col gap-3 card p-4 text-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-2">
                       <input
@@ -219,7 +219,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                         <p className="font-medium text-ink">{e.vendor_name_raw}</p>
                         {e.duplicateWarning && <DuplicateFlag label={e.duplicateWarning} />}
                         <p className="text-xs text-ink/55">
-                          <Link href={`/expenses/${e.id}`} className="font-mono underline">
+                          <Link href={`/expenses/${e.id}`} className="tabular-nums font-medium underline-offset-2 hover:underline">
                             {e.expense_number ?? "View"}
                           </Link>
                           {" · "}
@@ -228,7 +228,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                         </p>
                       </div>
                     </div>
-                    <span className="shrink-0 font-mono text-base font-semibold text-ink">${e.total.toFixed(2)}</span>
+                    <span className="shrink-0 tabular-nums text-base font-semibold text-ink">${e.total.toFixed(2)}</span>
                   </div>
 
                   <div>
@@ -257,7 +257,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                       aria-label="Payment date"
                       className="input"
                     />
-                    <SubmitButton className="rounded-md bg-gold px-3 py-2 text-sm font-medium text-ink hover:bg-gold-deep">
+                    <SubmitButton className="btn btn-primary">
                       Mark paid
                     </SubmitButton>
                   </form>
@@ -296,7 +296,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                           aria-label="Select expense"
                         />
                       </td>
-                      <td className="p-2 font-mono text-xs"><Link href={`/expenses/${e.id}`} className="text-ink/70 underline">{e.expense_number ?? "View"}</Link></td>
+                      <td className="p-2 tabular-nums text-xs"><Link href={`/expenses/${e.id}`} className="text-ink/70 underline">{e.expense_number ?? "View"}</Link></td>
                       <td className="p-2">
                         {e.vendor_name_raw}
                         {e.duplicateWarning && <DuplicateFlag label={e.duplicateWarning} />}
@@ -306,7 +306,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                       <td className="p-2 text-ink/70">{e.invoice_number || "—"}</td>
                       <td className="p-2">{e.hasReceipt ? <ReceiptViewer expenseId={e.id} /> : <span className="text-ink/40">—</span>}</td>
                       <td className="p-2 text-ink/70">{e.decided_at ? formatDate(e.decided_at) : "—"}</td>
-                      <td className="p-2 font-mono">${e.total.toFixed(2)}</td>
+                      <td className="p-2 tabular-nums">${e.total.toFixed(2)}</td>
                       <td colSpan={3} className="p-2">
                         <form action={markExpensePaid} className="flex flex-wrap items-center gap-2">
                           <input type="hidden" name="expense_id" value={e.id} />
@@ -318,7 +318,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                             required
                             className="input h-8 py-1 text-xs"
                           />
-                          <SubmitButton className="rounded-md bg-gold px-3 py-1.5 text-xs font-medium text-ink hover:bg-gold-deep">
+                          <SubmitButton className="btn btn-primary btn-sm">
                             Mark paid
                           </SubmitButton>
                         </form>

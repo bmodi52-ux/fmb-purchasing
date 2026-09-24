@@ -36,10 +36,7 @@ export default async function PricelistUnitsPage() {
         </Link>
         <h1 className="page-title mt-1 text-ink">Units</h1>
         <p className="page-description mt-1 max-w-2xl">
-          The units pack sizes are measured in. Each carries a dimension and a
-          factor for converting to a base unit, which is what lets a 500 g pack
-          and a 1 kg pack be compared on cost rather than reported as
-          &ldquo;0.01/g&rdquo; and &ldquo;9/kg&rdquo;.
+          The units pack sizes are measured in, and how each converts, so packs compare on cost.
         </p>
       </div>
 

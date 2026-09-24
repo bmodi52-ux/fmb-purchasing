@@ -145,8 +145,7 @@ export default async function MenuCalendarPage({
         <div>
           <h1 className="page-title text-ink">Thaali Calendar</h1>
           <p className="page-description mt-1 max-w-2xl">
-            What is being cooked, for how many, and what that costs a thaali. A day&apos;s quantities come from its
-            dishes and its thaali count, so changing either works the rest out.
+            What is being cooked, for how many, and what it costs a thaali.
           </p>
         </div>
         {/* One menu, then as many days as it is wanted for (#20). */}
@@ -154,7 +153,7 @@ export default async function MenuCalendarPage({
           <form action={newEstimate}>
             <SubmitButton
               pendingLabel="Starting…"
-              className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep"
+              className="btn btn-primary"
             >
               + Add menu
             </SubmitButton>
@@ -196,16 +195,16 @@ export default async function MenuCalendarPage({
           </span>
         </h2>
         <div className="flex items-center gap-2 text-sm">
-          <Link href={monthHref(-1)} className="rounded-md border border-ink/15 px-3 py-1.5 hover:border-ink/30">
+          <Link href={monthHref(-1)} className="btn btn-secondary btn-sm">
             ← Previous
           </Link>
           <Link
             href={`/menus${kitchensQuery ? `?${kitchensQuery.slice(1)}` : ""}`}
-            className="rounded-md border border-ink/15 px-3 py-1.5 hover:border-ink/30"
+            className="btn btn-secondary btn-sm"
           >
             This month
           </Link>
-          <Link href={monthHref(1)} className="rounded-md border border-ink/15 px-3 py-1.5 hover:border-ink/30">
+          <Link href={monthHref(1)} className="btn btn-secondary btn-sm">
             Next →
           </Link>
         </div>
@@ -222,7 +221,7 @@ export default async function MenuCalendarPage({
               <li key={`${date}-${entry.kitchenId}`}>
                 <Link
                   href={`/menus/${date}?kitchen=${entry.kitchenId}`}
-                  className="flex flex-col gap-1 rounded-lg border border-ink/10 bg-white/70 p-3"
+                  className="flex flex-col gap-1 card p-3"
                 >
                   <span className="flex flex-wrap items-baseline justify-between gap-2">
                     <span className="font-medium text-ink">
@@ -241,7 +240,7 @@ export default async function MenuCalendarPage({
                     {entry.dishes.map((d) => d.dishName).join(", ") || "No dishes yet"}
                   </span>
                   {entry.cost?.perThaali != null && (
-                    <span className="font-mono text-xs text-ink/55">{money(entry.cost.perThaali)} a thaali</span>
+                    <span className="tabular-nums text-xs text-ink/55">{money(entry.cost.perThaali)} a thaali</span>
                   )}
                 </Link>
               </li>
@@ -282,7 +281,7 @@ export default async function MenuCalendarPage({
                           <span className={`font-medium ${cell.inCurrentMonth ? "text-ink" : ""}`}>
                             {cell.gregorian.getDate()}
                           </span>
-                          <span className="text-[0.65rem] text-ink/45">{formatHijri(cell.hijri)}</span>
+                          <span className="text-[0.7rem] text-ink/45">{formatHijri(cell.hijri)}</span>
                         </Link>
                         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-1">
                           {entries.length === 0 && cell.inCurrentMonth && (
@@ -300,7 +299,7 @@ export default async function MenuCalendarPage({
                               className="rounded border border-ink/10 bg-cream/60 px-1.5 py-1 hover:border-ink/30"
                             >
                               {showing.length > 1 && (
-                                <span className="block truncate text-[0.65rem] text-ink/45">{entry.kitchenName}</span>
+                                <span className="block truncate text-[0.7rem] text-ink/45">{entry.kitchenName}</span>
                               )}
                               <span className="line-clamp-2 text-ink/75">
                                 {entry.dishes.map((d) => d.dishName).join(", ") || "No dishes yet"}
@@ -308,7 +307,7 @@ export default async function MenuCalendarPage({
                               <span className="text-ink/50">
                                 {entry.thaalis > 0 && `${entry.thaalis} thaalis`}
                                 {entry.cost?.perThaali != null && (
-                                  <span className="block font-mono text-ink/70">
+                                  <span className="block tabular-nums text-ink/70">
                                     {money(entry.cost.perThaali)}/thaali
                                   </span>
                                 )}

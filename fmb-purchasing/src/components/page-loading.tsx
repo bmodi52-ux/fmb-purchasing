@@ -101,7 +101,7 @@ function TryAgain() {
     <button
       type="button"
       onClick={() => window.location.reload()}
-      className="rounded-md bg-gold px-4 py-2 font-medium text-ink hover:bg-gold-deep"
+      className="btn btn-primary"
     >
       Try again
     </button>

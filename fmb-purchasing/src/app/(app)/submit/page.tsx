@@ -128,7 +128,7 @@ export default async function SubmitExpensePage({
                 <div className="flex items-center gap-3">
                   <Link
                     href={`/submit?inbound=${r.id}`}
-                    className="rounded-md bg-gold px-3.5 py-1.5 text-sm font-medium text-ink hover:bg-gold-deep"
+                    className="btn btn-primary btn-sm"
                   >
                     Read and submit
                   </Link>
@@ -144,7 +144,7 @@ export default async function SubmitExpensePage({
       )}
       {newSubmission && !inbound && forwardingAddress && (
         <p className="-mt-3 text-xs text-ink/55">
-          You can also forward a receipt email to <span className="font-mono text-ink/75">{forwardingAddress}</span> from
+          You can also forward a receipt email to <span className="tabular-nums text-ink/75">{forwardingAddress}</span> from
           your own address — it will wait here for you.
         </p>
       )}

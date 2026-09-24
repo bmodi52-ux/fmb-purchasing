@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { StatusBadge } from "@/components/status-badge";
 import { ColumnsDataTable, type ColumnDef } from "@/components/columns-data-table";
 import { ReceiptViewer } from "@/components/receipt-viewer";
 import { formatDate } from "@/lib/format";
@@ -33,23 +34,23 @@ const ALL_COLUMNS: ColumnDef<ExpenseRow>[] = [
     label: "Entry #",
     // The entry number exists to be followed; make it the way in.
     render: (r) => (
-      <Link href={`/expenses/${r.id}`} className="font-mono text-ink underline">
+      <Link href={`/expenses/${r.id}`} className="tabular-nums text-ink font-medium underline-offset-2 hover:underline">
         {r.expenseNumber ?? "View"}
       </Link>
     ),
     exportValue: (r) => r.expenseNumber ?? "",
   },
-  { key: "vendor", label: "Vendor", render: (r) => r.vendor_name_raw ?? "—", exportValue: (r) => r.vendor_name_raw ?? "" },
+  { key: "vendor", label: "Vendor", render: (r) => r.vendor_name_raw ?? "—", exportValue: (r) => r.vendor_name_raw ?? "", onPhone: true },
   {
     key: "vendor_number",
     label: "Vendor #",
-    render: (r) => <span className="font-mono">{r.vendorNumber ?? "—"}</span>,
+    render: (r) => <span className="tabular-nums">{r.vendorNumber ?? "—"}</span>,
     exportValue: (r) => r.vendorNumber ?? "",
   },
   { key: "submitted_by", label: "Submitted by", render: (r) => r.submittedByName, exportValue: (r) => r.submittedByName },
-  { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} />, exportValue: (r) => r.status },
+  { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} />, exportValue: (r) => r.status, onPhone: true },
   { key: "invoice_number", label: "Invoice #", render: (r) => r.invoice_number ?? "—", exportValue: (r) => r.invoice_number ?? "" },
-  { key: "receipt_date", label: "Receipt date", render: (r) => r.receipt_date ?? "—", exportValue: (r) => r.receipt_date ?? "" },
+  { key: "receipt_date", label: "Receipt date", render: (r) => r.receipt_date ?? "—", exportValue: (r) => r.receipt_date ?? "", onPhone: true },
   {
     key: "receipt",
     label: "Receipt",
@@ -58,7 +59,7 @@ const ALL_COLUMNS: ColumnDef<ExpenseRow>[] = [
   },
   { key: "subtotal", label: "Subtotal", render: (r) => `$${r.subtotal.toFixed(2)}`, exportValue: (r) => r.subtotal },
   { key: "gst_amount", label: "GST", render: (r) => `$${r.gst_amount.toFixed(2)}`, exportValue: (r) => r.gst_amount },
-  { key: "total", label: "Total", render: (r) => `$${r.total.toFixed(2)}`, exportValue: (r) => r.total },
+  { key: "total", label: "Total", render: (r) => `$${r.total.toFixed(2)}`, exportValue: (r) => r.total, onPhone: true },
   {
     key: "fiscal_year",
     label: "Fiscal year (H)",
@@ -97,15 +98,4 @@ export function ExpensesTable({ rows, initialVisible }: { rows: ExpenseRow[]; in
       emptyLabel="No expenses yet."
     />
   );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    submitted: "bg-gold/15 text-gold-deep",
-    approved: "bg-palm/15 text-palm",
-    declined: "bg-maroon/10 text-maroon",
-    paid: "bg-ink/10 text-ink/70",
-    withdrawn: "bg-ink/5 text-ink/50",
-  };
-  return <span className={`rounded-full px-2 py-0.5 text-xs ${styles[status] ?? ""}`}>{status}</span>;
 }

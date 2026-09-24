@@ -52,7 +52,7 @@ export function BudgetPhasing({
                   value={values[i]}
                   inputMode="decimal"
                   onChange={(e) => setValues((prev) => prev.map((v, j) => (j === i ? e.target.value : v)))}
-                  className="w-14 rounded border border-ink/15 px-1 py-0.5 text-right font-mono"
+                  className="w-14 rounded border border-ink/15 px-1 py-0.5 text-right tabular-nums"
                   aria-label={`${label} share`}
                 />
                 %
@@ -64,7 +64,7 @@ export function BudgetPhasing({
           {blank ? "All blank: spread evenly by day." : `Adds up to ${Math.round(sum * 10) / 10}%`}
         </p>
         <div className="flex items-center gap-3">
-          <button type="submit" className="rounded-md bg-gold px-3 py-1 font-medium text-ink hover:bg-gold-deep">
+          <button type="submit" className="btn btn-primary btn-xs">
             Save
           </button>
           <button type="button" onClick={() => setValues(Array(12).fill(""))} className="text-ink/55 underline">

@@ -206,7 +206,7 @@ export function PeriodPicker({
             <button
               type="submit"
               disabled={!from || !to || from > to}
-              className="rounded-md border border-ink/15 px-3 py-1.5 text-sm text-ink/75 hover:border-ink/30 disabled:opacity-50"
+              className="btn btn-secondary btn-sm"
             >
               Show
             </button>

@@ -45,7 +45,7 @@ export function ColumnsMenu({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="rounded-md border border-ink/15 px-3 py-1 text-xs text-ink/70 hover:border-ink/30"
+        className="btn btn-secondary btn-xs"
       >
         Columns
       </button>

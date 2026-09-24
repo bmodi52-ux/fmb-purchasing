@@ -152,14 +152,14 @@ function RankedTable({
           {ranked.map((b) => (
             <tr key={b.key} className="border-b border-ink/5 last:border-0">
               <td className="py-1 pr-3 truncate">{b.label}</td>
-              <td className="py-1 pr-3 text-right font-mono tabular-nums">{formatMoney(b.spend)}</td>
-              <td className="py-1 text-right font-mono text-ink/60 tabular-nums">{b.count}</td>
+              <td className="py-1 pr-3 text-right tabular-nums tabular-nums">{formatMoney(b.spend)}</td>
+              <td className="py-1 text-right tabular-nums text-ink/60 tabular-nums">{b.count}</td>
             </tr>
           ))}
           <tr className="border-t border-ink/15 font-medium">
             <td className="py-1 pr-3">Total</td>
-            <td className="py-1 pr-3 text-right font-mono tabular-nums">{formatMoney(total)}</td>
-            <td className="py-1 text-right font-mono tabular-nums">
+            <td className="py-1 pr-3 text-right tabular-nums tabular-nums">{formatMoney(total)}</td>
+            <td className="py-1 text-right tabular-nums tabular-nums">
               {ranked.reduce((s, b) => s + b.count, 0)}
             </td>
           </tr>
@@ -183,7 +183,7 @@ function CompareCards({
   return (
     <div className="grid grid-cols-2 gap-2.5">
       {comparison.subjects.map((s, i) => (
-        <div key={s.key} className="rounded-lg border border-ink/10 bg-white/60 p-2.5">
+        <div key={s.key} className="card p-2.5">
           <div className="flex items-center gap-1.5">
             <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: seriesHue(i) }} />
             <p className="min-w-0 truncate text-xs font-medium text-ink">{s.label}</p>
@@ -226,7 +226,7 @@ function CompareTable({
             <tr key={m.key} className="border-b border-ink/5 last:border-0">
               <td className="py-1 pr-3">{m.label}</td>
               {comparison.subjects.map((s) => (
-                <td key={s.key} className="py-1 pr-3 text-right font-mono tabular-nums">
+                <td key={s.key} className="py-1 pr-3 text-right tabular-nums tabular-nums">
                   {s.values[i] > 0 ? formatMoney(s.values[i]) : "—"}
                 </td>
               ))}
@@ -255,13 +255,13 @@ function UnitCostTable({ rows }: { rows: PerUnitRow[] }) {
           {rows.map((r, i) => (
             <tr key={i} className="border-t border-ink/5">
               <td className="py-1 pr-3 truncate">{r.vendorName}</td>
-              <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
+              <td className="py-1 pr-3 text-right tabular-nums text-ink/60 tabular-nums">
                 {r.normalizedQuantity} {r.normalizedUnit}
               </td>
-              <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
+              <td className="py-1 pr-3 text-right tabular-nums text-ink/60 tabular-nums">
                 {r.perPack != null ? `$${r.perPack.toFixed(2)}` : "—"}
               </td>
-              <td className="py-1 text-right font-mono tabular-nums">${r.perUnit.toFixed(2)}</td>
+              <td className="py-1 text-right tabular-nums tabular-nums">${r.perUnit.toFixed(2)}</td>
             </tr>
           ))}
         </tbody>

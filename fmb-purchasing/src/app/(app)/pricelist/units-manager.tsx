@@ -81,7 +81,7 @@ export function UnitsManager({ units }: { units: ManagedUnit[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5 text-sm">
+      <section className="card p-5 text-sm">
         <h2 className="mb-3 section-title text-ink">All units ({units.length})</h2>
 
         <div className="flex flex-col gap-4">
@@ -117,7 +117,7 @@ export function UnitsManager({ units }: { units: ManagedUnit[] }) {
         </div>
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5 text-sm">
+      <section className="card p-5 text-sm">
         <h2 className="mb-1 section-title text-ink">Add a unit</h2>
         <p className="mb-4 max-w-2xl text-xs text-ink/50">
           Two costs are only comparable when both reduce to the same base unit,

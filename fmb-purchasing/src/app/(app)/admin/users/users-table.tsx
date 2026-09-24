@@ -1,6 +1,7 @@
 "use client";
 
 import { SubmitButton } from "@/components/submit-button";
+import { StatusBadge } from "@/components/status-badge";
 import { ColumnsDataTable, type ColumnDef, type BulkAction } from "@/components/columns-data-table";
 import { setUserActive, bulkSetUserActive } from "./actions";
 import { ResetPasswordButton } from "./reset-password-button";
@@ -19,7 +20,7 @@ const COLUMNS: ColumnDef<UserRow>[] = [
   {
     key: "email",
     label: "Email address",
-    render: (u) => <span className="font-mono">{u.email}</span>,
+    render: (u) => <span className="tabular-nums">{u.email}</span>,
     exportValue: (u) => u.email,
   },
   { key: "teams", label: "Teams", render: (u) => u.teamNames || "—", exportValue: (u) => u.teamNames },
@@ -28,11 +29,11 @@ const COLUMNS: ColumnDef<UserRow>[] = [
     label: "Status",
     render: (u) =>
       !u.is_active ? (
-        <span className="text-maroon/70">Disabled</span>
+        <StatusBadge status="disabled" label="Disabled" />
       ) : u.must_change_password ? (
-        <span className="text-ink/60">Password not set</span>
+        <StatusBadge status="pending" label="Password not set" />
       ) : (
-        <span className="text-palm">Active</span>
+        <StatusBadge status="active" label="Active" />
       ),
     exportValue: (u) =>
       !u.is_active ? "Disabled" : u.must_change_password ? "Password not set" : "Active",

@@ -25,7 +25,7 @@ export function ViewToggle({ linesView }: { linesView: boolean }) {
 
   return (
     <div
-      className="inline-flex rounded-md border border-ink/15 p-0.5 text-xs"
+      className="segmented"
       role="group"
       aria-label="View"
     >
@@ -41,9 +41,7 @@ function Tab({ href, active, label }: { href: string; active: boolean; label: st
       href={href}
       prefetch={false}
       aria-current={active ? "true" : undefined}
-      className={`rounded px-3 py-1 ${
-        active ? "bg-gold/20 font-medium text-ink" : "text-ink/60 hover:text-ink"
-      }`}
+      className="segment"
     >
       {label}
     </Link>

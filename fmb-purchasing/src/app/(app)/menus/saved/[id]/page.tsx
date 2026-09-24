@@ -11,6 +11,7 @@ import { loadKitchens, loadPlannedDates, loadSections } from "../../data";
 import { CostLinesTable, DishesSection, ExtrasSection } from "../../menu-contents";
 import { TypedMenu } from "../../[date]/typed-menu";
 import { ApplyForm } from "../apply-form";
+import { MenuLayout, MenuSummary } from "../../menu-layout";
 import { loadSavedMenus } from "../data";
 import {
   addSavedDish,
@@ -31,7 +32,6 @@ import {
 
 export const metadata = { title: "Menu" };
 
-const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
 function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -86,38 +86,56 @@ export default async function SavedMenuPage({
   const hidden = { saved_menu_id: menu.id };
   const items = (allItems ?? []).map((i) => ({ id: i.id as string, name: i.name as string }));
 
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <Link href="/menus/saved" className="text-sm text-ink/50 hover:text-ink">
-          ← Saved menus
-        </Link>
-        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="page-title text-ink">{menu.saved ? menu.name : "New menu"}</h1>
-          {menu.saved && canManage && (
-            <form action={toggleFavourite}>
-              <input type="hidden" name="saved_menu_id" value={menu.id} />
-              <SubmitButton
-                aria-pressed={menu.favourite}
-                className={`rounded-full border px-2.5 py-0.5 text-xs ${
-                  menu.favourite
-                    ? "border-gold-deep bg-gold/15 text-ink"
-                    : "border-ink/15 text-ink/55 hover:border-ink/30"
-                }`}
-              >
-                {menu.favourite ? "★ Favourite" : "☆ Mark as favourite"}
-              </SubmitButton>
-            </form>
-          )}
-          {menu.saved && !canManage && menu.favourite && <span className="text-sm text-gold-deep">★ Favourite</span>}
-        </div>
-        <p className="page-description mt-1 max-w-2xl">
-          {menu.saved
-            ? "A menu kept to use again. Changing it here doesn't change days already planned from it."
-            : "Build a menu and see what it costs, then put it on days, save it to use again, or both. A menu that isn't saved is cleared after a week; days it was put on keep theirs."}
-        </p>
-      </div>
+  const aside = (
+    <MenuSummary
+      cost={cost}
+      thaalis={thaalis}
+      emptyHint={simple ? "List what to buy to see what it costs." : "Add dishes and a thaali count to see what it costs."}
+    >
+      {canManage && hasAnything && (
+        <a href="#put-on-days" className="btn btn-primary w-full">
+          Put it on days
+        </a>
+      )}
 
+      {canManage && (
+        <form action={saveMenu} className="flex flex-col gap-2">
+          <input type="hidden" name="saved_menu_id" value={menu.id} />
+          <FormResetBoundary>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-ink/70">{menu.saved ? "Name" : "Save to use again"}</span>
+              <input
+                name="name"
+                required
+                defaultValue={menu.name ?? ""}
+                placeholder="e.g. Friday biryani"
+                className="input"
+              />
+            </label>
+            {!menu.saved && (
+              <label className="flex items-center gap-2 text-sm text-ink/70">
+                <input type="checkbox" name="favourite" /> Mark as a favourite
+              </label>
+            )}
+          </FormResetBoundary>
+          <SubmitButton className="btn btn-secondary w-full">{menu.saved ? "Rename" : "Save menu"}</SubmitButton>
+        </form>
+      )}
+
+      {canManage && (
+        <form action={deleteSavedMenu} className="flex items-center justify-between gap-3 text-xs text-ink/50">
+          <input type="hidden" name="saved_menu_id" value={menu.id} />
+          <span>{menu.saved ? "Days planned from it keep their menus." : "Unsaved, it goes by itself after a week."}</span>
+          <SubmitButton pendingLabel="Deleting…" className="btn btn-quiet btn-xs text-maroon">
+            {menu.saved ? "Delete" : "Discard"}
+          </SubmitButton>
+        </form>
+      )}
+    </MenuSummary>
+  );
+
+  const main = (
+    <>
       {done && (
         <p role="status" className="rounded-md border border-palm/30 bg-palm/10 px-4 py-3 text-sm text-ink">
           {done}{" "}
@@ -127,41 +145,8 @@ export default async function SavedMenuPage({
         </p>
       )}
 
-      {canManage && (
-        <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-          <h2 className="mb-3 section-title text-ink">{menu.saved ? "Name" : "Save to use again"}</h2>
-          <form action={saveMenu} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="saved_menu_id" value={menu.id} />
-            <FormResetBoundary>
-              <label className="flex min-w-56 flex-1 flex-col gap-1 text-sm">
-                <span className="text-ink/70">Name</span>
-                <input
-                  name="name"
-                  required
-                  defaultValue={menu.name ?? ""}
-                  placeholder="e.g. Friday biryani, 2 kitchens"
-                  className="input"
-                />
-              </label>
-              {!menu.saved && (
-                <label className="flex items-center gap-2 pb-2 text-sm">
-                  <input type="checkbox" name="favourite" /> Favourite
-                </label>
-              )}
-            </FormResetBoundary>
-            <SubmitButton className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep">
-              {menu.saved ? "Rename" : "Save menu"}
-            </SubmitButton>
-          </form>
-        </section>
-      )}
-
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-1 section-title text-ink">For how many</h2>
-        <p className="mb-4 text-sm text-ink/55">
-          The estimate is worked out for this count. When the menu is put on a day that has no count yet, the day starts
-          with this one.
-        </p>
+      <section className="card p-5">
+        <h2 className="mb-3 section-title text-ink">How many</h2>
         <form action={setSavedCount} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="saved_menu_id" value={menu.id} />
           <FormResetBoundary>
@@ -173,20 +158,19 @@ export default async function SavedMenuPage({
                 min="0"
                 defaultValue={thaalis}
                 disabled={!canManage}
-                className="input w-32"
+                className="input w-28"
               />
             </label>
             <label className="flex min-w-48 flex-1 flex-col gap-1 text-sm">
-              <span className="text-ink/70">Notes</span>
+              <span className="text-ink/70">
+                Notes <span className="text-ink/40">(optional)</span>
+              </span>
               <input name="notes" defaultValue={menu.notes ?? ""} disabled={!canManage} className="input" />
             </label>
           </FormResetBoundary>
-          {canManage && (
-            <SubmitButton className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep">
-              Save
-            </SubmitButton>
-          )}
+          {canManage && <SubmitButton className="btn btn-secondary">Save</SubmitButton>}
         </form>
+        <p className="mt-2 text-xs text-ink/50">A day this is put on that has no count yet starts with this one.</p>
       </section>
 
       {simple ? (
@@ -230,70 +214,65 @@ export default async function SavedMenuPage({
         </>
       )}
 
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
-        <h2 className="mb-1 section-title text-ink">Estimate</h2>
-        <p className="mb-4 text-sm text-ink/55">
-          {simple ? "What was typed in, priced." : `Worked out from the recipes for ${thaalis} ${thaalis === 1 ? "thaali" : "thaalis"}.`}{" "}
-          Prices are what was last actually paid where there is any, then the cheapest paid lately, then a vendor&apos;s
-          quote.
-        </p>
-        {cost.lines.length === 0 ? (
-          <p className="text-sm text-ink/55">
-            {simple ? "List what to buy to see this." : "Add dishes and a thaali count to see this."}
-          </p>
-        ) : (
-          <>
-            <CostLinesTable lines={cost.lines} />
-            <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3 border-t border-ink/10 pt-3">
-              <span className="text-sm text-ink/60">
-                {cost.lines.length} {cost.lines.length === 1 ? "item" : "items"}
-                {cost.unpriced > 0 && (
-                  <span className="text-alert"> · {cost.unpriced} with no price, so this is less than the real cost</span>
-                )}
-              </span>
-              <span className="font-mono text-lg text-ink">
-                {money(cost.total)}
-                {cost.perThaali != null && (
-                  <span className="ml-2 text-sm text-ink/60">· {money(cost.perThaali)} a thaali</span>
-                )}
-              </span>
-            </div>
-          </>
-        )}
-      </section>
-
-      {canManage && (
-        <section id="put-on-days" className="rounded-lg border border-ink/10 bg-white/60 p-5">
-          <h2 className="mb-1 section-title text-ink">Put it on days</h2>
+      {cost.lines.length > 0 && (
+        <section className="card p-5">
+          <h2 className="mb-1 section-title text-ink">What it needs</h2>
           <p className="mb-4 text-sm text-ink/55">
-            Pick one day or several. Each gets its own copy of this menu, which can then be changed on the day.
+            {simple ? "What was typed in, priced." : `From the recipes, for ${thaalis} ${thaalis === 1 ? "thaali" : "thaalis"}.`}{" "}
+            Priced at what was last paid, else the cheapest lately, else a quote.
           </p>
-          {hasAnything ? (
-            <ApplyForm savedMenuId={menu.id} kitchens={kitchens} planned={planned} today={today} />
-          ) : (
-            <p className="text-sm text-ink/55">Add something to the menu first.</p>
-          )}
+          <CostLinesTable lines={cost.lines} />
         </section>
       )}
 
-      {canManage && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white/60 p-4 text-sm">
-          <p className="text-ink/60">
-            {menu.saved
-              ? "Deleting this doesn't touch days already planned from it."
-              : "Don't need this menu? Unsaved, it goes by itself after a week, or now."}
-          </p>
-          <form action={deleteSavedMenu}>
-            <input type="hidden" name="saved_menu_id" value={menu.id} />
-            <SubmitButton
-              pendingLabel="Deleting…"
-              className="rounded-md border border-maroon/30 px-4 py-2 text-sm text-maroon hover:border-maroon/60 hover:bg-maroon/5"
-            >
-              {menu.saved ? "Delete this saved menu" : "Discard"}
-            </SubmitButton>
-          </form>
+      {canManage && hasAnything && (
+        <section id="put-on-days" className="card scroll-mt-6 p-5">
+          <h2 className="mb-1 section-title text-ink">Put it on days</h2>
+          <p className="mb-4 text-sm text-ink/55">Each day gets its own copy, which can then be changed on the day.</p>
+          <ApplyForm savedMenuId={menu.id} kitchens={kitchens} planned={planned} today={today} />
         </section>
       )}
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <Link href="/menus/saved" className="text-sm text-ink/50 hover:text-ink">
+          ← Saved menus
+        </Link>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className="page-title text-ink">{menu.saved ? menu.name : "New menu"}</h1>
+          {menu.saved && canManage && (
+            <form action={toggleFavourite}>
+              <input type="hidden" name="saved_menu_id" value={menu.id} />
+              <SubmitButton
+                aria-pressed={menu.favourite}
+                className={`rounded-full border px-2.5 py-0.5 text-xs ${
+                  menu.favourite
+                    ? "border-gold-deep bg-gold/15 text-ink"
+                    : "border-ink/15 text-ink/55 hover:border-ink/30"
+                }`}
+              >
+                {menu.favourite ? "★ Favourite" : "☆ Mark as favourite"}
+              </SubmitButton>
+            </form>
+          )}
+          {menu.saved && !canManage && menu.favourite && <span className="text-sm text-gold-deep">★ Favourite</span>}
+        </div>
+        <p className="page-description mt-1 max-w-2xl">
+          {menu.saved
+            ? "Kept to use again. Changing it here doesn't change days already planned from it."
+            : "Build a menu and see what a thaali costs, then put it on days, save it to use again, or both."}
+        </p>
+      </div>
+
+      <MenuLayout
+        main={main}
+        aside={aside}
+        cost={cost}
+        barAction={canManage && hasAnything ? { href: "#put-on-days", label: "Put on days" } : undefined}
+      />
     </div>
   );
 }

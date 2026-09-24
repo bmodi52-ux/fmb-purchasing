@@ -23,7 +23,7 @@ export function NewDishForm({ boxSizes }: { boxSizes: number[] }) {
   }, [state.dishId, router]);
 
   return (
-    <form action={action} className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-white/60 p-4">
+    <form action={action} className="flex flex-col gap-3 card p-4">
       <h2 className="section-title text-ink">Add a dish</h2>
       <FormResetBoundary>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -51,7 +51,7 @@ export function NewDishForm({ boxSizes }: { boxSizes: number[] }) {
         </label>
       </FormResetBoundary>
       {state.error && <p className="text-sm text-alert">{state.error}</p>}
-      <SubmitButton className="self-start rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep">
+      <SubmitButton className="btn btn-primary self-start">
         Add dish
       </SubmitButton>
     </form>

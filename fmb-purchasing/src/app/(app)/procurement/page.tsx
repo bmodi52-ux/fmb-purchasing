@@ -78,8 +78,7 @@ export default async function ProcurementPage({
       <div>
         <h1 className="page-title text-ink">Procurement</h1>
         <p className="page-description mt-1 max-w-2xl">
-          What released menus need, by day and section. Quantities come from the menus; what to order is rounded to a
-          pack the supplier sells.
+          What released menus need, by day and section, rounded to packs the supplier sells.
         </p>
       </div>
 
@@ -128,7 +127,7 @@ export default async function ProcurementPage({
           const spent = dayLines.reduce((sum, l) => sum + l.spent, 0);
 
           return (
-            <section key={key} className="rounded-lg border border-ink/10 bg-white/60 p-4">
+            <section key={key} className="card p-4">
               <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <h2 className="section-title text-ink">
                   <Link href={`/menus/${date}`} className="underline-offset-2 hover:underline">
@@ -136,7 +135,7 @@ export default async function ProcurementPage({
                   </Link>
                   <span className="ml-2 text-sm font-normal text-ink/55">{kitchen}</span>
                 </h2>
-                <span className="font-mono text-sm text-ink/60">
+                <span className="tabular-nums text-sm text-ink/60">
                   planned {money(planned)}
                   {spent > 0 && <span className="ml-2 text-ink/80">· spent {money(spent)}</span>}
                 </span>
@@ -180,9 +179,9 @@ export default async function ProcurementPage({
                           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                             <span className="text-ink">
                               {line.itemName}
-                              {line.itemNumber && <span className="ml-1.5 font-mono text-xs text-ink/40">{line.itemNumber}</span>}
+                              {line.itemNumber && <span className="ml-1.5 tabular-nums text-xs text-ink/40">{line.itemNumber}</span>}
                             </span>
-                            <span className="font-mono text-ink/80">
+                            <span className="tabular-nums text-ink/80">
                               {line.quantity} {line.unit}
                               {line.pack && line.pack.packs > 0 && (
                                 <span className="ml-2 text-ink/55">
@@ -240,8 +239,8 @@ export default async function ProcurementPage({
                                   <SubmitButton
                                     className={
                                       s === NEXT_STEP[line.status]
-                                        ? "rounded-md bg-gold px-4 py-2.5 text-sm font-medium text-ink hover:bg-gold-deep sm:px-3 sm:py-1 sm:text-xs"
-                                        : "rounded border border-ink/15 px-3 py-2 text-sm hover:border-ink/30 sm:px-2 sm:py-1 sm:text-xs"
+                                        ? "btn btn-primary btn-lg sm:px-3 sm:py-1 sm:text-xs"
+                                        : "btn btn-secondary sm:px-2 sm:py-1 sm:text-xs"
                                     }
                                   >
                                     {s === "to_order" ? "Not ordered" : s === "ordered" ? "Mark ordered" : "Mark delivered"}

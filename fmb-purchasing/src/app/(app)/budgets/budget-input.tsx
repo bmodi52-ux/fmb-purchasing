@@ -63,7 +63,7 @@ export function BudgetInput({
             e.preventDefault();
             commit(e.currentTarget);
           }}
-          className={`w-32 rounded border bg-white px-2 py-1 text-right font-mono ${
+          className={`w-32 rounded border bg-white px-2 py-1 text-right tabular-nums ${
             conflict ? "border-maroon/50" : "border-ink/15"
           } ${pending ? "opacity-60" : ""}`}
         />

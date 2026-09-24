@@ -11,7 +11,7 @@ import { addBoxSize, removeBoxSize } from "./actions";
  */
 export function BoxSizes({ sizes }: { sizes: { ml: number; dishes: number }[] }) {
   return (
-    <section className="rounded-lg border border-ink/10 bg-white/60 p-4">
+    <section className="card p-4">
       <h2 className="section-title text-ink">Box sizes</h2>
       <p className="mt-1 text-sm text-ink/55">
         What a dish can be portioned into. Taking a size off only removes it from the list — a dish written for it
@@ -58,7 +58,7 @@ export function BoxSizes({ sizes }: { sizes: { ml: number; dishes: number }[] })
             <span className="text-sm text-ink/55">ml</span>
           </div>
         </label>
-        <SubmitButton className="rounded-md border border-ink/15 px-3 py-1.5 text-sm hover:border-ink/30">
+        <SubmitButton className="btn btn-secondary btn-sm">
           Add
         </SubmitButton>
       </form>

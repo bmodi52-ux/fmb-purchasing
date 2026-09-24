@@ -153,8 +153,7 @@ export default async function MenuSheetPage({
       <div>
         <h1 className="page-title text-ink">Thaali Calendar</h1>
         <p className="page-description mt-1 max-w-2xl">
-          Every day side by side, with what each one needs under Meat, Fresh produce and Dry goods — the planning
-          sheet, with the quantities worked out rather than typed.
+          Every day side by side, with what each needs under Meat, Fresh produce and Dry goods.
         </p>
       </div>
 
@@ -172,13 +171,13 @@ export default async function MenuSheetPage({
         {showingIds.size !== kitchens.length && (
           <input type="hidden" name="kitchens" value={[...showingIds].join(",")} />
         )}
-        <button type="submit" className="rounded-md border border-ink/15 px-4 py-2 hover:border-ink/30">
+        <button type="submit" className="btn btn-secondary">
           Show
         </button>
-        <Link href={shift(-14)} className="rounded-md border border-ink/15 px-3 py-2 hover:border-ink/30">
+        <Link href={shift(-14)} className="btn btn-secondary">
           ← Earlier
         </Link>
-        <Link href={shift(14)} className="rounded-md border border-ink/15 px-3 py-2 hover:border-ink/30">
+        <Link href={shift(14)} className="btn btn-secondary">
           Later →
         </Link>
       </form>
@@ -274,7 +273,7 @@ export default async function MenuSheetPage({
                       return (
                         <td
                           key={`${column.date}-${column.kitchenId}`}
-                          className="border-b border-ink/5 p-2 font-mono whitespace-nowrap text-ink/80"
+                          className="border-b border-ink/5 p-2 tabular-nums whitespace-nowrap text-ink/80"
                         >
                           {quantity == null ? <span className="text-ink/20">—</span> : `${quantity} ${row.unit}`}
                         </td>
@@ -293,7 +292,7 @@ export default async function MenuSheetPage({
                 {columns.map((column) => (
                   <td
                     key={`${column.date}-${column.kitchenId}`}
-                    className="border-t border-ink/15 p-2 font-mono whitespace-nowrap text-ink"
+                    className="border-t border-ink/15 p-2 tabular-nums whitespace-nowrap text-ink"
                   >
                     {column.cost ? money(column.cost.total) : "—"}
                     {column.cost && column.cost.unpriced > 0 && (

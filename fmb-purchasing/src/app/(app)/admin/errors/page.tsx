@@ -64,9 +64,7 @@ export default async function ErrorsPage() {
       <div>
         <h1 className="page-title text-ink">System errors</h1>
         <p className="page-description mt-1 max-w-xl">
-          Failures the app caught and handled without telling anyone at the time —
-          a receipt that wouldn&apos;t extract, an email that didn&apos;t send. Repeats of
-          the same fault are counted on one line rather than listed separately.
+          Things that failed quietly — a receipt that wouldn&apos;t read, an email that didn&apos;t send.
         </p>
       </div>
 
@@ -86,7 +84,7 @@ export default async function ErrorsPage() {
       {/* Not an error, but it belongs on the page an admin reaches when
           something looks wrong — and it is deliberately not somewhere a reader
           would find it, since each refresh re-reads the whole ledger. */}
-      <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-ink/10 bg-white/60 px-4 py-3">
+      <section className="flex flex-wrap items-center justify-between gap-4 card px-4 py-3">
         <div className="max-w-xl">
           <h2 className="text-sm font-medium text-ink">Reports figures look wrong?</h2>
           <p className="mt-0.5 text-xs leading-relaxed text-ink/60">
@@ -100,7 +98,7 @@ export default async function ErrorsPage() {
         <form action={refreshReportData}>
           <SubmitButton
             pendingLabel="Refreshing…"
-            className="whitespace-nowrap rounded-md border border-ink/15 px-3.5 py-2 text-sm text-ink/70 hover:border-ink/30"
+            className="btn btn-secondary"
           >
             Refresh Reports data
           </SubmitButton>
@@ -158,14 +156,14 @@ function ErrorCard({
   resolvable?: boolean;
 }) {
   return (
-    <li className="rounded-lg border border-ink/10 bg-white/60 p-4">
+    <li className="card p-4">
       {/* Not flex-wrap: a long single-line message would otherwise push the
           button onto its own row and left-align it, out of line with the
           other cards. */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-2">
-            <span className="rounded bg-ink/10 px-1.5 py-0.5 font-mono text-xs text-ink/70">
+            <span className="rounded bg-ink/10 px-1.5 py-0.5 tabular-nums text-xs text-ink/70">
               {row.source}
             </span>
             {row.seen_count > 1 && (

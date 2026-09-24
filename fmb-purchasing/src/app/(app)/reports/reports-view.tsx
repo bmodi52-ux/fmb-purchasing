@@ -183,14 +183,13 @@ export function ReportsView({
         <div>
           <h1 className="page-title text-ink">Reports</h1>
           <p className="page-description mt-1">
-            Any period: the Hijri year (Shawwal → Ramadan, Fatimi/Misri calendar), the Australian financial year,
-            a calendar year, a quarter, a month or your own dates.
+            Spending over any period — Hijri year, financial year, quarter, month or your own dates.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-ink/10">
           <SectionTabs query={query} active={query.section} />
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 pb-2">
             <SavedViews views={savedViews} query={query} userId={userId} teams={teams} />
             {!empty && (
               <PrintButton
@@ -214,7 +213,7 @@ export function ReportsView({
         />
 
         {empty ? (
-          <p className="rounded-xl border border-ink/10 bg-white/60 px-4 py-8 text-center text-sm text-ink/55">
+          <p className="card px-4 py-8 text-center text-sm text-ink/55">
             Nothing recorded for {periodLabel}
             {isFiltered && " with these filters"}.
           </p>
@@ -323,7 +322,7 @@ function OverviewSection({
     <>
       {found.length > 0 && (
         <Printable id="overview-insights" label="What stands out">
-          <section className="rounded-xl border border-ink/10 bg-white/60 p-4">
+          <section className="card p-4">
             <h2 className="text-xs tracking-wide text-ink/45 uppercase">What stands out</h2>
             <ul className="mt-2.5 flex flex-col gap-1.5">
               {found.map((insight) => (
@@ -402,7 +401,7 @@ function BreakdownSection({ query, current }: { query: ReportQuery; current: Sli
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-ink/10 bg-white/60 p-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 card p-3">
         <span className="text-xs text-ink/55">Break down by</span>
         <div className="flex flex-wrap gap-1.5">
           {(
@@ -523,30 +522,30 @@ function DimensionSection({
                 {ranked.map((b) => (
                   <tr key={b.key} className="border-b border-ink/5 last:border-0">
                     <td className="py-1.5 pr-4">{b.label}</td>
-                    <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
+                    <td className="py-1.5 pr-4 text-right tabular-nums text-ink/60 tabular-nums">
                       {b.count}
                     </td>
-                    <td className="py-1.5 pr-4 text-right font-mono tabular-nums">
+                    <td className="py-1.5 pr-4 text-right tabular-nums tabular-nums">
                       {formatMoney(b.spend)}
                     </td>
-                    <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
+                    <td className="py-1.5 pr-4 text-right tabular-nums text-ink/60 tabular-nums">
                       {formatMoney(b.gst)}
                     </td>
-                    <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
+                    <td className="py-1.5 pr-4 text-right tabular-nums text-ink/60 tabular-nums">
                       {total > 0 ? `${Math.round((b.spend / total) * 100)}%` : "—"}
                     </td>
                   </tr>
                 ))}
                 <tr className="border-t border-ink/15 font-medium">
                   <td className="py-2 pr-4">Total</td>
-                  <td className="py-2 pr-4 text-right font-mono tabular-nums">
+                  <td className="py-2 pr-4 text-right tabular-nums tabular-nums">
                     {ranked.reduce((s, b) => s + b.count, 0)}
                   </td>
-                  <td className="py-2 pr-4 text-right font-mono tabular-nums">{formatMoney(total)}</td>
-                  <td className="py-2 pr-4 text-right font-mono tabular-nums">
+                  <td className="py-2 pr-4 text-right tabular-nums tabular-nums">{formatMoney(total)}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums tabular-nums">
                     {formatMoney(ranked.reduce((s, b) => s + b.gst, 0))}
                   </td>
-                  <td className="py-2 pr-4 text-right font-mono tabular-nums">100%</td>
+                  <td className="py-2 pr-4 text-right tabular-nums tabular-nums">100%</td>
                 </tr>
               </tbody>
             </table>
@@ -601,7 +600,7 @@ function CompareSection({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-ink/10 bg-white/60 p-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 card p-3">
         <span className="text-xs text-ink/55">Compare by</span>
         <div className="flex flex-wrap gap-1.5">
           {(
@@ -641,7 +640,7 @@ function CompareSection({
       )}
 
       {comparison.subjects.length === 0 ? (
-        <p className="rounded-xl border border-ink/10 bg-white/60 px-4 py-8 text-center text-sm text-ink/55">
+        <p className="card px-4 py-8 text-center text-sm text-ink/55">
           Nothing to compare with the current filters.
         </p>
       ) : (
@@ -658,7 +657,7 @@ function CompareSection({
                 return (
                   <div
                     key={s.key}
-                    className="rounded-xl border border-ink/10 bg-white/60 p-3.5"
+                    className="card p-3.5"
                   >
                     <div className="flex items-start gap-2">
                       <span
@@ -711,7 +710,7 @@ function CompareSection({
                         {comparison.subjects.map((s) => (
                           <td
                             key={s.key}
-                            className="py-1.5 pr-4 text-right font-mono tabular-nums"
+                            className="py-1.5 pr-4 text-right tabular-nums tabular-nums"
                           >
                             {s.values[i] > 0 ? formatMoney(s.values[i]) : "—"}
                           </td>
@@ -721,7 +720,7 @@ function CompareSection({
                     <tr className="border-t border-ink/15 font-medium">
                       <td className="py-2 pr-4">Total</td>
                       {comparison.subjects.map((s) => (
-                        <td key={s.key} className="py-2 pr-4 text-right font-mono tabular-nums">
+                        <td key={s.key} className="py-2 pr-4 text-right tabular-nums tabular-nums">
                           {formatMoney(s.total)}
                         </td>
                       ))}
@@ -838,16 +837,16 @@ function UnitCostsSection({
                         {rows.map((r, i) => (
                           <tr key={i} className="border-t border-ink/5">
                             <td className="py-1 pr-3">{r.vendorName}</td>
-                            <td className="py-1 pr-3 font-mono text-ink/60">
+                            <td className="py-1 pr-3 tabular-nums text-ink/60">
                               <DateCell date={r.receiptDate} calendar={calendar} />
                             </td>
-                            <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
+                            <td className="py-1 pr-3 text-right tabular-nums text-ink/60 tabular-nums">
                               {r.normalizedQuantity} {r.normalizedUnit}
                             </td>
-                            <td className="py-1 pr-3 text-right font-mono text-ink/60 tabular-nums">
+                            <td className="py-1 pr-3 text-right tabular-nums text-ink/60 tabular-nums">
                               {r.perPack != null ? `$${r.perPack.toFixed(2)}` : "—"}
                             </td>
-                            <td className="py-1 text-right font-mono tabular-nums">
+                            <td className="py-1 text-right tabular-nums tabular-nums">
                               ${r.perUnit.toFixed(2)}
                             </td>
                           </tr>
@@ -883,10 +882,10 @@ function MonthTable({ monthly }: { monthly: Bucket[] }) {
           {monthly.map((m) => (
             <tr key={m.key} className="border-b border-ink/5 last:border-0">
               <td className="py-1.5 pr-4">{m.label}</td>
-              <td className="py-1.5 pr-4 text-right font-mono text-ink/60 tabular-nums">
+              <td className="py-1.5 pr-4 text-right tabular-nums text-ink/60 tabular-nums">
                 {m.count}
               </td>
-              <td className="py-1.5 pr-4 text-right font-mono tabular-nums">
+              <td className="py-1.5 pr-4 text-right tabular-nums tabular-nums">
                 {formatMoney(m.spend)}
               </td>
             </tr>
@@ -911,7 +910,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-ink/10 bg-white/60 p-4">
+    <section className="card p-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <div className="min-w-0">
           <h2 className="section-title text-ink capitalize">{title}</h2>

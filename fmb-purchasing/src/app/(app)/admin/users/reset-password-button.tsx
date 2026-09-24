@@ -30,7 +30,7 @@ export function ResetPasswordButton({
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-4 w-full rounded-md bg-gold px-4 py-2 font-medium text-ink transition-colors hover:bg-gold-deep"
+            className="btn btn-primary mt-4 w-full"
           >
             Done
           </button>

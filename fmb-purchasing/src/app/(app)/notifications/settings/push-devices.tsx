@@ -119,7 +119,7 @@ export function PushDevices({ publicKey }: { publicKey: string | null }) {
               type="button"
               onClick={enable}
               disabled={busy}
-              className="rounded-md bg-gold px-3.5 py-2 font-medium text-ink hover:bg-gold-deep disabled:opacity-60"
+              className="btn btn-primary"
             >
               {busy ? "Turning on…" : "Turn on push for this device"}
             </button>

@@ -152,7 +152,7 @@ export function DayPicker({
       <SubmitButton
         disabled={picked.length === 0}
         pendingLabel="Putting it on…"
-        className="self-start rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink hover:bg-gold-deep disabled:opacity-50"
+        className="btn btn-primary self-start"
       >
         {picked.length === 0 ? "Pick days first" : `Put on ${picked.length} ${picked.length === 1 ? "day" : "days"}`}
       </SubmitButton>

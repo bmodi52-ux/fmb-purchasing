@@ -26,7 +26,7 @@ export default function NotFound() {
         <div className="flex flex-wrap items-center gap-4 pt-1">
           <Link
             href="/"
-            className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-gold-deep hover:text-white"
+            className="btn btn-primary"
           >
             Go to the dashboard
           </Link>

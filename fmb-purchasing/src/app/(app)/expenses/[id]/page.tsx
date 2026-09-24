@@ -1,5 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import { StatusBadge } from "@/components/status-badge";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getUserPermissions, can } from "@/lib/permissions";
 import { canViewExpense } from "@/lib/expense-access";
@@ -66,14 +67,6 @@ const EVENT_LABEL: Record<string, string> = {
   declined: "Declined",
   paid: "Paid",
   withdrawn: "Withdrawn",
-};
-
-const STATUS_CLASS: Record<string, string> = {
-  submitted: "bg-gold/20 text-gold-deep",
-  approved: "bg-palm/15 text-palm",
-  declined: "bg-maroon/10 text-maroon",
-  paid: "bg-palm/20 text-palm",
-  withdrawn: "bg-ink/5 text-ink/50",
 };
 
 /**
@@ -275,13 +268,7 @@ export default async function ExpenseDetailPage({
 
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1 className="page-title text-ink">{expense.expense_number ?? "Expense"}</h1>
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-              STATUS_CLASS[expense.status] ?? "bg-ink/10 text-ink/70"
-            }`}
-          >
-            {STATUS_LABEL[expense.status] ?? expense.status}
-          </span>
+          <StatusBadge status={expense.status} label={STATUS_LABEL[expense.status]} />
         </div>
 
         <p className="page-description mt-1">
@@ -299,7 +286,7 @@ export default async function ExpenseDetailPage({
             {priceNotes.map((n) => (
               <li
                 key={n.label}
-                className={`rounded-full px-2 py-0.5 text-xs ${n.serious ? "bg-maroon/10 text-maroon" : "bg-gold/15 text-gold-deep"}`}
+                className={`rounded-md px-2 py-1 text-xs leading-snug ${n.serious ? "bg-maroon/10 text-maroon" : "bg-gold/15 text-gold-deep"}`}
               >
                 {n.label}
               </li>
@@ -327,7 +314,7 @@ export default async function ExpenseDetailPage({
       </div>
 
       {/* ---------------- summary ---------------- */}
-      <section className="rounded-lg border border-ink/10 bg-white/60 p-5">
+      <section className="card p-5">
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Vendor">
             {vendor ? (
@@ -418,7 +405,7 @@ export default async function ExpenseDetailPage({
                 return (
                   <li
                     key={line.id}
-                    className="rounded-lg border border-ink/10 bg-white/60 p-4 text-sm"
+                    className="card p-4 text-sm"
                   >
                     <p className="font-medium text-ink">{line.description_raw}</p>
                     <NotOnReceiptBadge line={line} />
@@ -454,7 +441,7 @@ export default async function ExpenseDetailPage({
               })}
             </ul>
 
-            <div className="hidden overflow-x-auto rounded-lg border border-ink/10 bg-white/60 md:block">
+            <div className="hidden overflow-x-auto card md:block">
             <table className="w-full text-sm">
               <thead className="border-b border-ink/10 text-left text-ink/60">
                 <tr>
@@ -521,7 +508,7 @@ export default async function ExpenseDetailPage({
       {expense.status === "paid" && (
         <section className="flex flex-col gap-3">
           <h2 className="section-title text-ink">Payment</h2>
-          <dl className="grid gap-x-8 gap-y-4 rounded-lg border border-ink/10 bg-white/60 p-5 sm:grid-cols-3">
+          <dl className="grid gap-x-8 gap-y-4 card p-5 sm:grid-cols-3">
             <Field label="Reference">{expense.payment_reference || "—"}</Field>
             <Field label="Paid on">
               {expense.payment_date ? formatDate(expense.payment_date) : "—"}

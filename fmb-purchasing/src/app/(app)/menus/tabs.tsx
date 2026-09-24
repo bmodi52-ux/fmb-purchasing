@@ -11,7 +11,7 @@ import { TabLink } from "@/components/tab-link";
  */
 export function MenuTabs({ active }: { active: "calendar" | "sheet" | "dishes" | "saved" | "costs" }) {
   return (
-    <nav aria-label="Thaali Calendar sections" className="flex flex-wrap gap-x-1 border-b border-ink/10">
+    <nav aria-label="Thaali Calendar sections" className="tabs">
       <TabLink href="/menus" active={active === "calendar"}>
         Calendar
       </TabLink>

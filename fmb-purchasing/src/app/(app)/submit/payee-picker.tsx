@@ -229,7 +229,7 @@ export function PayeePicker({
                       pushVendor({ bsb: e.target.value });
                     }}
                     placeholder="082112"
-                    className="input font-mono"
+                    className="input tabular-nums"
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
@@ -241,7 +241,7 @@ export function PayeePicker({
                       setVendorAccountNumber(e.target.value);
                       pushVendor({ accountNumber: e.target.value });
                     }}
-                    className="input font-mono"
+                    className="input tabular-nums"
                   />
                 </label>
               </div>
@@ -327,7 +327,7 @@ export function PayeePicker({
                 pushNew({ bsb: e.target.value });
               }}
               placeholder="082112"
-              className="input font-mono"
+              className="input tabular-nums"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
@@ -339,7 +339,7 @@ export function PayeePicker({
                 setAccountNumber(e.target.value);
                 pushNew({ accountNumber: e.target.value });
               }}
-              className="input font-mono"
+              className="input tabular-nums"
             />
           </label>
           <p className="text-xs text-ink/45 sm:col-span-2">
