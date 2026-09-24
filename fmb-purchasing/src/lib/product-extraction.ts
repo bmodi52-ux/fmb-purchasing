@@ -33,6 +33,12 @@ export type ExtractedProduct = {
   /** Whether the price is for the whole pack, or per kg / L / each. */
   priceIsPer: "pack" | "unit" | null;
   category: string | null;
+  /** The usual price when `price` is a special ("was $42"), else null (#29). */
+  regularPrice: number | null;
+  /** The last day of a special, YYYY-MM-DD, when shown. */
+  specialEndsOn: string | null;
+  /** What the source says about GST, if anything. Never guessed (#29). */
+  gstStated: "includes" | "excludes" | null;
 };
 
 export type ProductPhotoReading = {
@@ -57,7 +63,8 @@ const REQUEST_TIMEOUT_MS = 120_000;
 
 export const UNCLEAR_PRODUCT_CATEGORY = "Unclear — needs a person";
 
-function buildTool(categoryNames: string[]): Anthropic.Tool {
+/** Exported for the test that keeps it under the API's limit on union-typed fields. */
+export function buildTool(categoryNames: string[]): Anthropic.Tool {
   return {
     name: TOOL_NAME,
     description:
@@ -120,6 +127,22 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
                   "'pack' when price is for the whole pack; 'unit' when it is per kg, per L or each.",
               },
               category: { type: "string", enum: [...categoryNames, UNCLEAR_PRODUCT_CATEGORY] },
+              regularPrice: {
+                type: ["number", "null"],
+                description:
+                  "When the product is on special, its usual price for the same pack ('was $42.00'); null when it is not on special.",
+              },
+              specialEndsOn: {
+                type: "string",
+                description:
+                  "When a special's end date is shown ('offer ends 30/09', 'valid until'), that date as YYYY-MM-DD; otherwise an empty string. Never guess one.",
+              },
+              gstStated: {
+                type: "string",
+                enum: ["includes", "excludes", "not_stated"],
+                description:
+                  "Only what the source itself says: 'includes' for 'inc GST' or 'GST inclusive'; 'excludes' for 'ex GST', '+GST' or 'excluding GST'; otherwise 'not_stated'.",
+              },
             },
             required: [
               "name",
@@ -132,6 +155,9 @@ function buildTool(categoryNames: string[]): Anthropic.Tool {
               "price",
               "priceIsPer",
               "category",
+              "regularPrice",
+              "specialEndsOn",
+              "gstStated",
             ],
           },
         },
@@ -150,6 +176,7 @@ const SYSTEM_PROMPT = `You read photos taken in shops, and supplier price lists,
 WHAT YOU MAY BE GIVEN
 - A shelf price tag, a product's own label or packaging, or both, of one product. When a tag and a label are both given they are the same product: take the price from the tag, and the size and brand from the label.
 - A supplier's price list, catalogue page or order sheet, photographed or as a PDF, listing many products. Record every product that has a price.
+- A shop's product web page, given as text: the page's address and title, the product data the page publishes for search engines, and lines of the page that mention a price. The page is about ONE product — the one in its title and product data. Other products it shows (recommendations, "popular now", "customers also bought") are not it: record only the page's own product, and leave its price null if the page doesn't clearly give that product's price. Never take another product's price.
 - Part of a supplier's price list exported as a spreadsheet, given as CSV text with its column headings first. Each row with a price is a product; rows that are only a heading or a section name are not. Where a list shows prices both excluding and including GST, use the price including GST — what is actually paid.
 
 FOR EACH PRODUCT
@@ -158,6 +185,8 @@ FOR EACH PRODUCT
 - innerQuantity and unit: how much one of the things holds, as printed on the label or tag. For a carton of 10 x 1L bottles that is 1 L with packCount 10. For loose goods use 1 and the unit they are priced by.
 - price: the price to pay for one pack as bought. Australian shelf tags print a small unit price such as "$2.40 per 1kg" beside the main price — that is a comparison figure. Use it to check the size, never as the price of a pack, unless it is the only price shown (then set priceIsPer "unit").
 - category: the closest from the list, or the Unclear option when the photo does not say enough.
+- regularPrice: when the product is on special, price is the special price and regularPrice the usual one ("was"). A saving shown on its own ("save $5") means regularPrice = price + saving. Not on special: null.
+- specialEndsOn: only a date the source shows. gstStated: only what the source says about GST — never assume either way.
 - Use null or "unclear" whenever something is not visible. Never invent a price or a size.
 
 Call the record_products tool exactly once.`;
@@ -254,6 +283,9 @@ export async function extractProducts(files: ProductSource[], categoryNames: str
         price: positive(p.price),
         priceIsPer: p.priceIsPer === "pack" || p.priceIsPer === "unit" ? p.priceIsPer : null,
         category: !p.category || p.category === UNCLEAR_PRODUCT_CATEGORY ? null : (p.category as string),
+        regularPrice: positive(p.regularPrice),
+        specialEndsOn: typeof p.specialEndsOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.specialEndsOn) ? p.specialEndsOn : null,
+        gstStated: p.gstStated === "includes" || p.gstStated === "excludes" ? p.gstStated : null,
       };
     })
     .filter((p): p is ExtractedProduct => p !== null);

@@ -7,8 +7,11 @@ import {
   countFor,
   portionLabel,
   costMenuDay,
+  pickCheapest,
   priceFor,
+  priceFromLabel,
   requirementsFor,
+  type PriceCandidate,
   type MenuDish,
   type MenuExtra,
   type MenuLine,
@@ -370,5 +373,62 @@ describe("a day typed the way the sheet types it (#77)", () => {
 
   test("nothing typed and nothing cooked is nothing to buy", () => {
     assert.deepEqual(requirementsFor({}, 250), []);
+  });
+});
+
+describe("the cheapest price wins (#29)", () => {
+  const c = (perUnit: number, source: "paid" | "quoted", vendorName: string, brand: string | null, date = "2026-09-12"): PriceCandidate => ({
+    perUnit,
+    source,
+    vendorName,
+    brand,
+    date,
+  });
+  const rice = [
+    c(7.4, "paid", "Taj Mart", "India Gate"),
+    c(6.6, "quoted", "Costco", "Tilda"),
+    c(7.2, "quoted", "Coles", "Taj"),
+    c(8.0, "paid", "Woolworths", "Tilda"),
+  ];
+
+  test("across every store and brand, paid or quoted, even never bought", () => {
+    const best = pickCheapest(rice, null);
+    assert.equal(best?.vendorName, "Costco");
+    assert.equal(best?.source, "quoted");
+    assert.equal(best?.brandMissing, false);
+  });
+
+  test("a preferred brand is costed at that brand only, at its cheapest store", () => {
+    assert.equal(pickCheapest(rice, "tilda")?.vendorName, "Costco");
+    assert.equal(pickCheapest(rice, "India Gate")?.perUnit, 7.4);
+  });
+
+  test("no price for the preferred brand yet: the cheapest of any brand, and it says so", () => {
+    const best = pickCheapest(rice, "Daawat");
+    assert.equal(best?.vendorName, "Costco");
+    assert.equal(best?.brandMissing, true);
+  });
+
+  test("a tie goes to what was actually paid", () => {
+    assert.equal(pickCheapest([c(5, "quoted", "A", null), c(5, "paid", "B", null)], null)?.source, "paid");
+  });
+
+  test("nothing priced, nothing picked", () => {
+    assert.equal(pickCheapest([c(0, "paid", "A", null)], null), null);
+    assert.equal(pickCheapest([], null), null);
+  });
+
+  test("costing uses it and says where it is from", () => {
+    const cheapest = pickCheapest(rice, null);
+    assert.deepEqual(priceFor({ cheapest, latestPaid: 9 }), {
+      perUnit: 6.6,
+      basis: "cheapest_quoted",
+      from: "Tilda at Costco, quoted 12/09",
+    });
+  });
+
+  test("the label copes with what isn't known", () => {
+    assert.equal(priceFromLabel(c(1, "paid", "Taj Mart", null, "2026-08-01")), "Taj Mart, paid 01/08");
+    assert.equal(priceFromLabel({ ...c(1, "quoted", "", null), vendorName: null, date: null }), "quoted");
   });
 });

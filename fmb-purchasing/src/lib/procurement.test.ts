@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { progressOf, proposeAllocations, suggestPacks, type OpenRequirement } from "./procurement";
+import { cheapestBuy, progressOf, proposeAllocations, suggestPacks, type BuyOption, type OpenRequirement } from "./procurement";
 
 const PUREE = [
   { packSizeId: "p-4l", title: "Box of 4 L", totalQuantity: 4 },
@@ -121,5 +121,67 @@ describe("progressOf", () => {
 
   test("nothing bought yet", () => {
     assert.deepEqual(progressOf({ quantity: 50 }, []), { bought: 0, spent: 0, outstanding: 50, complete: false });
+  });
+});
+
+describe("cheapestBuy (#29)", () => {
+  const o = (p: Partial<BuyOption> & Pick<BuyOption, "offerId" | "totalQuantity" | "price" | "vendorName">): BuyOption => ({
+    packSizeId: p.offerId,
+    title: `${p.totalQuantity} kg`,
+    soldLoose: false,
+    vendorId: p.vendorName,
+    brand: null,
+    onSpecial: false,
+    saleEndsOn: null,
+    ...p,
+  });
+  const rice = [
+    o({ offerId: "costco-10", totalQuantity: 10, price: 32.99, vendorName: "Costco", brand: "Tilda" }),
+    o({ offerId: "coles-5", totalQuantity: 5, price: 37, vendorName: "Coles", brand: "Taj" }),
+    o({ offerId: "taj-5", totalQuantity: 5, price: 20, vendorName: "Taj Mart", brand: "India Gate" }),
+  ];
+
+  test("the lowest total for what's needed, from any store", () => {
+    const buy = cheapestBuy(18, rice, null);
+    assert.equal(buy?.vendorName, "Costco");
+    assert.equal(buy?.packs, 2);
+    assert.equal(buy?.cost, 65.98);
+  });
+
+  test("a smaller pack wins when the big one would mostly be waste", () => {
+    // 4 kg: one 10 kg at Costco is $32.99; one 5 kg at Taj Mart is $20.
+    const buy = cheapestBuy(4, rice, null);
+    assert.equal(buy?.vendorName, "Taj Mart");
+    assert.equal(buy?.over, 1);
+  });
+
+  test("a preferred brand is bought in that brand, at its cheapest store", () => {
+    assert.equal(cheapestBuy(4, rice, "taj")?.vendorName, "Coles");
+  });
+
+  test("no store has the preferred brand: any brand, and it says so", () => {
+    const buy = cheapestBuy(4, rice, "Daawat");
+    assert.equal(buy?.vendorName, "Taj Mart");
+    assert.equal(buy?.brandMissing, true);
+  });
+
+  test("a special counts while it runs, because it is today's price", () => {
+    const onSpecial = [...rice, o({ offerId: "woolies-5", totalQuantity: 5, price: 15, vendorName: "Woolworths", onSpecial: true, saleEndsOn: "2026-09-29" })];
+    const buy = cheapestBuy(4, onSpecial, null);
+    assert.equal(buy?.vendorName, "Woolworths");
+    assert.equal(buy?.onSpecial, true);
+  });
+
+  test("bought loose, it is the amount times the price per kg, not rounded", () => {
+    const onions = [o({ offerId: "loose", totalQuantity: 1, price: 1.3, vendorName: "KMA", soldLoose: true })];
+    const buy = cheapestBuy(12.5, onions, null);
+    assert.equal(buy?.packs, null);
+    assert.equal(buy?.cost, 16.25);
+    assert.equal(buy?.over, 0);
+  });
+
+  test("nothing priced, nothing suggested", () => {
+    assert.equal(cheapestBuy(4, [o({ offerId: "x", totalQuantity: 5, price: 0, vendorName: "A" })], null), null);
+    assert.equal(cheapestBuy(0, rice, null), null);
   });
 });

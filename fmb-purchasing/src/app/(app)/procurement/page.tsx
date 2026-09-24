@@ -192,6 +192,23 @@ export default async function ProcurementPage({
                             </span>
                           </div>
 
+                          {/* The cheapest way to buy what is still needed (#29). */}
+                          {line.buy && line.status !== "delivered" && (
+                            <p className="mt-1 text-xs text-ink/70">
+                              <span className="text-ink/50">Cheapest: </span>
+                              {line.buy.packs != null ? `${line.buy.packs} × ${line.buy.title}` : `${line.buy.quantity} ${line.unit}`}
+                              {line.buy.brand && ` ${line.buy.brand}`} at <span className="font-medium text-ink">{line.buy.vendorName}</span>
+                              <span className="tabular-nums">, {money(line.buy.cost)}</span>
+                              {line.buy.onSpecial && (
+                                <span className="text-palm">
+                                  {" "}
+                                  · on special{line.buy.saleEndsOn ? ` until ${formatPlainDate(line.buy.saleEndsOn).slice(0, 5)}` : ""}
+                                </span>
+                              )}
+                              {line.buy.brandMissing && <span className="text-ink/50"> · the preferred brand has no price yet</span>}
+                            </p>
+                          )}
+
                           {/* When it has to be ordered by, and who to ring (#15). */}
                           {(line.status === "to_order" || line.vendorName) && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">

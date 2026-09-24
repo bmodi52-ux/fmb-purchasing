@@ -423,7 +423,7 @@ export default async function MenuDayPage({
             {simple
               ? "What was typed in, priced."
               : `From the recipes, for ${thaalis} ${thaalis === 1 ? "thaali" : "thaalis"}, in each item's own unit.`}{" "}
-            Priced at what was last paid, else the cheapest lately, else a quote.
+            Priced at the cheapest on file — paid or quoted, from any store.
           </p>
           <CostLinesTable lines={cost.lines} />
 

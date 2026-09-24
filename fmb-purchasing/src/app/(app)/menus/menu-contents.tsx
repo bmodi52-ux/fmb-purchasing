@@ -338,7 +338,7 @@ export function CostLinesTable({ lines }: { lines: CostedLine[] }) {
                     <span className="tabular-nums">
                       {money(line.perUnit)}/{line.baseUnitCode}
                     </span>
-                    <span className="block text-xs text-ink/45">{PRICE_BASIS_LABEL[line.basis]}</span>
+                    <span className="block text-xs text-ink/45">{line.from ?? PRICE_BASIS_LABEL[line.basis]}</span>
                   </>
                 )}
               </td>

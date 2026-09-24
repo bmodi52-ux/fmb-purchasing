@@ -704,7 +704,7 @@ export async function bulkReviewOffers(offerIds: string[], decision: "approved" 
   await reviewOffers(offerIds, decision);
 }
 
-const ITEM_TRACKED_FIELDS = ["name", "category_id", "canonical_unit_id", "comments"] as const;
+const ITEM_TRACKED_FIELDS = ["name", "category_id", "canonical_unit_id", "comments", "preferred_brand"] as const;
 type ItemTrackedRow = Record<(typeof ITEM_TRACKED_FIELDS)[number], unknown>;
 
 export async function updateItem(formData: FormData) {
@@ -726,6 +726,8 @@ export async function updateItem(formData: FormData) {
     category_id: fieldOrNull(formData, "category_id"),
     canonical_unit_id: fieldOrNull(formData, "canonical_unit_id"),
     comments: fieldOrNull(formData, "comments"),
+    // When set, costing and the buying list consider only this brand (#29).
+    preferred_brand: fieldOrNull(formData, "preferred_brand"),
   };
 
   const changes: Record<string, { old: unknown; new: unknown }> = {};

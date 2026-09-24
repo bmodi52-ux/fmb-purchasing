@@ -18,7 +18,7 @@ export const NAV_ITEMS: {
 }[] = [
   { key: "submit_expense", label: "Submit expense", href: "/submit", action: "submit", group: "Spend" },
   // The quick way onto the Pricelist from a shop floor — see pricelist/add-by-photo.
-  { key: "submit_expense", label: "Add item by photo", href: "/pricelist/add-by-photo", action: "submit", group: "Spend" },
+  { key: "submit_expense", label: "Add item by photo or link", href: "/pricelist/add-by-photo", action: "submit", group: "Spend" },
   { key: "my_submissions", label: "My submissions", href: "/my-submissions", action: "view", group: "Spend" },
   { key: "all_expenses", label: "All expenses", href: "/expenses", action: "view", group: "Spend" },
   { key: "approvals", label: "Approvals", href: "/approvals", action: "view", group: "Review" },

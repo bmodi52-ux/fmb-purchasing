@@ -17,6 +17,8 @@ type Line = {
   unit: string;
   packTitle: string | null;
   packs: number | null;
+  /** The cheapest store and what to buy there, at today's prices (#29). */
+  cheapest: { vendorName: string; what: string; onSpecial: boolean } | null;
   vendorName: string | null;
   status: "to_order" | "ordered" | "delivered" | "cancelled";
 };
@@ -42,6 +44,8 @@ export function ShoppingLists({
   const [chosenSections, setChosenSections] = useState<Set<SectionKey>>(new Set(sections.map((s) => s.key)));
   const [openOnly, setOpenOnly] = useState(true);
   const [ticked, setTicked] = useState<Set<string>>(new Set());
+  // One list per store instead of per section, for a trip to each (#29).
+  const [byStore, setByStore] = useState(false);
 
   const shown = useMemo(
     () =>
@@ -59,7 +63,16 @@ export function ShoppingLists({
   const rows = useMemo(() => {
     const byItem = new Map<
       string,
-      { section: SectionKey; itemName: string; unit: string; quantity: number; days: string[]; vendors: Set<string>; packTitle: string | null }
+      {
+        section: SectionKey;
+        itemName: string;
+        unit: string;
+        quantity: number;
+        days: string[];
+        vendors: Set<string>;
+        packTitle: string | null;
+        cheapest: Line["cheapest"];
+      }
     >();
     for (const line of shown) {
       const key = `${line.section}:${line.itemId}`;
@@ -78,6 +91,7 @@ export function ShoppingLists({
           days: [line.serviceDate],
           vendors: new Set(line.vendorName ? [line.vendorName] : []),
           packTitle: line.packTitle,
+          cheapest: line.cheapest,
         });
       }
     }
@@ -132,6 +146,10 @@ export function ShoppingLists({
             <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} />
             Only what is still to buy
           </label>
+          <label className="flex items-center gap-2 text-ink/70">
+            <input type="checkbox" checked={byStore} onChange={(e) => setByStore(e.target.checked)} />
+            Group by cheapest store
+          </label>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -145,6 +163,7 @@ export function ShoppingLists({
               { key: "order", label: "To order" },
               { key: "days", label: "For" },
               { key: "vendor", label: "Vendor" },
+              { key: "cheapest", label: "Cheapest at" },
             ]}
             rows={rows.map((row) => ({
               section: sections.find((s) => s.key === row.section)?.label ?? row.section,
@@ -153,6 +172,7 @@ export function ShoppingLists({
               order: row.packTitle ?? "",
               days: row.days.map(formatPlainDate).join(", "),
               vendor: [...row.vendors].join(", "),
+              cheapest: row.cheapest ? `${row.cheapest.what} — ${row.cheapest.vendorName}` : "",
             }))}
           />
           <button
@@ -165,14 +185,19 @@ export function ShoppingLists({
         </div>
       </div>
 
-      {sections
-        .filter((section) => chosenSections.has(section.key) && rows.some((r) => r.section === section.key))
-        .map((section) => (
-          <section key={section.key} className="card p-4">
-            <h2 className="mb-3 section-title text-ink">{section.label}</h2>
+      {(byStore
+        ? [...new Set(rows.map(storeOf))].sort().map((store) => ({ key: store, label: store, match: (r: (typeof rows)[number]) => storeOf(r) === store }))
+        : sections
+            .filter((section) => chosenSections.has(section.key))
+            .map((section) => ({ key: section.key as string, label: section.label, match: (r: (typeof rows)[number]) => r.section === section.key }))
+      )
+        .filter((group) => rows.some(group.match))
+        .map((group) => (
+          <section key={group.key} className="card p-4">
+            <h2 className="mb-3 section-title text-ink">{group.label}</h2>
             <ul className="flex flex-col gap-1">
               {rows
-                .filter((row) => row.section === section.key)
+                .filter(group.match)
                 .map((row) => (
                   <li key={row.key} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-ink/5 py-2 last:border-0">
                     <label className="flex flex-1 items-baseline gap-2">
@@ -194,6 +219,13 @@ export function ShoppingLists({
                       {row.days.map(formatPlainDate).join(", ")}
                       {row.vendors.size > 0 && ` · ${[...row.vendors].join(", ")}`}
                     </span>
+                    {row.cheapest && (
+                      <span className="w-full text-xs text-ink/70">
+                        Cheapest: {row.cheapest.what ? `${row.cheapest.what} at ` : "at "}
+                        <span className="font-medium text-ink">{row.cheapest.vendorName}</span>
+                        {row.cheapest.onSpecial && <span className="text-palm"> · on special</span>}
+                      </span>
+                    )}
                   </li>
                 ))}
             </ul>
@@ -203,4 +235,9 @@ export function ShoppingLists({
       {rows.length === 0 && <p className="text-sm text-ink/55">Nothing on the lists you have chosen.</p>}
     </div>
   );
+}
+
+/** Where a row is cheapest to buy, or the vendor it was given to, or anywhere. */
+function storeOf(row: { cheapest: { vendorName: string } | null; vendors: Set<string> }): string {
+  return row.cheapest?.vendorName ?? [...row.vendors][0] ?? "Anywhere";
 }

@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { leafCategories } from "@/lib/categories";
 import { AddByPhotoForm } from "./add-by-photo-form";
 
-export const metadata = { title: "Add item by photo" };
+export const metadata = { title: "Add item by photo or link" };
 
 // A long supplier price list is read in several pieces (#29).
 export const maxDuration = 300;
@@ -37,9 +37,9 @@ export default async function AddByPhotoPage({ searchParams }: { searchParams: P
             ← {vendorRow.name}
           </Link>
         )}
-        <h1 className="page-title mt-1 text-ink">Add item by photo</h1>
+        <h1 className="page-title mt-1 text-ink">Add item by photo or link</h1>
         <p className="page-description mt-1 max-w-xl">
-          Photograph a price tag, a label or a supplier&apos;s price list; what can be read is filled in for you to check.
+          Photograph a price tag, a label or a price list, or paste a link to a shop&apos;s product page; what can be read is filled in for you to check.
         </p>
       </div>
       <AddByPhotoForm

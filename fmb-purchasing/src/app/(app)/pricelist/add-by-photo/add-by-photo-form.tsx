@@ -6,13 +6,16 @@ import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image
 import { PACKAGING, packagingLabel, packagingWord } from "@/lib/pack-description";
 import { useReportPending } from "@/components/pending";
 import {
+  readProductLinkAction,
   readProductPhotosAction,
   saveProductsAction,
+  type ReadPhotosResult,
   type PhotoProductDraft,
   type ProductToSave,
   type SavedProduct,
 } from "./actions";
 import type { ProductUnit } from "@/lib/product-extraction";
+import type { GstAnswer } from "@/lib/offer-pricing";
 import { isPriceListFile } from "@/lib/price-list-file";
 
 type Photo = { file: File; url: string };
@@ -35,6 +38,14 @@ type Draft = {
   price: string;
   priceIsPer: "pack" | "unit";
   category: string;
+  /** Never assumed: filled only when the source said, or from the shop's last answer (#29). */
+  gst: GstAnswer | "";
+  /** Where the GST answer came from, said beside it. */
+  gstFrom: "page" | "shop" | null;
+  gstHistory: PhotoProductDraft["gstHistory"];
+  /** The usual price when `price` is a special; "" when it isn't one. */
+  regularPrice: string;
+  specialEndsOn: string;
 };
 
 const UNIT_OPTIONS: { value: ProductUnit; label: string }[] = [
@@ -47,8 +58,9 @@ const UNIT_OPTIONS: { value: ProductUnit; label: string }[] = [
 
 const MAX_PHOTOS = 4;
 
-function toDraft(p: PhotoProductDraft, i: number, total: number): Draft {
+function toDraft(p: PhotoProductDraft, i: number, total: number, shopGst: ReadPhotosResult["shopGst"]): Draft {
   const existing = !!p.match?.itemId && p.match.confidence !== "none";
+  const stated = p.gstStated === "includes" ? "included" : p.gstStated === "excludes" ? "excluded" : null;
   return {
     key: `${i}-${p.name}`,
     include: total === 1 || p.price != null,
@@ -65,6 +77,11 @@ function toDraft(p: PhotoProductDraft, i: number, total: number): Draft {
     price: p.price != null ? String(p.price) : "",
     priceIsPer: p.priceIsPer ?? (p.soldAs === "loose" ? "unit" : "pack"),
     category: p.category ?? "",
+    gst: stated ?? shopGst ?? "",
+    gstFrom: stated ? "page" : shopGst ? "shop" : null,
+    gstHistory: p.gstHistory,
+    regularPrice: p.regularPrice != null ? String(p.regularPrice) : "",
+    specialEndsOn: p.specialEndsOn ?? "",
   };
 }
 
@@ -92,6 +109,12 @@ export function AddByPhotoForm({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<SavedProduct[]>([]);
   const [savedVendorId, setSavedVendorId] = useState<string | null>(vendor?.id ?? null);
+  // A shop's page, pasted (#29).
+  const [link, setLink] = useState("");
+  const [linkFailed, setLinkFailed] = useState(false);
+  const [source, setSource] = useState<ReadPhotosResult["source"]>(null);
+  /** The store as the reading recognised it, so its id goes with the save. */
+  const [readVendor, setReadVendor] = useState<{ id: string; name: string } | null>(null);
 
   useReportPending(phase === "reading" || phase === "saving");
 
@@ -132,21 +155,44 @@ export function AddByPhotoForm({
     const payload = new FormData();
     for (const p of photos) payload.append("photos", p.file);
     payload.append("vendor_name", vendor?.name ?? storeName);
+    // A screenshot of a page whose link couldn't be read still carries the link.
+    if (linkFailed && link.trim()) payload.append("source_link", link.trim());
     try {
-      const result = await readProductPhotosAction(payload);
-      if (result.error) {
-        setError(result.error);
-        setPhase("capture");
-        return;
-      }
-      setDrafts(result.products.map((p, i) => toDraft(p, i, result.products.length)));
-      setNote(result.note);
-      if (!vendor && !storeName.trim() && result.store) setStoreName(result.store);
-      setPhase("review");
+      showReading(await readProductPhotosAction(payload));
     } catch {
       setError("Couldn't read that just now. Check the connection and try again.");
       setPhase("capture");
     }
+  }
+
+  async function readLink() {
+    setError(null);
+    setLinkFailed(false);
+    setPhase("reading");
+    const payload = new FormData();
+    payload.append("link", link);
+    payload.append("vendor_name", vendor?.name ?? storeName);
+    try {
+      showReading(await readProductLinkAction(payload));
+    } catch {
+      setError("Couldn't read that just now. Check the connection and try again.");
+      setPhase("capture");
+    }
+  }
+
+  function showReading(result: ReadPhotosResult) {
+    if (result.error) {
+      setError(result.error);
+      setLinkFailed(!!result.linkFailed);
+      setPhase("capture");
+      return;
+    }
+    setDrafts(result.products.map((p, i) => toDraft(p, i, result.products.length, result.shopGst ?? null)));
+    setNote(result.note);
+    setSource(result.source ?? null);
+    setReadVendor(result.vendor ?? null);
+    if (!vendor && !storeName.trim() && result.store) setStoreName(result.store);
+    setPhase("review");
   }
 
   function update(key: string, patch: Partial<Draft>) {
@@ -174,6 +220,11 @@ export function AddByPhotoForm({
       setError("Every new item needs a name.");
       return;
     }
+    const noGst = chosen.find((d) => d.gst === "");
+    if (noGst) {
+      setError(`Say whether the price of ${noGst.useExisting ? (noGst.match?.itemName ?? noGst.name) : noGst.name || "each product"} includes GST.`);
+      return;
+    }
 
     const products: ProductToSave[] = chosen.map((d) => {
       const describesSize = !d.useExisting || d.packChoice === "new";
@@ -190,12 +241,18 @@ export function AddByPhotoForm({
         price: d.price ? Number(d.price) : null,
         priceIsPer: d.soldAs === "loose" ? "unit" : d.priceIsPer,
         category: d.useExisting ? null : d.category || null,
+        regularPrice: d.regularPrice ? Number(d.regularPrice) : null,
+        specialEndsOn: d.regularPrice && d.specialEndsOn ? d.specialEndsOn : null,
+        gst: d.gst as GstAnswer,
       };
     });
 
     setPhase("saving");
     try {
-      const result = await saveProductsAction({ vendorId: vendor?.id ?? null, vendorName: storeName, products });
+      // The recognised store, unless the name was changed to another one.
+      const vendorId =
+        vendor?.id ?? (readVendor && readVendor.name.trim().toLowerCase() === storeName.trim().toLowerCase() ? readVendor.id : null);
+      const result = await saveProductsAction({ vendorId, vendorName: storeName, products, source });
       setSaved(result.saved);
       setSavedVendorId(result.vendorId);
       if (result.error) {
@@ -217,6 +274,10 @@ export function AddByPhotoForm({
     setNote(null);
     setError(null);
     setSaved([]);
+    setLink("");
+    setLinkFailed(false);
+    setSource(null);
+    setReadVendor(null);
     setPhase("capture");
   }
 
@@ -308,9 +369,11 @@ export function AddByPhotoForm({
           {phase === "reading" ? (
             <div className="flex flex-col gap-2" role="status" aria-live="polite">
               <p className="text-sm text-ink/70">
-                {photos.some((p) => isPriceListFile(p.file))
-                  ? "Reading the price list — a long one can take a couple of minutes…"
-                  : `Reading the photo${photos.length === 1 ? "" : "s"}…`}
+                {photos.length === 0
+                  ? "Reading the shop's page…"
+                  : photos.some((p) => isPriceListFile(p.file))
+                    ? "Reading the price list — a long one can take a couple of minutes…"
+                    : `Reading the photo${photos.length === 1 ? "" : "s"}…`}
               </p>
               <span className="inline-progress" aria-hidden="true" />
             </div>
@@ -356,6 +419,43 @@ export function AddByPhotoForm({
                   ? "The price tag and the product's label together read best. A supplier's price list works too."
                   : "Add the label as well if the size isn't on the tag, then read."}
               </p>
+
+              {photos.length === 0 && (
+                <div className="flex flex-col gap-2 border-t border-ink/10 pt-4">
+                  <label htmlFor="product-link" className="text-sm text-ink/70">
+                    Or paste a link to the product&apos;s page
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      id="product-link"
+                      type="url"
+                      inputMode="url"
+                      value={link}
+                      onChange={(e) => {
+                        setLink(e.target.value);
+                        setLinkFailed(false);
+                      }}
+                      placeholder="https://www.coles.com.au/product/…"
+                      className="input min-w-0 flex-1 basis-64"
+                    />
+                    <button type="button" onClick={readLink} disabled={!link.trim()} className="btn btn-secondary">
+                      Read link
+                    </button>
+                  </div>
+                  {linkFailed && (
+                    <div className="flex flex-col gap-2 rounded-md border border-gold/40 bg-gold/10 p-3 text-sm text-ink/80">
+                      <p>
+                        Take a screenshot of that page, with the price showing, and read it instead. The link is still
+                        kept with the price.
+                      </p>
+                      <label className="btn btn-primary cursor-pointer self-start">
+                        <input type="file" accept="image/*" className="hidden" onChange={addPhotos} />
+                        Choose the screenshot
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -363,11 +463,29 @@ export function AddByPhotoForm({
 
       {(phase === "review" || phase === "saving") && (
         <div className="flex flex-col gap-4">
+          {source && (
+            <p className="text-sm text-ink/60">
+              From{" "}
+              <a href={source.url} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                {source.domain}
+              </a>{" "}
+              — the link is kept with the price.
+            </p>
+          )}
           {note && <p className="rounded-md bg-gold/10 px-3 py-2 text-sm text-ink/70">{note}</p>}
           {drafts.length > 1 && (
-            <p className="text-sm text-ink/60">
-              {drafts.length} products read. Untick any you don&apos;t want to save.
-            </p>
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-ink/60">
+                {drafts.length} products read. Untick any you don&apos;t want to save.
+              </p>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-ink/60">GST, for all of them:</span>
+                <GstChoice
+                  value=""
+                  onChange={(gst) => setDrafts((current) => current.map((d) => ({ ...d, gst, gstFrom: null })))}
+                />
+              </div>
+            </div>
           )}
           {drafts.map((d) => (
             <DraftCard
@@ -611,6 +729,69 @@ function DraftCard({
           )}
         </div>
 
+        <div className="flex flex-col gap-1 text-sm sm:col-span-2">
+          <span className="text-ink/70">
+            GST on that price <span className="text-alert">*</span>
+          </span>
+          <GstChoice value={d.gst} onChange={(gst) => onChange({ gst, gstFrom: null })} />
+          <span className="text-xs text-ink/50">
+            {d.gstFrom === "page"
+              ? "As the page says."
+              : d.gstFrom === "shop"
+                ? "Your answer last time for this shop — check it still holds."
+                : d.gst === ""
+                  ? "Not stated where this was read, so it needs saying."
+                  : null}
+            {d.gstHistory === "free" && " Receipts show this item as GST-free."}
+            {d.gstHistory === "taxable" && " Receipts show GST on this item."}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-2 text-sm sm:col-span-2">
+          <label className="flex items-center gap-2 text-ink/70">
+            <input
+              type="checkbox"
+              checked={d.regularPrice !== ""}
+              onChange={(e) => onChange({ regularPrice: e.target.checked ? d.price : "", specialEndsOn: "" })}
+            />
+            That&apos;s a special price
+          </label>
+          {d.regularPrice !== "" && (
+            <div className="flex flex-wrap items-end gap-3 rounded-md bg-gold/10 p-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-ink/70">Usual price</span>
+                <span className="flex items-center gap-2">
+                  <span className="text-ink/60">$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={d.regularPrice}
+                    onChange={(e) => onChange({ regularPrice: e.target.value })}
+                    className="input w-28"
+                  />
+                </span>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-ink/70">
+                  Special ends <span className="text-ink/40">(if shown)</span>
+                </span>
+                <input
+                  type="date"
+                  value={d.specialEndsOn}
+                  onChange={(e) => onChange({ specialEndsOn: e.target.value })}
+                  className="input"
+                />
+              </label>
+              <p className="basis-full text-xs text-ink/55">
+                The buying list uses the special until it ends, then the usual price by itself. Costing always uses the
+                usual price.{!d.specialEndsOn && " With no end date: the next Tuesday at Woolworths and Coles, a week anywhere else."}
+              </p>
+            </div>
+          )}
+        </div>
+
         {!d.useExisting && (
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-ink/70">Category</span>
@@ -625,6 +806,31 @@ function DraftCard({
           </label>
         )}
       </div>
+    </div>
+  );
+}
+
+const GST_OPTIONS: { value: GstAnswer; label: string }[] = [
+  { value: "included", label: "Includes GST" },
+  { value: "excluded", label: "Excludes GST — add 10%" },
+  { value: "free", label: "No GST on this item" },
+];
+
+/** GST, asked every time it isn't known — never assumed (#29). */
+function GstChoice({ value, onChange }: { value: GstAnswer | ""; onChange: (gst: GstAnswer) => void }) {
+  return (
+    <div className="segmented flex-wrap self-start" role="group" aria-label="GST">
+      {GST_OPTIONS.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={value === o.value}
+          onClick={() => onChange(o.value)}
+          className="segment"
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }

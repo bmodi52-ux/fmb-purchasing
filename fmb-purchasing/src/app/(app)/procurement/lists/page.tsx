@@ -78,6 +78,13 @@ export default async function ShoppingListsPage({
             unit: l.unit,
             packTitle: l.pack?.title ?? null,
             packs: l.pack?.packs ?? null,
+            cheapest: l.buy
+              ? {
+                  vendorName: l.buy.vendorName,
+                  what: [l.buy.packs != null ? `${l.buy.packs} × ${l.buy.title}` : null, l.buy.brand].filter(Boolean).join(" "),
+                  onSpecial: l.buy.onSpecial,
+                }
+              : null,
             vendorName: l.vendorId ? (vendorName.get(l.vendorId) ?? null) : null,
             status: l.status,
           }))}
