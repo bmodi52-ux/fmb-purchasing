@@ -187,6 +187,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
       title="Payments"
       placeholder="Filter by vendor, submitter, invoice…"
       sortOptions={SORT_OPTIONS}
+      selectable
     >
       {(rows, selection) => {
         const selectedRows = rows.filter((r) => selection.isSelected(r.id));
@@ -270,7 +271,13 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                 <thead>
                   <tr className="text-left text-ink/60">
                     <th scope="col" className="p-2">
-                      <span className="sr-only">Select</span>
+                      {/* Every row the filters leave showing (#32). */}
+                      <input
+                        type="checkbox"
+                        checked={selection.allShownSelected}
+                        onChange={selection.toggleAllShown}
+                        aria-label={rows.length === expenses.length ? "Select all" : `Select all ${rows.length} shown`}
+                      />
                     </th>
                     <th scope="col" className="p-2">Entry #</th>
                     <th scope="col" className="p-2">Vendor</th>
@@ -296,7 +303,11 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                           aria-label="Select expense"
                         />
                       </td>
-                      <td className="p-2 tabular-nums text-xs"><Link href={`/expenses/${e.id}`} className="text-ink/70 underline">{e.expense_number ?? "View"}</Link></td>
+                      <td className="p-2 tabular-nums whitespace-nowrap">
+                        <Link href={`/expenses/${e.id}`} className="font-medium text-ink underline-offset-2 hover:underline">
+                          {e.expense_number ?? "View"}
+                        </Link>
+                      </td>
                       <td className="p-2">
                         {e.vendor_name_raw}
                         {e.duplicateWarning && <DuplicateFlag label={e.duplicateWarning} />}
