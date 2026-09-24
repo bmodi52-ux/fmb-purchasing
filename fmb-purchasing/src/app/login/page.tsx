@@ -5,7 +5,7 @@ export const metadata = { title: "Sign in" };
 
 export default function LoginPage() {
   return (
-    <AuthCard title="FMB Sydney" subtitle="Sign in to continue">
+    <AuthCard title="Sign in" subtitle="Use the email your account was set up with.">
       <LoginForm />
     </AuthCard>
   );
