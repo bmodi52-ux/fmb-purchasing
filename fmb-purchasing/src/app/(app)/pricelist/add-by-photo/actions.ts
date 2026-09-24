@@ -13,15 +13,30 @@ import { matchOrCreateVendor, recordVendorItemDescription } from "@/lib/expense-
 import { formatPackPrice, isPackaging } from "@/lib/pack-description";
 import { extractProducts, type ExtractedProduct, type ProductUnit, type ProductPhotoReading } from "@/lib/product-extraction";
 import { isPriceListFile, priceListChunks, readPriceListRows } from "@/lib/price-list-file";
+import { LinkUnreadable, parseLink, readProductLink, shopDomain, shopName } from "@/lib/product-link";
+import { saleEndFor, settlePrices, type GstAnswer } from "@/lib/offer-pricing";
+import { todayIso } from "@/lib/periods-data";
 import { matchReceiptLinesAction, type LineMatchResult } from "../../submit/actions";
 
-export type PhotoProductDraft = ExtractedProduct & { match: LineMatchResult | null };
+export type PhotoProductDraft = ExtractedProduct & {
+  match: LineMatchResult | null;
+  /** What this item's receipts say about GST, as a hint beside the choice (#29). */
+  gstHistory: "free" | "taxable" | null;
+};
 
 export type ReadPhotosResult = {
   error: string | null;
   store: string | null;
   note: string | null;
   products: PhotoProductDraft[];
+  /** A link that couldn't be read, so the page should offer a screenshot instead (#29). */
+  linkFailed?: boolean;
+  /** The page the products were read from. */
+  source?: { url: string; domain: string } | null;
+  /** The vendor the store was recognised as, by its website or its name. */
+  vendor?: { id: string; name: string } | null;
+  /** This shop's last GST answer, offered again (still shown and confirmed). */
+  shopGst?: "included" | "excluded" | null;
 };
 
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
@@ -148,7 +163,33 @@ export async function readProductPhotosAction(formData: FormData): Promise<ReadP
     };
   }
 
-  const vendorName = String(formData.get("vendor_name") ?? "").trim() || reading.store || "";
+  // A screenshot taken because the page's link couldn't be read keeps the link.
+  let source: { url: string; domain: string } | null = null;
+  try {
+    const sourceLink = String(formData.get("source_link") ?? "").trim();
+    if (sourceLink) {
+      const url = parseLink(sourceLink).toString();
+      source = { url, domain: shopDomain(url) };
+    }
+  } catch {
+    source = null;
+  }
+  const vendorName =
+    String(formData.get("vendor_name") ?? "").trim() || reading.store || (source ? shopName(source.domain, null) : "");
+  return afterReading(admin, reading, vendorName, source);
+}
+
+/**
+ * What a reading needs before it is shown: each product looked up on the
+ * Pricelist, the store recognised, and what is already known about GST —
+ * the shop's last answer, and whether an item's receipts carried GST.
+ */
+async function afterReading(
+  admin: ReturnType<typeof createAdminClient>,
+  reading: ProductPhotoReading,
+  vendorName: string,
+  source: { url: string; domain: string } | null
+): Promise<ReadPhotosResult> {
   const matches = await matchReceiptLinesAction({
     vendorName,
     abn: null,
@@ -161,12 +202,126 @@ export async function readProductPhotosAction(formData: FormData): Promise<ReadP
     })),
   });
 
+  // The store: by its website first, since a link names it exactly, then by name.
+  const vendorColumns = "id, name, quote_gst_basis";
+  let vendorRow: { id: string; name: string; quote_gst_basis: string | null } | null = null;
+  if (source) {
+    const { data } = await admin.from("vendors").select(vendorColumns).ilike("website", source.domain).limit(1);
+    vendorRow = data?.[0] ?? null;
+  }
+  if (!vendorRow && vendorName) {
+    const { data } = await admin.from("vendors").select(vendorColumns).ilike("name", vendorName).neq("status", "rejected").limit(1);
+    vendorRow = data?.[0] ?? null;
+  }
+
+  const itemIds = [...new Set(Object.values(matches).map((m) => m?.itemId).filter((id): id is string => !!id))];
+  const gstHistory = await gstHistoryOf(admin, itemIds);
+
   return {
     error: null,
-    store: reading.store,
+    store: vendorRow?.name ?? reading.store,
     note: reading.note,
-    products: reading.products.map((p, i) => ({ ...p, match: matches[String(i)] ?? null })),
+    products: reading.products.map((p, i) => {
+      const match = matches[String(i)] ?? null;
+      return { ...p, match, gstHistory: match?.itemId ? (gstHistory.get(match.itemId) ?? null) : null };
+    }),
+    source,
+    vendor: vendorRow ? { id: vendorRow.id, name: vendorRow.name } : null,
+    shopGst:
+      vendorRow?.quote_gst_basis === "included" || vendorRow?.quote_gst_basis === "excluded"
+        ? vendorRow.quote_gst_basis
+        : null,
   };
+}
+
+/** Whether each item's receipt lines carried GST: all without is "free", any with is "taxable". */
+async function gstHistoryOf(
+  admin: ReturnType<typeof createAdminClient>,
+  itemIds: string[]
+): Promise<Map<string, "free" | "taxable">> {
+  const result = new Map<string, "free" | "taxable">();
+  if (itemIds.length === 0) return result;
+  const { data: offers } = await admin
+    .from("pricelist_items")
+    .select("id, item_pack_sizes!inner(item_id)")
+    .in("item_pack_sizes.item_id", itemIds);
+  const itemOfOffer = new Map(
+    (offers ?? []).map((o) => {
+      const pack = o.item_pack_sizes as unknown as { item_id: string } | { item_id: string }[];
+      return [o.id as string, Array.isArray(pack) ? pack[0]?.item_id : pack.item_id];
+    })
+  );
+  if (itemOfOffer.size === 0) return result;
+  const { data: lines } = await admin
+    .from("expense_line_items")
+    .select("pricelist_item_id, gst_applicable")
+    .in("pricelist_item_id", [...itemOfOffer.keys()])
+    .not("gst_applicable", "is", null);
+  for (const line of lines ?? []) {
+    const itemId = itemOfOffer.get(line.pricelist_item_id as string);
+    if (!itemId) continue;
+    if (line.gst_applicable) result.set(itemId, "taxable");
+    else if (!result.has(itemId)) result.set(itemId, "free");
+  }
+  return result;
+}
+
+/**
+ * Read a shop's product page from a pasted link (#29). Writes nothing. When
+ * the page can't be read, or gives no price for its product, says so with
+ * `linkFailed`, and the page offers a screenshot instead — Costco publishes
+ * no price in its pages, and any shop can block a server.
+ */
+export async function readProductLinkAction(formData: FormData): Promise<ReadPhotosResult> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await requirePermission(user, "submit_expense", "submit");
+
+  const empty = { store: null, note: null, products: [] };
+  const link = String(formData.get("link") ?? "").trim();
+  if (!link) return { error: "Paste the link to the product's page first.", ...empty };
+
+  const verdict = await checkExtractionThrottle(user.id);
+  if (!verdict.allowed) {
+    return { error: `That's a lot read in one hour. Try again in about ${verdict.retryAfterMinutes} minutes.`, ...empty };
+  }
+
+  let page;
+  try {
+    page = await readProductLink(link);
+  } catch (err) {
+    if (err instanceof LinkUnreadable) return { error: err.message, linkFailed: true, ...empty };
+    await reportError({ source: "product-link", error: err, detail: link, userId: user.id });
+    return { error: "That page couldn't be read.", linkFailed: true, ...empty };
+  }
+
+  const admin = createAdminClient();
+  const { data: categories } = await admin.from("categories").select("id, name, parent_category_id");
+  const categoryNames = leafCategories(categories ?? []).map((c) => c.name);
+
+  let reading: ProductPhotoReading;
+  try {
+    reading = await extractProducts([{ text: page.text, label: `The shop's page` }], categoryNames);
+  } catch (err) {
+    await reportError({ source: "product-link", error: err, detail: link, userId: user.id });
+    return { error: "That page couldn't be read.", linkFailed: true, ...empty };
+  }
+
+  // A product page is one product; one read without a price is no use.
+  const product = reading.products[0];
+  if (!product || product.price == null) {
+    return {
+      error: `${page.store}'s page doesn't show that product's price to the app.`,
+      linkFailed: true,
+      ...empty,
+    };
+  }
+
+  const vendorName = String(formData.get("vendor_name") ?? "").trim() || page.store;
+  return afterReading(admin, { ...reading, store: page.store, products: [product] }, vendorName, {
+    url: page.url,
+    domain: page.domain,
+  });
 }
 
 export type ProductToSave = {
@@ -184,6 +339,12 @@ export type ProductToSave = {
   price: number | null;
   priceIsPer: "pack" | "unit" | null;
   category: string | null;
+  /** The usual price when `price` is a special (#29). */
+  regularPrice: number | null;
+  /** The special's last day as shown, or null to take the shop's usual week. */
+  specialEndsOn: string | null;
+  /** How GST was settled — always asked, never assumed (#29). */
+  gst: GstAnswer;
 };
 
 export type SavedProduct = { name: string; itemId: string; priceText: string | null; keptPrice: boolean };
@@ -208,6 +369,8 @@ export async function saveProductsAction(input: {
   vendorId: string | null;
   vendorName: string;
   products: ProductToSave[];
+  /** The shop's page these were read from, when they came from a link (#29). */
+  source?: { url: string; domain: string } | null;
 }): Promise<SaveProductsResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -215,6 +378,11 @@ export async function saveProductsAction(input: {
 
   const products = input.products.filter((p) => p.itemId || p.name.trim());
   if (products.length === 0) return { error: "There is nothing to save.", saved: [], vendorId: null };
+  if (products.some((p) => !["included", "excluded", "free"].includes(p.gst))) {
+    return { error: "Say for each price whether it includes GST.", saved: [], vendorId: null };
+  }
+  const source = input.source ?? null;
+  const today = todayIso();
 
   const permissions = await getUserPermissions(user);
   const trusted = can(permissions, "pricelist", "edit_master_data");
@@ -232,6 +400,16 @@ export async function saveProductsAction(input: {
     vendorId = (await matchOrCreateVendor(admin, { name: input.vendorName, abn: null, userId: user.id })).id;
   }
   if (!vendorId) return { error: "Say which store or supplier this is from.", saved: [], vendorId: null };
+
+  // What is now known about the shop: its website, so its next link finds it,
+  // and how its prices stand on GST, offered again next time (#29).
+  const shopGst = [...products].reverse().find((p) => p.gst !== "free")?.gst ?? null;
+  const { data: shop } = await admin.from("vendors").select("name, website").eq("id", vendorId).maybeSingle();
+  if (shopGst) await admin.from("vendors").update({ quote_gst_basis: shopGst }).eq("id", vendorId);
+  // Separately, and allowed to fail: a website another vendor already has
+  // stays with that vendor (unique index), and must not cost the GST answer.
+  if (source && !shop?.website) await admin.from("vendors").update({ website: source.domain }).eq("id", vendorId);
+  const shopForSales = source?.domain ?? ((shop?.name as string | undefined) || input.vendorName);
 
   const [{ data: units }, { data: categories }] = await Promise.all([
     admin.from("units").select("id, code, label, base_unit_code, to_base_factor"),
@@ -343,21 +521,43 @@ export async function saveProductsAction(input: {
 
       // The price of that pack. A tag that only gave a price per kg is turned
       // into the price of the whole pack, through the units table.
-      let packPrice = p.price && p.price > 0 ? p.price : null;
-      if (packPrice != null && p.priceIsPer === "unit" && !pack.sold_loose) {
-        packPrice = round4(
-          packPrice * Number(pack.inner_quantity) * Number(pack.pack_count) * Number(packUnit.to_base_factor)
-        );
-      }
+      const perPack = (n: number | null) =>
+        n != null && n > 0 && p.priceIsPer === "unit" && !pack.sold_loose
+          ? round4(n * Number(pack.inner_quantity) * Number(pack.pack_count) * Number(packUnit.to_base_factor))
+          : n != null && n > 0
+            ? n
+            : null;
+      // The regular price is the offer's price; a special sits beside it with
+      // its last day, and GST is settled the way the person said (#29).
+      const settled = settlePrices({ price: perPack(p.price), regularPrice: perPack(p.regularPrice), gst: p.gst });
+      const packPrice = settled.packPrice;
+      const sale =
+        settled.salePrice != null
+          ? {
+              sale_price: settled.salePrice,
+              sale_ends_on: p.specialEndsOn ?? saleEndFor(shopForSales, today),
+              sale_end_assumed: !p.specialEndsOn,
+            }
+          : { sale_price: null, sale_ends_on: null, sale_end_assumed: false };
+      const provenance = {
+        gst_basis: settled.gstBasis,
+        price_read_at: now,
+        ...(source ? { source_url: source.url } : {}),
+      };
 
-      // This store's offer on it.
+      // This store's offer on it, in this brand: two brands of the same size
+      // at one shop are two prices, so the cheapest of each can be found.
+      const brand = p.brand?.trim() || null;
       const { data: offers } = await admin
         .from("pricelist_items")
         .select("id, status, pack_price, brand, created_at")
         .eq("vendor_id", vendorId)
         .eq("pack_size_id", pack.id)
         .neq("status", "rejected");
-      const existingOffer = [...(offers ?? [])].sort(
+      const sameBrand = (offers ?? []).filter((o) =>
+        brand ? String(o.brand ?? "").toLowerCase() === brand.toLowerCase() || !o.brand : true
+      );
+      const existingOffer = [...sameBrand].sort(
         (a, b) =>
           Number(b.status === "approved") - Number(a.status === "approved") ||
           String(a.created_at).localeCompare(String(b.created_at))
@@ -371,16 +571,30 @@ export async function saveProductsAction(input: {
           if (trusted || current == null) changes.pack_price = { old: current, new: packPrice };
           else keptPrice = true;
         }
-        if (p.brand && !existingOffer.brand) changes.brand = { old: null, new: p.brand };
-        if (Object.keys(changes).length > 0) {
+        if (brand && !existingOffer.brand) changes.brand = { old: null, new: brand };
+        // A price that stands (new, confirmed, or allowed to change) brings its
+        // special, source and date with it; one kept for review changes none.
+        const { data: onFile } = await admin
+          .from("pricelist_items")
+          .select("sale_price")
+          .eq("id", existingOffer.id)
+          .maybeSingle();
+        const currentSale = onFile?.sale_price != null ? Number(onFile.sale_price) : null;
+        if (!keptPrice && currentSale !== sale.sale_price) {
+          changes.sale_price = { old: currentSale, new: sale.sale_price };
+        }
+        if (Object.keys(changes).length > 0 || !keptPrice) {
           await admin
             .from("pricelist_items")
             .update({
               ...Object.fromEntries(Object.entries(changes).map(([k, v]) => [k, v.new])),
+              ...(keptPrice ? {} : { ...sale, ...provenance }),
               updated_at: now,
               updated_by: user.id,
             })
             .eq("id", existingOffer.id);
+        }
+        if (Object.keys(changes).length > 0) {
           await admin
             .from("pricelist_item_history")
             .insert({ item_id: existingOffer.id, changed_by: user.id, changes });
@@ -389,8 +603,10 @@ export async function saveProductsAction(input: {
         const { error } = await admin.from("pricelist_items").insert({
           pack_size_id: pack.id,
           vendor_id: vendorId,
-          brand: p.brand,
+          brand,
           pack_price: packPrice,
+          ...sale,
+          ...provenance,
           status,
           created_by: user.id,
           updated_by: user.id,

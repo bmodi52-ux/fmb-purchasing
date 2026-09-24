@@ -8,7 +8,7 @@ describe("pageNameFor", () => {
   test("a sidebar page by its sidebar name", () => {
     assert.equal(pageNameFor("/submit"), "Submit expense");
     assert.equal(pageNameFor("/expenses/"), "All expenses");
-    assert.equal(pageNameFor("/pricelist/add-by-photo"), "Add item by photo");
+    assert.equal(pageNameFor("/pricelist/add-by-photo"), "Add item by photo or link");
   });
 
   test("one record's page by what it is", () => {

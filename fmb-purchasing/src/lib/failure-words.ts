@@ -15,6 +15,7 @@ const WHAT: Record<string, string> = {
   "receipt-too-large": "A receipt upload",
   "product-photo-extraction": "Reading a product photo",
   "product-photo-save": "Saving an item from a photo",
+  "product-link": "Reading a shop's page",
   "extraction-check": "The receipt reader check",
   "inbound-email": "A receipt sent by email",
   "email-send": "Sending an email",
