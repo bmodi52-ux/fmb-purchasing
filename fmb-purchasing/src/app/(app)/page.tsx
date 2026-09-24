@@ -7,6 +7,7 @@ import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import { loadReportRawData } from "./reports/data";
 import { computeWidgetData, widgetPeriodCode } from "./reports/dashboard-widgets";
 import { HomeDashboard, type SavedWidget } from "./home-dashboard";
+import { TodayPanel } from "./today-panel";
 
 export const metadata = { title: "Home" };
 
@@ -14,14 +15,17 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  const firstName = (user.fullName || user.email).split(/[s@]/)[0];
   const welcome = (
-    <div>
-      <h1 className="page-title text-ink">Welcome, {user.fullName || user.email}</h1>
-      <p className="max-w-xl text-ink/70">
-        Use the sidebar to submit an expense or, if you have access, review submissions, master data,
-        and reports.
-      </p>
-    </div>
+    <>
+      <div>
+        <h1 className="page-title text-ink">Welcome, {firstName}</h1>
+        <p className="page-description mt-1">
+          {new Date().toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" })}
+        </p>
+      </div>
+      <TodayPanel user={user} />
+    </>
   );
 
   // A dashboard built from Reports data has no business showing up for
@@ -29,7 +33,7 @@ export default async function DashboardPage() {
   // than rendered empty, so no figure a person shouldn't see ever ships.
   const canViewReports = await userCan(user, "reports", "view");
   if (!canViewReports) {
-    return <div className="flex flex-col gap-4">{welcome}</div>;
+    return <div className="flex flex-col gap-6">{welcome}</div>;
   }
 
   const admin = createAdminClient();
