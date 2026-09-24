@@ -20,6 +20,15 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 
 <!-- What happened, where, and what you expected instead. -->
 
+### 22. Receipt reading failing, and the error shown raw in notifications
+
+Raised 2026-09-24, seen during the design review. Notifications holds 29
+unread "Something failed in the background" entries from 22/09, each the raw
+JSON of a 400 from receipt extraction: "Schema contains too many parameters
+with union types (19 parameters…, limit: 16)". Two things: the extraction
+schema needs fewer nullable/union fields, and a failure notice should say what
+failed in words, with the raw error kept for System errors.
+
 ## Improvements
 
 <!-- Existing things that should work better. -->

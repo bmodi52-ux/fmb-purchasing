@@ -9,6 +9,27 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 23–28. Design and UI overhaul
+
+Raised and delivered 2026-09-24 (PR #87), from a design review of the whole
+app. Nothing changed what the app does.
+
+- **#23 Shared building blocks:** one set of button styles, one status
+  badge, solid cards, one tab style (scrolls on a phone), one toggle;
+  figures in Inter with tabular numbers rather than monospace.
+- **#24 Add-menu page:** builder on the left, an estimate held in view on
+  the right with Put it on days / Save / Discard, a bottom bar on a phone;
+  dishes and items picked by typing. A day's menu page uses the same layout.
+- **#25 Sidebar:** grouped, Admin folded, scrolls on its own; notifications
+  as a bell.
+- **#26 Tables and intros:** one Export menu, sort and filter marks on
+  hover, filters behind a button on a phone, one-line page intros.
+- **#27 Phone cards:** four fields, the rest behind "more".
+- **#28 Home:** a Today panel of what is waiting on you.
+
+Also: the sign-in logo out of the card, much larger, above it. A maroon
+split sign-in panel was tried and dropped.
+
 ### 10. Stock, recipes and menu costing
 
 _Was #43._ Delivered 2026-09-24 (PR #86). The last open part was a monthly
