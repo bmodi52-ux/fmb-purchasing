@@ -149,7 +149,8 @@ const MAX_RETRIES = 2;
  */
 export const UNCLEAR_CATEGORY = "Unclear — needs a person";
 
-function buildTool(categoryNames: string[]): Anthropic.Tool {
+/** Exported for the test that keeps it under the API's limit on union-typed fields (#22). */
+export function buildTool(categoryNames: string[]): Anthropic.Tool {
   return {
     name: EXTRACT_TOOL_NAME,
     description: "Records structured data extracted from a receipt, invoice, or covering email.",
