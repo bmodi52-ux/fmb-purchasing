@@ -62,6 +62,7 @@ const ITEM_FIELD_LABELS: Record<string, string> = {
   sold_loose: "Bought loose",
   contents_confirmed: "Pack contents confirmed",
   preferred_vendor_id: "Preferred vendor",
+  preferred_brand: "Preferred brand",
   price_rise_percent: "Alert on a rise over (%)",
   price_fall_percent: "Alert on a fall over (%)",
   expected_min_per_unit: "Expected price from",
@@ -504,6 +505,28 @@ export default async function ItemDetailPage({
               Prices show per box or pack, and per this unit — e.g. kg for vegetables, L for milk, item for roti
             </span>
           </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-ink/70">
+              Preferred brand <span className="text-ink/40">(optional)</span>
+            </span>
+            <input
+              name="preferred_brand"
+              list="item-brands"
+              defaultValue={(item.preferred_brand as string | null) ?? ""}
+              disabled={!canEdit}
+              placeholder="Any brand"
+              className="input"
+            />
+            <datalist id="item-brands">
+              {[...new Set((offers ?? []).map((o) => o.brand as string | null).filter((b): b is string => !!b))].map((b) => (
+                <option key={b} value={b} />
+              ))}
+            </datalist>
+            <span className="text-xs text-ink/45">
+              Left empty, the cheapest of any brand is used. Set, costing and the buying list use only this brand, at
+              whichever store is cheapest.
+            </span>
+          </label>
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
             <span className="text-ink/70">Comments</span>
             <textarea name="comments" defaultValue={item.comments ?? ""} disabled={!canEdit} rows={2} className="input" />
@@ -659,6 +682,26 @@ export default async function ItemDetailPage({
                       )}
                     </span>
                   </div>
+                  {/* A special, where the price came from and when (#29). Prices don't
+                      expire, so the date is how an old one shows. */}
+                  {(o.sale_price != null || o.source_url || o.price_read_at || o.gst_basis === "added") && (
+                    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink/55">
+                      {o.sale_price != null && o.sale_ends_on && String(o.sale_ends_on) >= todayIso() && (
+                        <span className="text-palm">
+                          On special {formatPackPrice(Number(o.sale_price), packShapeOf(p))} until{" "}
+                          {formatPlainDate(String(o.sale_ends_on))}
+                          {o.sale_end_assumed && " (end date assumed)"}
+                        </span>
+                      )}
+                      {o.price_read_at && <span>Price from {formatPlainDate(String(o.price_read_at).slice(0, 10))}</span>}
+                      {o.gst_basis === "added" && <span>+GST added</span>}
+                      {o.source_url && (
+                        <a href={String(o.source_url)} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                          shop&apos;s page
+                        </a>
+                      )}
+                    </p>
+                  )}
                   {o.comments && <p className="mt-1 text-ink/60">{o.comments}</p>}
                   {/* What a receipt filled in (#79) is only ever a reading of
                       the invoice, so it waits here to be checked. */}

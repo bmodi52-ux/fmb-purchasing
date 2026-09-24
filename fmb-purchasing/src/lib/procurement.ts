@@ -55,6 +55,74 @@ function packQuantity(packs: PackOption[], suggestion: PackSuggestion): number {
   return packs.find((p) => p.packSizeId === suggestion.packSizeId)?.totalQuantity ?? 0;
 }
 
+/** One way to buy an item: a store's offer on one pack, at today's price (#29). */
+export type BuyOption = {
+  offerId: string;
+  packSizeId: string;
+  title: string;
+  /** How much one pack holds, in the item's base unit. */
+  totalQuantity: number;
+  /** Priced by weight or each: `price` is then per base unit and nothing is rounded. */
+  soldLoose: boolean;
+  vendorId: string;
+  vendorName: string;
+  brand: string | null;
+  /** Today's price — the special while it runs (see offer-pricing priceOn). */
+  price: number;
+  onSpecial: boolean;
+  saleEndsOn: string | null;
+};
+
+export type CheapestBuy = BuyOption & {
+  /** How many packs; null when bought loose. */
+  packs: number | null;
+  quantity: number;
+  over: number;
+  cost: number;
+  /** The item has a preferred brand but no store prices it yet. */
+  brandMissing: boolean;
+};
+
+/**
+ * The cheapest way to buy what a line needs (#29): each store's offer on each
+ * pack, bought in whole packs, costed at today's price — so a special counts
+ * while it runs — and the lowest total wins. A dearer-per-kg small pack can
+ * beat a big one that would mostly go to waste. An item with a preferred brand
+ * is bought in that brand, still at the cheapest store. Ties go to less waste,
+ * then the larger pack.
+ */
+export function cheapestBuy(required: number, options: BuyOption[], preferredBrand: string | null): CheapestBuy | null {
+  const usable = options.filter((o) => o.price > 0 && (o.soldLoose || o.totalQuantity > 0));
+  if (required <= 0 || usable.length === 0) return null;
+  const wanted = preferredBrand?.trim().toLowerCase();
+  const ofBrand = wanted ? usable.filter((o) => (o.brand ?? "").trim().toLowerCase() === wanted) : usable;
+  const pool = ofBrand.length > 0 ? ofBrand : usable;
+
+  let best: CheapestBuy | null = null;
+  for (const o of pool) {
+    const packs = o.soldLoose ? null : Math.ceil(round3(required / o.totalQuantity));
+    const quantity = packs == null ? required : round3(packs * o.totalQuantity);
+    const cost = round2(packs == null ? required * o.price : packs * o.price);
+    const candidate: CheapestBuy = {
+      ...o,
+      packs,
+      quantity,
+      over: round3(quantity - required),
+      cost,
+      brandMissing: !!wanted && ofBrand.length === 0,
+    };
+    if (
+      !best ||
+      cost < best.cost ||
+      (cost === best.cost && candidate.over < best.over) ||
+      (cost === best.cost && candidate.over === best.over && o.totalQuantity > best.totalQuantity)
+    ) {
+      best = candidate;
+    }
+  }
+  return best;
+}
+
 export type OpenRequirement = {
   requirementId: string;
   itemId: string;

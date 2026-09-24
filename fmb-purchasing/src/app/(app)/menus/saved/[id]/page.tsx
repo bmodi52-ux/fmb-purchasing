@@ -219,7 +219,7 @@ export default async function SavedMenuPage({
           <h2 className="mb-1 section-title text-ink">What it needs</h2>
           <p className="mb-4 text-sm text-ink/55">
             {simple ? "What was typed in, priced." : `From the recipes, for ${thaalis} ${thaalis === 1 ? "thaali" : "thaalis"}.`}{" "}
-            Priced at what was last paid, else the cheapest lately, else a quote.
+            Priced at the cheapest on file — paid or quoted, from any store.
           </p>
           <CostLinesTable lines={cost.lines} />
         </section>

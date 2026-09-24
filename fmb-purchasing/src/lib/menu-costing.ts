@@ -215,22 +215,68 @@ export function requirementsFor(menu: MenuContents, thaalis: number): Requiremen
 }
 
 /**
- * Where a price came from, in the order it is looked for.
+ * Where a price came from.
  *
- * What was paid beats what was quoted, because a payment is a fact and a
- * quote is an intention — and the answer says which it used, so a figure
- * nobody can explain is impossible.
+ * Since #29 the cheapest price available wins — paid or quoted, from any
+ * store — because collecting prices from several stores is for buying at the
+ * cheapest (decided 2026-09-24). The answer says which it used and where from,
+ * so a figure nobody can explain is impossible. The older order (last paid,
+ * then cheapest paid lately, then a quote) is kept for a caller that hands in
+ * only those.
  */
-export type PriceBasis = "paid_latest" | "paid_cheapest_recent" | "offer" | "none";
+export type PriceBasis =
+  | "cheapest_paid"
+  | "cheapest_quoted"
+  | "paid_latest"
+  | "paid_cheapest_recent"
+  | "offer"
+  | "none";
 
 export const PRICE_BASIS_LABEL: Record<PriceBasis, string> = {
+  cheapest_paid: "cheapest, paid",
+  cheapest_quoted: "cheapest, quoted",
   paid_latest: "last paid",
   paid_cheapest_recent: "cheapest paid lately",
   offer: "vendor's quoted price",
   none: "no price yet",
 };
 
+/** One price an item could be costed at: a store's offer, or what was last paid there. */
+export type PriceCandidate = {
+  perUnit: number;
+  source: "paid" | "quoted";
+  vendorName: string | null;
+  /** When it was paid or read, YYYY-MM-DD. Prices never expire; the date is shown. */
+  date: string | null;
+  brand: string | null;
+};
+
+/**
+ * The cheapest candidate. An item with a preferred brand is costed at that
+ * brand only, still at whichever store is cheapest; when no store has a price
+ * for it yet, the cheapest of any brand stands in, and says so.
+ */
+export function pickCheapest(
+  candidates: PriceCandidate[],
+  preferredBrand: string | null
+): (PriceCandidate & { brandMissing: boolean }) | null {
+  const usable = candidates.filter((c) => Number.isFinite(c.perUnit) && c.perUnit > 0);
+  const wanted = preferredBrand?.trim().toLowerCase();
+  const ofBrand = wanted ? usable.filter((c) => (c.brand ?? "").trim().toLowerCase() === wanted) : usable;
+  const pool = ofBrand.length > 0 ? ofBrand : usable;
+  const best = pool.reduce<PriceCandidate | null>(
+    (min, c) =>
+      !min || c.perUnit < min.perUnit || (c.perUnit === min.perUnit && c.source === "paid" && min.source === "quoted")
+        ? c
+        : min,
+    null
+  );
+  return best ? { ...best, brandMissing: !!wanted && ofBrand.length === 0 } : null;
+}
+
 export type ItemPrices = {
+  /** The cheapest price available (#29), with where it is from. */
+  cheapest?: (PriceCandidate & { brandMissing: boolean }) | null;
   /** Per base unit, from submitted receipts. */
   latestPaid?: number | null;
   cheapestRecent?: number | null;
@@ -238,7 +284,22 @@ export type ItemPrices = {
   offer?: number | null;
 };
 
-export function priceFor(prices: ItemPrices | undefined): { perUnit: number | null; basis: PriceBasis } {
+/** "Costco, quoted 12/09" — where a price is from, beside it. */
+export function priceFromLabel(c: PriceCandidate & { brandMissing?: boolean }): string {
+  const when = c.date ? `${c.date.slice(8, 10)}/${c.date.slice(5, 7)}` : null;
+  const what = [c.brand, c.vendorName].filter(Boolean).join(" at ");
+  const label = [what || null, [c.source, when].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return c.brandMissing ? `${label} — the preferred brand has no price yet` : label;
+}
+
+export function priceFor(prices: ItemPrices | undefined): { perUnit: number | null; basis: PriceBasis; from?: string } {
+  if (prices?.cheapest && prices.cheapest.perUnit > 0) {
+    return {
+      perUnit: prices.cheapest.perUnit,
+      basis: prices.cheapest.source === "paid" ? "cheapest_paid" : "cheapest_quoted",
+      from: priceFromLabel(prices.cheapest),
+    };
+  }
   if (prices?.latestPaid != null && prices.latestPaid > 0) {
     return { perUnit: prices.latestPaid, basis: "paid_latest" };
   }
@@ -254,6 +315,8 @@ export function priceFor(prices: ItemPrices | undefined): { perUnit: number | nu
 export type CostedLine = RequirementLine & {
   perUnit: number | null;
   basis: PriceBasis;
+  /** Where the price is from, when known: "Taj at Coles, quoted 24/09". */
+  from?: string;
   cost: number | null;
 };
 
@@ -273,8 +336,8 @@ export function costMenuDay(
   pricesByItem: Map<string, ItemPrices>
 ): MenuDayCost {
   const lines = requirementsFor(menu, thaalis).map((line) => {
-    const { perUnit, basis } = priceFor(pricesByItem.get(line.itemId));
-    return { ...line, perUnit, basis, cost: perUnit == null ? null : round2(line.quantity * perUnit) };
+    const { perUnit, basis, from } = priceFor(pricesByItem.get(line.itemId));
+    return { ...line, perUnit, basis, from, cost: perUnit == null ? null : round2(line.quantity * perUnit) };
   });
 
   const total = round2(lines.reduce((sum, l) => sum + (l.cost ?? 0), 0));

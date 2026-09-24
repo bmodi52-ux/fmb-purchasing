@@ -1,8 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSetting } from "@/lib/app-settings";
-import { loadCheapestRecent } from "@/lib/price-alerts-data";
-import { todayIso } from "@/lib/periods-data";
-import type { ItemPrices, MenuDish, MenuExtra, MenuLine } from "@/lib/menu-costing";
+import { pickCheapest, type ItemPrices, type MenuDish, type MenuExtra, type MenuLine, type PriceCandidate } from "@/lib/menu-costing";
 import { resolveSection, type SectionKey } from "@/lib/menu-sections";
 
 /**
@@ -214,40 +211,104 @@ export async function loadMenuLines(
 }
 
 /**
- * The prices for a set of items: what was last paid per base unit, the
- * cheapest paid lately, and what a vendor quotes. Which of them is used is
- * decided by priceFor, not here.
+ * The prices for a set of items (#29): every store's offer, and what was last
+ * paid at each store in each brand, reduced to the cheapest — within the
+ * item's preferred brand when it has one. Prices never expire; the date is
+ * carried so it can be shown. Costing always uses an offer's regular price —
+ * a special is for the buying list, not for what a thaali costs.
  */
 export async function loadItemPrices(admin: SupabaseClient, itemIds: string[]): Promise<Map<string, ItemPrices>> {
   const prices = new Map<string, ItemPrices>();
   if (itemIds.length === 0) return prices;
 
-  const settings = await getSetting(admin, "price_alerts");
-  const [{ data: paid }, cheapest, { data: offers }] = await Promise.all([
-    admin.from("item_unit_costs").select("item_id, latest_cost_per_base_unit").in("item_id", itemIds),
-    loadCheapestRecent(admin, settings.cheapestRecentDays, todayIso()),
-    admin.from("offer_unit_costs").select("item_id, cost_per_base_unit").in("item_id", itemIds),
+  const [{ data: items }, { data: offers }, { data: paid }] = await Promise.all([
+    admin.from("items").select("id, preferred_brand").in("id", itemIds),
+    admin
+      .from("offer_unit_costs")
+      .select("offer_id, item_id, vendor_id, status, cost_per_base_unit")
+      .in("item_id", itemIds)
+      .neq("status", "rejected"),
+    admin
+      .from("item_paid_unit_costs")
+      .select("item_id, vendor_id, line_item_id, receipt_date, submitted_at, expense_status, cost_per_base_unit, pack_disagrees")
+      .in("item_id", itemIds),
   ]);
 
-  for (const row of paid ?? []) {
-    const value = row.latest_cost_per_base_unit == null ? null : Number(row.latest_cost_per_base_unit);
-    prices.set(row.item_id as string, { ...prices.get(row.item_id as string), latestPaid: value });
+  // A cost from a receipt whose pack size disagrees with the Pricelist is
+  // not a price anybody paid per kg; declined and withdrawn spend never was.
+  const paidRows = (paid ?? []).filter(
+    (p) =>
+      p.cost_per_base_unit != null &&
+      !p.pack_disagrees &&
+      p.expense_status !== "declined" &&
+      p.expense_status !== "withdrawn"
+  );
+
+  // Brand, date and store names for both.
+  const lineIds = paidRows.map((p) => p.line_item_id as string);
+  const { data: lines } = lineIds.length
+    ? await admin.from("expense_line_items").select("id, pricelist_item_id").in("id", lineIds)
+    : { data: [] };
+  const offerOfLine = new Map((lines ?? []).map((l) => [l.id as string, l.pricelist_item_id as string | null]));
+  const offerIds = [
+    ...new Set([
+      ...(offers ?? []).map((o) => o.offer_id as string),
+      ...[...offerOfLine.values()].filter((id): id is string => !!id),
+    ]),
+  ];
+  const vendorIds = [
+    ...new Set([...(offers ?? []), ...paidRows].map((r) => r.vendor_id as string | null).filter((id): id is string => !!id)),
+  ];
+  const [{ data: offerRows }, { data: vendors }] = await Promise.all([
+    offerIds.length
+      ? admin.from("pricelist_items").select("id, brand, price_read_at, updated_at, created_at").in("id", offerIds)
+      : Promise.resolve({ data: [] }),
+    vendorIds.length ? admin.from("vendors").select("id, name").in("id", vendorIds) : Promise.resolve({ data: [] }),
+  ]);
+  const offerById = new Map((offerRows ?? []).map((o) => [o.id as string, o]));
+  const vendorName = new Map((vendors ?? []).map((v) => [v.id as string, v.name as string]));
+  const day = (v: unknown) => (typeof v === "string" && v ? v.slice(0, 10) : null);
+
+  const candidates = new Map<string, PriceCandidate[]>();
+  const add = (itemId: string, c: PriceCandidate) => candidates.set(itemId, [...(candidates.get(itemId) ?? []), c]);
+
+  for (const o of offers ?? []) {
+    const row = offerById.get(o.offer_id as string);
+    add(o.item_id as string, {
+      perUnit: Number(o.cost_per_base_unit),
+      source: "quoted",
+      vendorName: vendorName.get(o.vendor_id as string) ?? null,
+      date: day(row?.price_read_at ?? row?.updated_at ?? row?.created_at),
+      brand: (row?.brand as string | null) ?? null,
+    });
   }
 
+  // What was last paid at each store, in each brand: the latest receipt, not
+  // every one — an old price at a store that has since gone up isn't on offer.
+  const latestPaid = new Map<string, (typeof paidRows)[number] & { brand: string | null }>();
+  for (const p of paidRows) {
+    const offerId = offerOfLine.get(p.line_item_id as string);
+    const brand = offerId ? ((offerById.get(offerId)?.brand as string | null) ?? null) : null;
+    const key = `${p.item_id}|${p.vendor_id}|${(brand ?? "").toLowerCase()}`;
+    const when = String(p.receipt_date ?? p.submitted_at ?? "");
+    const current = latestPaid.get(key);
+    if (!current || when > String(current.receipt_date ?? current.submitted_at ?? "")) latestPaid.set(key, { ...p, brand });
+  }
+  for (const p of latestPaid.values()) {
+    add(p.item_id as string, {
+      perUnit: Number(p.cost_per_base_unit),
+      source: "paid",
+      vendorName: vendorName.get(p.vendor_id as string) ?? null,
+      date: day(p.receipt_date ?? p.submitted_at),
+      brand: p.brand,
+    });
+  }
+
+  const preferred = new Map((items ?? []).map((i) => [i.id as string, (i.preferred_brand as string | null) ?? null]));
   for (const itemId of itemIds) {
-    const recent = cheapest.get(itemId);
-    if (recent) prices.set(itemId, { ...prices.get(itemId), cheapestRecent: recent.costPerUnit });
+    const cheapest = pickCheapest(candidates.get(itemId) ?? [], preferred.get(itemId) ?? null);
+    if (cheapest) prices.set(itemId, { cheapest });
   }
-
-  // The cheapest live quote, since that is the one anybody would buy at.
-  for (const row of offers ?? []) {
-    const itemId = row.item_id as string;
-    const value = row.cost_per_base_unit == null ? null : Number(row.cost_per_base_unit);
-    if (value == null) continue;
-    const current = prices.get(itemId);
-    if (current?.offer == null || value < current.offer) prices.set(itemId, { ...current, offer: value });
-  }
-
   return prices;
 }
 

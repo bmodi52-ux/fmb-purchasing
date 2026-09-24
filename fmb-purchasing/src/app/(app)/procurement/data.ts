@@ -1,5 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { progressOf, suggestPacks, type PackOption, type PackSuggestion } from "@/lib/procurement";
+import {
+  cheapestBuy,
+  progressOf,
+  suggestPacks,
+  type BuyOption,
+  type CheapestBuy,
+  type PackOption,
+  type PackSuggestion,
+} from "@/lib/procurement";
+import { priceOn } from "@/lib/offer-pricing";
+import { todayIso } from "@/lib/periods-data";
 import type { SectionKey } from "@/lib/menu-sections";
 
 type RequirementRow = {
@@ -43,6 +53,8 @@ export type ProcurementLine = {
   note: string | null;
   /** What to actually order, rounded to a pack the vendor sells. */
   pack: PackSuggestion | null;
+  /** The cheapest store, pack and brand for what is still needed, at today's prices (#29). */
+  buy: CheapestBuy | null;
   /** What has been bought against it, from the receipts already submitted. */
   bought: number;
   spent: number;
@@ -98,6 +110,9 @@ export async function loadProcurement(
       : Promise.resolve({ data: [] }),
   ]);
   const vendorById = new Map((vendors ?? []).map((v) => [v.id as string, v]));
+  const buyOptionsBy = await loadBuyOptions(admin, itemIds, packs ?? []);
+  const { data: preferredRows } = await admin.from("items").select("id, preferred_brand").in("id", itemIds);
+  const preferredBrand = new Map((preferredRows ?? []).map((i) => [i.id as string, (i.preferred_brand as string | null) ?? null]));
   const phoneOf = new Map<string, string>();
   for (const c of contacts ?? []) {
     const phone = String(c.phone ?? "").trim();
@@ -159,6 +174,11 @@ export async function loadProcurement(
         leadDays: row.vendor_id ? ((vendorById.get(row.vendor_id)?.order_lead_days as number | null | undefined) ?? null) : null,
         note: row.note,
         pack: suggestPacks(progress.outstanding > 0 ? progress.outstanding : quantity, packsBy.get(row.item_id) ?? []),
+        buy: cheapestBuy(
+          progress.outstanding > 0 ? progress.outstanding : quantity,
+          buyOptionsBy.get(row.item_id) ?? [],
+          preferredBrand.get(row.item_id) ?? null
+        ),
         bought: progress.bought,
         spent: progress.spent,
         outstanding: progress.outstanding,
@@ -170,6 +190,71 @@ export async function loadProcurement(
         a.kitchenName.localeCompare(b.kitchenName) ||
         a.itemName.localeCompare(b.itemName, "en", { sensitivity: "base" })
     );
+}
+
+/**
+ * Every store's offer on every pack of these items, at today's price: the
+ * special while it runs, the regular price after (#29).
+ */
+async function loadBuyOptions(
+  admin: SupabaseClient,
+  itemIds: string[],
+  packs: Record<string, unknown>[]
+): Promise<Map<string, BuyOption[]>> {
+  const result = new Map<string, BuyOption[]>();
+  const { data: costs } = await admin
+    .from("offer_unit_costs")
+    .select("offer_id, item_id, vendor_id, pack_size_id, pack_price, total_base_quantity, cost_per_base_unit, status")
+    .in("item_id", itemIds)
+    .neq("status", "rejected");
+  const priced = (costs ?? []).filter((c) => c.pack_price != null && Number(c.pack_price) > 0 && c.vendor_id);
+  if (priced.length === 0) return result;
+
+  const offerIds = priced.map((c) => c.offer_id as string);
+  const vendorIds = [...new Set(priced.map((c) => c.vendor_id as string))];
+  const [{ data: offers }, { data: vendors }] = await Promise.all([
+    admin.from("pricelist_items").select("id, brand, sale_price, sale_ends_on").in("id", offerIds),
+    admin.from("vendors").select("id, name").in("id", vendorIds),
+  ]);
+  const offerById = new Map((offers ?? []).map((o) => [o.id as string, o]));
+  const vendorName = new Map((vendors ?? []).map((v) => [v.id as string, v.name as string]));
+  const packById = new Map(packs.map((p) => [p.id as string, p]));
+  const today = todayIso();
+
+  for (const c of priced) {
+    const offer = offerById.get(c.offer_id as string);
+    const pack = packById.get(c.pack_size_id as string);
+    const packPrice = Number(c.pack_price);
+    const now = priceOn(
+      {
+        packPrice,
+        salePrice: offer?.sale_price != null ? Number(offer.sale_price) : null,
+        saleEndsOn: (offer?.sale_ends_on as string | null) ?? null,
+      },
+      today
+    );
+    if (now.price == null) continue;
+    const soldLoose = Boolean(pack?.sold_loose);
+    // Loose goods are priced per base unit; a special scales it the same way.
+    const perUnit = c.cost_per_base_unit != null ? Number(c.cost_per_base_unit) * (now.price / packPrice) : null;
+    if (soldLoose && perUnit == null) continue;
+    const option: BuyOption = {
+      offerId: c.offer_id as string,
+      packSizeId: c.pack_size_id as string,
+      title: pack ? ((pack.label as string | null) ?? describe(pack)) : "pack",
+      totalQuantity: Number(c.total_base_quantity ?? 0),
+      soldLoose,
+      vendorId: c.vendor_id as string,
+      vendorName: vendorName.get(c.vendor_id as string) ?? "a store",
+      brand: (offer?.brand as string | null) ?? null,
+      price: soldLoose ? perUnit! : now.price,
+      onSpecial: now.onSpecial,
+      saleEndsOn: now.onSpecial ? ((offer?.sale_ends_on as string | null) ?? null) : null,
+    };
+    const itemId = c.item_id as string;
+    result.set(itemId, [...(result.get(itemId) ?? []), option]);
+  }
+  return result;
 }
 
 /** A pack with no name of its own, said the way the rest of the app says it. */
