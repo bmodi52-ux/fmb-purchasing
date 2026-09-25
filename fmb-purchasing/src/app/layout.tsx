@@ -1,13 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Inter, IBM_Plex_Mono, Amiri } from "next/font/google";
+import { Marcellus, Inter, IBM_Plex_Mono, Amiri } from "next/font/google";
 import "./globals.css";
 import { SandboxBanner } from "@/components/sandbox-banner";
 import { isSandbox } from "@/lib/sandbox";
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+// The Mashk wordmark, and nothing else.
+const marcellus = Marcellus({
+  variable: "--font-marcellus",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "400",
 });
 
 const inter = Inter({
@@ -38,13 +39,13 @@ export const metadata: Metadata = {
    * tab is truncated from the right.
    */
   title: {
-    template: "%s · FMB Sydney",
-    default: "FMB Sydney",
+    template: "%s · Mashk",
+    default: "Mashk",
   },
   description: "Expense submission, approval and reporting for FMB.",
   // Named here as well as in the manifest: iOS reads this one when the site is
   // added to a home screen, and ignores the manifest's short_name.
-  appleWebApp: { capable: true, title: "FMB Purchasing", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Mashk", statusBarStyle: "default" },
 };
 
 /**
@@ -68,7 +69,7 @@ export default function RootLayout({
       lang="en"
       // Keeps the crest maroon as the brand colour on the sandbox (globals.css).
       data-sandbox={isSandbox() ? "" : undefined}
-      className={`${fraunces.variable} ${inter.variable} ${plexMono.variable} ${amiri.variable} h-full antialiased`}
+      className={`${marcellus.variable} ${inter.variable} ${plexMono.variable} ${amiri.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-cream text-ink font-sans">
         <SandboxBanner />

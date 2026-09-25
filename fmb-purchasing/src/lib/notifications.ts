@@ -43,8 +43,8 @@ export function emailTemplate(bodyHtml: string): string {
                       <img src="${SITE_URL}/fmb-logo.png" width="32" height="32" alt="FMB" style="display:block; border-radius:4px;" />
                     </td>
                     <td style="vertical-align:middle;">
-                      <p style="margin:0; font-family:Georgia,'Times New Roman',serif; font-size:16px; font-weight:bold; color:#2B211C; letter-spacing:-0.01em;">FMB Sydney</p>
-                      <p style="margin:1px 0 0 0; font-size:11px; color:#8A7B6C;">Faiz ul Mawaid il Burhaniyah</p>
+                      <p style="margin:0; font-family:Georgia,'Times New Roman',serif; font-size:16px; font-weight:bold; color:#2B211C; letter-spacing:-0.01em;">Mashk</p>
+                      <p style="margin:1px 0 0 0; font-size:11px; color:#8A7B6C;">FMB Sydney</p>
                     </td>
                   </tr>
                 </table>
@@ -57,7 +57,7 @@ export function emailTemplate(bodyHtml: string): string {
             </tr>
             <tr>
               <td style="padding:14px 24px; border-top:1px solid #EFE7D8; background-color:#FCFAF5;">
-                <p style="margin:0; font-family:${EMAIL_FONT}; font-size:11px; line-height:1.5; color:#9A8B7B;">Automated message from FMB Sydney — please don&rsquo;t reply to this address.</p>
+                <p style="margin:0; font-family:${EMAIL_FONT}; font-size:11px; line-height:1.5; color:#9A8B7B;">Automated message from Mashk — please don&rsquo;t reply to this address.</p>
               </td>
             </tr>
           </table>

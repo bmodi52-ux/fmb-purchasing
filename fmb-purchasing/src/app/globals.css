@@ -8,6 +8,8 @@
      marker. Teal on the live site; the sandbox keeps the crest's maroon so
      nobody mistakes one for the other (html[data-sandbox], below). */
   --color-brand: #11706c;
+  /* The top of the primary button's gradient: lighter, for the sheen. */
+  --color-brand-light: #1a8f87;
   /* Declined, over budget, delete: things that went or could go wrong. This
      was maroon until the brand moved to teal; a deep red keeps the meaning. */
   --color-danger: #8b1e2d;
@@ -22,6 +24,7 @@
 
 html[data-sandbox] {
   --color-brand: #4a160a;
+  --color-brand-light: #7a2a18;
 }
 
 @theme inline {
@@ -35,7 +38,7 @@ html[data-sandbox] {
   --color-alert: var(--color-alert);
 
   --font-sans: var(--font-inter);
-  --font-serif: var(--font-fraunces);
+  --font-serif: var(--font-marcellus);
   --font-mono: var(--font-plex-mono);
   --font-arabic: var(--font-amiri);
 }
@@ -92,10 +95,12 @@ h1, h2, h3, h4 {
   color: rgb(43 33 28 / 0.68);
 }
 
-/* The wordmark keeps the serif, so the brand still has a distinctive mark. */
+/* The Mashk wordmark: Marcellus, in the brand colour. */
 .brand-wordmark {
-  font-family: var(--font-fraunces);
-  letter-spacing: -0.01em;
+  font-family: var(--font-marcellus);
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--color-brand);
 }
 
 .font-mono,
@@ -144,15 +149,21 @@ h1, h2, h3, h4 {
 
   /* The one thing a screen is for. */
   .btn-primary {
-    background-color: var(--color-gold);
-    color: var(--color-ink);
+    background-color: var(--color-brand);
+    background-image: linear-gradient(180deg, var(--color-brand-light) 0%, var(--color-brand) 100%);
+    color: white;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.3),
+      0 1px 2px rgb(0 0 0 / 0.14);
+    text-shadow: 0 1px 0 rgb(0 0 0 / 0.18);
   }
   .btn-primary:hover {
-    background-color: color-mix(in srgb, var(--color-gold) 82%, var(--color-gold-deep));
+    background-image: linear-gradient(180deg, color-mix(in srgb, var(--color-brand-light) 88%, white) 0%, var(--color-brand) 100%);
   }
   .btn-primary:active {
-    background-color: var(--color-gold-deep);
-    color: white;
+    background-image: none;
+    background-color: var(--color-brand);
+    box-shadow: inset 0 2px 3px rgb(0 0 0 / 0.2);
   }
 
   /* Everything else a person might press. */

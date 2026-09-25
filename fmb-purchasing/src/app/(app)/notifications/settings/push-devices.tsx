@@ -105,7 +105,7 @@ export function PushDevices({ publicKey }: { publicKey: string | null }) {
       {support === "unsupported" && <p className="text-ink/60">This browser can&apos;t receive push notifications.</p>}
       {support === "needs-home-screen" && (
         <p className="text-ink/70">
-          On an iPhone, push works once FMB Purchasing is on your home screen: tap Share, then <strong>Add to Home Screen</strong>, open
+          On an iPhone, push works once Mashk is on your home screen: tap Share, then <strong>Add to Home Screen</strong>, open
           it from there, and come back to this page. Needs iOS 16.4 or later.
         </p>
       )}

@@ -40,7 +40,7 @@ export default function GlobalError({
             "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
         }}
       >
-        <title>Something went wrong — FMB Sydney</title>
+        <title>Something went wrong — Mashk</title>
         <main style={{ maxWidth: "32rem" }}>
           <p
             style={{
@@ -51,7 +51,7 @@ export default function GlobalError({
               color: "#8A7B6C",
             }}
           >
-            FMB Sydney
+            Mashk
           </p>
           <h1 style={{ margin: "0.5rem 0 0", fontSize: "1.5rem", letterSpacing: "-0.02em" }}>
             Something went wrong
