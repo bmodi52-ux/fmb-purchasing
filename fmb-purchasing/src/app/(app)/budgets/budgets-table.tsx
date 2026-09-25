@@ -117,7 +117,7 @@ export function BudgetsTable({
               <td className="px-4 py-2.5 text-right tabular-nums tabular-figures text-ink/80">{money(row.paid)}</td>
               <td className="px-4 py-2.5 text-right tabular-nums tabular-figures text-ink/60">{money(row.committed)}</td>
               <td
-                className={`px-4 py-2.5 text-right tabular-nums tabular-figures ${over ? "text-maroon" : "text-ink/80"}`}
+                className={`px-4 py-2.5 text-right tabular-nums tabular-figures ${over ? "text-danger" : "text-ink/80"}`}
               >
                 {row.budget === null ? "—" : money(row.budget - row.spent)}
               </td>
@@ -149,7 +149,7 @@ function BudgetNote({
     parts.push(`${share.uncoveredDays} of ${share.days} days have no budget set`);
   }
   if (parts.length === 0) return null;
-  return <p className={`mt-1 text-xs ${share.uncoveredDays > 0 ? "text-maroon/80" : "text-ink/45"}`}>{parts.join(" · ")}</p>;
+  return <p className={`mt-1 text-xs ${share.uncoveredDays > 0 ? "text-danger/80" : "text-ink/45"}`}>{parts.join(" · ")}</p>;
 }
 
 /**
@@ -167,9 +167,9 @@ function UsageBar({ pct }: { pct: number | null }) {
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-24 overflow-hidden rounded-full bg-ink/10" aria-hidden="true">
-        <div className={`h-full rounded-full ${over ? "bg-maroon" : "bg-gold-deep"}`} style={{ width: `${width}%` }} />
+        <div className={`h-full rounded-full ${over ? "bg-danger" : "bg-gold-deep"}`} style={{ width: `${width}%` }} />
       </div>
-      <span className={`tabular-nums text-xs ${over ? "text-maroon" : "text-ink/55"}`}>{Math.round(pct * 100)}%</span>
+      <span className={`tabular-nums text-xs ${over ? "text-danger" : "text-ink/55"}`}>{Math.round(pct * 100)}%</span>
     </div>
   );
 }

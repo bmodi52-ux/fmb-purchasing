@@ -69,8 +69,8 @@ export default async function ErrorsPage() {
       </div>
 
       {migrations.state !== "current" && (
-        <section className="rounded-lg border border-maroon/30 bg-maroon/5 px-4 py-3">
-          <h2 className="text-sm font-medium text-maroon">The database is missing migrations</h2>
+        <section className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3">
+          <h2 className="text-sm font-medium text-danger">The database is missing migrations</h2>
           <p className="mt-0.5 text-xs leading-relaxed text-ink/70">
             {migrations.state === "no_ledger" &&
               "It has no migration record, so 0041 has not been run. Pages that depend on newer migrations may fail."}
@@ -167,7 +167,7 @@ function ErrorCard({
               {row.source}
             </span>
             {row.seen_count > 1 && (
-              <span className="text-xs text-maroon/80">{row.seen_count} times</span>
+              <span className="text-xs text-danger/80">{row.seen_count} times</span>
             )}
           </p>
           <p className="mt-1.5 break-words text-sm text-ink">{row.message}</p>

@@ -59,7 +59,7 @@ export default async function RecordsPage() {
       </div>
 
       {due.length > 0 ? (
-        <ul className="flex flex-col gap-1 rounded-lg border border-maroon/25 bg-maroon/5 px-4 py-3 text-sm text-maroon">
+        <ul className="flex flex-col gap-1 rounded-lg border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-danger">
           {due.map((d) => (
             <li key={d}>{d}</li>
           ))}
@@ -111,7 +111,7 @@ export default async function RecordsPage() {
               <li key={r.id as string} className="flex flex-col gap-0.5 px-4 py-2">
                 <p className="text-ink">
                   {formatPlainDate(r.rehearsed_on as string)} · {WHAT_LABELS[r.what as string] ?? r.what}{" "}
-                  <span className={r.succeeded ? "text-palm" : "text-maroon"}>{r.succeeded ? "restored" : "failed"}</span>
+                  <span className={r.succeeded ? "text-palm" : "text-danger"}>{r.succeeded ? "restored" : "failed"}</span>
                 </p>
                 {r.notes && <p className="text-xs text-ink/65">{r.notes as string}</p>}
                 <p className="text-xs text-ink/45">

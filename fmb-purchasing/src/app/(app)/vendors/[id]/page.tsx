@@ -187,7 +187,7 @@ function registrationSummary(v: Vendor): string {
 }
 
 function registrationTone(v: Vendor): string {
-  return v.abn_active === false || v.gst_registered === false ? "text-maroon" : "text-ink/60";
+  return v.abn_active === false || v.gst_registered === false ? "text-danger" : "text-ink/60";
 }
 
 async function DetailsTab({
@@ -515,7 +515,7 @@ async function DetailsTab({
                 <form action={removeCollectionAddress}>
                   <input type="hidden" name="address_id" value={a.id} />
                   <input type="hidden" name="vendor_id" value={vendor.id} />
-                  <SubmitButton className="text-xs text-maroon/70 hover:underline">
+                  <SubmitButton className="text-xs text-danger/70 hover:underline">
                     remove
                   </SubmitButton>
                 </form>
@@ -555,7 +555,7 @@ async function DetailsTab({
                 <form action={removeContact}>
                   <input type="hidden" name="contact_id" value={c.id} />
                   <input type="hidden" name="vendor_id" value={vendor.id} />
-                  <SubmitButton className="text-xs text-maroon/70 hover:underline">
+                  <SubmitButton className="text-xs text-danger/70 hover:underline">
                     remove
                   </SubmitButton>
                 </form>

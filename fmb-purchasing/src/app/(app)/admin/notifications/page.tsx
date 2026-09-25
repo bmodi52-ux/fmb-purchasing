@@ -122,7 +122,7 @@ export default async function NotificationsAdminPage() {
                     </form>
                     <form action={deleteAlertRule}>
                       <input type="hidden" name="rule_id" value={r.id} />
-                      <SubmitButton className="text-xs text-maroon/70 underline hover:text-maroon">Delete</SubmitButton>
+                      <SubmitButton className="text-xs text-danger/70 underline hover:text-danger">Delete</SubmitButton>
                     </form>
                   </div>
                 </li>

@@ -67,7 +67,7 @@ export function BackupRunsTable({ runs }: { runs: BackupRun[] }) {
                   {r.kind === "database"
                     ? `${r.itemCount.toLocaleString("en-AU")} rows`
                     : `${r.itemCount.toLocaleString("en-AU")} files, ${r.newCount.toLocaleString("en-AU")} new · ${formatBytes(r.bytes)}`}
-                  {r.problems > 0 && <span className="ml-2 text-maroon">{r.problems} problems</span>}
+                  {r.problems > 0 && <span className="ml-2 text-danger">{r.problems} problems</span>}
                 </td>
                 <td className="px-4 py-2 tabular-nums text-xs text-ink/60">{r.destination ?? "—"}</td>
               </tr>

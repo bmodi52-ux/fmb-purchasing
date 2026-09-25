@@ -119,7 +119,7 @@ export function AnnouncementForm({ teams, people }: { teams: Option[]; people: O
           {pending ? "Sending…" : "Send announcement"}
         </button>
         {state.message && (
-          <p className={`text-xs ${state.status === "error" ? "text-maroon" : "text-palm"}`}>{state.message}</p>
+          <p className={`text-xs ${state.status === "error" ? "text-danger" : "text-palm"}`}>{state.message}</p>
         )}
       </div>
     </form>
@@ -201,7 +201,7 @@ export function AlertRuleForm({
           {pending ? "Saving…" : "Save alert"}
         </button>
         {state.message && (
-          <p className={`text-xs ${state.status === "error" ? "text-maroon" : "text-palm"}`}>{state.message}</p>
+          <p className={`text-xs ${state.status === "error" ? "text-danger" : "text-palm"}`}>{state.message}</p>
         )}
       </div>
     </form>

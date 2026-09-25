@@ -230,7 +230,7 @@ function Figure({
   return (
     <div>
       <p className="text-xs text-ink/55">{label}</p>
-      <p className={`mt-0.5 text-xl font-semibold tabular-figures ${tone === "over" ? "text-maroon" : "text-ink"}`}>
+      <p className={`mt-0.5 text-xl font-semibold tabular-figures ${tone === "over" ? "text-danger" : "text-ink"}`}>
         {value}
       </p>
     </div>

@@ -143,15 +143,15 @@ function BulkPayBar({
         Clear
       </button>
       {failed && (
-        <p role="alert" className="basis-full text-xs text-maroon">
+        <p role="alert" className="basis-full text-xs text-danger">
           The payment wasn&apos;t recorded, and nothing was marked paid. Try again.
         </p>
       )}
       {bankFile && (
-        <div role="status" className={`basis-full text-xs ${bankFile.error ? "text-maroon" : "text-ink/70"}`}>
+        <div role="status" className={`basis-full text-xs ${bankFile.error ? "text-danger" : "text-ink/70"}`}>
           <p>{bankFile.message}</p>
           {bankFile.skipped.length > 0 && (
-            <ul className="mt-1 list-disc pl-5 text-maroon">
+            <ul className="mt-1 list-disc pl-5 text-danger">
               {bankFile.skipped.map((s) => (
                 <li key={s.label}>
                   Left out {s.label}: {s.reason.toLowerCase()}
@@ -167,7 +167,7 @@ function BulkPayBar({
 
 function DuplicateFlag({ label }: { label: string }) {
   return (
-    <span className="mt-1 inline-block rounded-full bg-maroon/10 px-2 py-0.5 text-xs text-maroon">{label}</span>
+    <span className="mt-1 inline-block rounded-full bg-danger/10 px-2 py-0.5 text-xs text-danger">{label}</span>
   );
 }
 

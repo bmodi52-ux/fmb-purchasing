@@ -205,7 +205,7 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
                         <form action={removeIngredient}>
                           <input type="hidden" name="ingredient_id" value={row.id} />
                           <input type="hidden" name="dish_id" value={dish.id} />
-                          <SubmitButton className="px-2 py-2 text-maroon/70 hover:underline">Remove</SubmitButton>
+                          <SubmitButton className="px-2 py-2 text-danger/70 hover:underline">Remove</SubmitButton>
                         </form>
                       </div>
                     </details>

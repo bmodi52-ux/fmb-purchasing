@@ -41,7 +41,7 @@ export function XeroExportButton({ period, basis }: { period: string; basis: Bas
       >
         {busy ? "Making the file…" : "Download Xero bills file"}
       </button>
-      {message && <p className={`text-xs ${message.warn ? "text-maroon" : "text-ink/60"}`}>{message.text}</p>}
+      {message && <p className={`text-xs ${message.warn ? "text-danger" : "text-ink/60"}`}>{message.text}</p>}
     </div>
   );
 }

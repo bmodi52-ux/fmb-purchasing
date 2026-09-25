@@ -60,7 +60,7 @@ export function BudgetPhasing({
             </label>
           ))}
         </div>
-        <p className={`${blank || Math.abs(sum - 100) <= 0.5 ? "text-ink/55" : "text-maroon"}`}>
+        <p className={`${blank || Math.abs(sum - 100) <= 0.5 ? "text-ink/55" : "text-danger"}`}>
           {blank ? "All blank: spread evenly by day." : `Adds up to ${Math.round(sum * 10) / 10}%`}
         </p>
         <div className="flex items-center gap-3">
@@ -71,7 +71,7 @@ export function BudgetPhasing({
             Spread evenly
           </button>
         </div>
-        {error && <p className="text-maroon">{error}</p>}
+        {error && <p className="text-danger">{error}</p>}
       </form>
     </details>
   );

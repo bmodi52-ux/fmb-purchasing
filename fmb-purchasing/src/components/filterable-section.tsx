@@ -276,7 +276,7 @@ export function FilterableSection<T extends Record<string, unknown>>({
       )}
 
       {bulkError && (
-        <p role="alert" className="rounded-md border border-maroon/30 bg-maroon/5 px-3 py-2 text-sm text-maroon">
+        <p role="alert" className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
           {bulkError}
         </p>
       )}

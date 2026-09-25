@@ -84,7 +84,7 @@ export default async function NotificationSettingsPage() {
                   </span>
                   <form action={removePushSubscription}>
                     <input type="hidden" name="subscription_id" value={d.id} />
-                    <SubmitButton className="text-xs text-maroon/70 hover:text-maroon">Remove</SubmitButton>
+                    <SubmitButton className="text-xs text-danger/70 hover:text-danger">Remove</SubmitButton>
                   </form>
                 </li>
               ))}

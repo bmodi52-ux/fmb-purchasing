@@ -54,7 +54,7 @@ export function ResetPasswordButton({
   return (
     <form action={formAction} className="flex items-center gap-2">
       <input type="hidden" name="user_id" value={userId} />
-      <SubmitButton className="text-xs font-medium text-maroon hover:underline">
+      <SubmitButton className="text-xs font-medium text-danger hover:underline">
         Reset {fullName.split(" ")[0]}&rsquo;s password?
       </SubmitButton>
       <button

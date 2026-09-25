@@ -279,14 +279,14 @@ export default async function ExpenseDetailPage({
         {concerns.length + priceNotes.length > 0 && (
           <ul className="mt-2 flex flex-wrap gap-1.5">
             {concerns.map((c) => (
-              <li key={c} className="rounded-full bg-maroon/10 px-2 py-0.5 text-xs text-maroon">
+              <li key={c} className="rounded-full bg-danger/10 px-2 py-0.5 text-xs text-danger">
                 {c}
               </li>
             ))}
             {priceNotes.map((n) => (
               <li
                 key={n.label}
-                className={`rounded-md px-2 py-1 text-xs leading-snug ${n.serious ? "bg-maroon/10 text-maroon" : "bg-gold/15 text-gold-deep"}`}
+                className={`rounded-md px-2 py-1 text-xs leading-snug ${n.serious ? "bg-danger/10 text-danger" : "bg-gold/15 text-gold-deep"}`}
               >
                 {n.label}
               </li>
@@ -348,7 +348,7 @@ export default async function ExpenseDetailPage({
             <Field label="GST">
               {money(expense.gst_amount)}
               {printedGst !== null && (
-                <span className={`block text-xs ${gstOff === null ? "text-ink/45" : "text-maroon"}`}>
+                <span className={`block text-xs ${gstOff === null ? "text-ink/45" : "text-danger"}`}>
                   {money(printedGst)} printed on the receipt
                 </span>
               )}

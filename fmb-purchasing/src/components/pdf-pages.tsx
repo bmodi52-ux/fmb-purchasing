@@ -62,6 +62,6 @@ export function PdfPages({ url }: { url: string }) {
     };
   }, [url]);
 
-  if (error) return <p className="p-6 text-sm text-maroon/70">Couldn&apos;t render this PDF: {error}</p>;
+  if (error) return <p className="p-6 text-sm text-danger/70">Couldn&apos;t render this PDF: {error}</p>;
   return <div ref={containerRef} className="mx-auto max-w-full p-2" />;
 }

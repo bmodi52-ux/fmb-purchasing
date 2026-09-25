@@ -74,7 +74,7 @@ export function MoveOfferPanel({
                 Cancel
               </button>
             </div>
-            {state.error && <p className="mt-2 text-maroon">{state.error}</p>}
+            {state.error && <p className="mt-2 text-danger">{state.error}</p>}
           </form>
         )}
       </div>

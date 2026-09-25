@@ -126,7 +126,7 @@ export function BuyingForm({
             {pending ? "Saving…" : "Save buying details"}
           </button>
           {state.status !== "idle" && (
-            <p role="status" className={`text-sm ${state.status === "error" ? "text-maroon" : "text-palm"}`}>
+            <p role="status" className={`text-sm ${state.status === "error" ? "text-danger" : "text-palm"}`}>
               {state.message}
             </p>
           )}

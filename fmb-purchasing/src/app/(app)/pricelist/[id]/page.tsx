@@ -772,7 +772,7 @@ export default async function ItemDetailPage({
                       <form action={deleteOffer}>
                         <input type="hidden" name="offer_id" value={o.id} />
                         <input type="hidden" name="item_id" value={item.id} />
-                        <SubmitButton className="text-xs text-maroon/70 hover:underline">
+                        <SubmitButton className="text-xs text-danger/70 hover:underline">
                           Delete offer
                         </SubmitButton>
                       </form>
@@ -788,7 +788,7 @@ export default async function ItemDetailPage({
                         <form action={retireOffer}>
                           <input type="hidden" name="offer_id" value={o.id} />
                           <input type="hidden" name="item_id" value={item.id} />
-                          <SubmitButton className="text-xs text-maroon/70 hover:underline">Retire offer</SubmitButton>
+                          <SubmitButton className="text-xs text-danger/70 hover:underline">Retire offer</SubmitButton>
                         </form>
                       )}
                     {canEdit && (
@@ -846,7 +846,7 @@ export default async function ItemDetailPage({
                     <form action={removePackSize}>
                       <input type="hidden" name="pack_size_id" value={p.id} />
                       <input type="hidden" name="item_id" value={item.id} />
-                      <SubmitButton className="text-xs text-maroon/70 hover:underline">
+                      <SubmitButton className="text-xs text-danger/70 hover:underline">
                         remove
                       </SubmitButton>
                     </form>
@@ -979,7 +979,7 @@ export default async function ItemDetailPage({
                   <form action={removeVendorItemDescription}>
                     <input type="hidden" name="description_id" value={d.id} />
                     <input type="hidden" name="item_id" value={item.id} />
-                    <SubmitButton className="shrink-0 text-xs text-maroon/70 hover:underline">remove</SubmitButton>
+                    <SubmitButton className="shrink-0 text-xs text-danger/70 hover:underline">remove</SubmitButton>
                   </form>
                 )}
               </li>

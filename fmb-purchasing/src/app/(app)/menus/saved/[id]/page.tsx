@@ -126,7 +126,7 @@ export default async function SavedMenuPage({
         <form action={deleteSavedMenu} className="flex items-center justify-between gap-3 text-xs text-ink/50">
           <input type="hidden" name="saved_menu_id" value={menu.id} />
           <span>{menu.saved ? "Days planned from it keep their menus." : "Unsaved, it goes by itself after a week."}</span>
-          <SubmitButton pendingLabel="Deleting…" className="btn btn-quiet btn-xs text-maroon">
+          <SubmitButton pendingLabel="Deleting…" className="btn btn-quiet btn-xs text-danger">
             {menu.saved ? "Delete" : "Discard"}
           </SubmitButton>
         </form>

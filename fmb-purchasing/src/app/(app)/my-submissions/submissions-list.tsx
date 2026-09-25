@@ -164,7 +164,7 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                   <div
                     key={e.id}
                     className={`rounded-lg border bg-white/60 ${
-                      e.status === "declined" ? "border-maroon/30" : "border-ink/10"
+                      e.status === "declined" ? "border-danger/30" : "border-ink/10"
                     }`}
                   >
                     <div className="flex items-start gap-3 px-3 pt-3 sm:px-4">
@@ -203,8 +203,8 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
                       <Progress expense={e} />
 
                       {e.status === "declined" && (
-                        <div className="flex flex-col gap-2 rounded-md bg-maroon/5 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-                          <p className="text-maroon">
+                        <div className="flex flex-col gap-2 rounded-md bg-danger/5 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-danger">
                             {e.decision_comment
                               ? `Declined: ${e.decision_comment}`
                               : "Declined without a reason — fix and resubmit, or ask the Procurement Head."}
@@ -274,7 +274,7 @@ function Progress({ expense: e }: { expense: SubmissionRow }) {
               →
             </span>
           )}
-          <span className={s.bad ? "text-maroon" : s.done ? "text-palm" : "text-ink/40"}>
+          <span className={s.bad ? "text-danger" : s.done ? "text-palm" : "text-ink/40"}>
             {s.done && !s.bad ? "✓ " : ""}
             {s.label}
             {s.done && s.date ? ` ${s.date}` : ""}
@@ -326,7 +326,7 @@ function SubmissionDetails({ expense: e }: { expense: SubmissionRow }) {
             </Link>
             <form action={withdrawExpense}>
               <input type="hidden" name="expense_id" value={e.id} />
-              <SubmitButton pendingLabel="Withdrawing…" className="px-2 py-1.5 text-maroon/70 underline hover:text-maroon">
+              <SubmitButton pendingLabel="Withdrawing…" className="px-2 py-1.5 text-danger/70 underline hover:text-danger">
                 Withdraw
               </SubmitButton>
             </form>

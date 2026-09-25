@@ -107,7 +107,7 @@ export function DayPicker({
                   <span
                     aria-hidden="true"
                     className={`absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${
-                      on ? "bg-ink/60" : "bg-maroon/60"
+                      on ? "bg-ink/60" : "bg-danger/60"
                     }`}
                   />
                 )}
@@ -116,7 +116,7 @@ export function DayPicker({
           })}
         </div>
         <p className="mt-2 flex items-center gap-1.5 text-xs text-ink/50">
-          <span aria-hidden="true" className="inline-block h-1 w-1 rounded-full bg-maroon/60" /> already has a menu
+          <span aria-hidden="true" className="inline-block h-1 w-1 rounded-full bg-danger/60" /> already has a menu
         </p>
       </div>
 
@@ -133,7 +133,7 @@ export function DayPicker({
                 key={date}
                 type="button"
                 onClick={() => toggle(date)}
-                className="rounded-full border border-ink/15 bg-white px-2.5 py-0.5 text-xs text-ink hover:border-maroon/40"
+                className="rounded-full border border-ink/15 bg-white px-2.5 py-0.5 text-xs text-ink hover:border-danger/40"
                 aria-label={`Unpick ${label(date)}`}
               >
                 {label(date)} ✕

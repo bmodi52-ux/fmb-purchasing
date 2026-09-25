@@ -155,7 +155,7 @@ function MatchSummary({
             }
           }}
           aria-label={`Which pack of ${match.itemName}`}
-          className={`rounded border bg-white px-1.5 py-0.5 ${needsPack ? "border-maroon/50" : "border-ink/15"}`}
+          className={`rounded border bg-white px-1.5 py-0.5 ${needsPack ? "border-danger/50" : "border-ink/15"}`}
         >
           {match.packs.length > 1 && <option value="">— which pack? —</option>}
           {match.packs.map((p) => (
@@ -169,7 +169,7 @@ function MatchSummary({
         <span className="text-ink/50">· no pack sizes yet, one will be added</span>
       )}
 
-      {needsPack && <span className="text-maroon">Choose the pack before submitting</span>}
+      {needsPack && <span className="text-danger">Choose the pack before submitting</span>}
 
       {newPack && (
         <div className="mt-1 w-full rounded-md border border-gold/40 bg-gold/5 p-2">
