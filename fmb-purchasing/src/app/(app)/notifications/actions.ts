@@ -137,7 +137,7 @@ export async function sendTestPush(): Promise<{ ok: boolean }> {
   await sendPush(createAdminClient(), [
     {
       userId: user.id,
-      payload: { title: "Push notifications are on", body: "This is how FMB Purchasing will reach you.", url: "/notifications/settings" },
+      payload: { title: "Push notifications are on", body: "This is how Mashk will reach you.", url: "/notifications/settings" },
     },
   ]);
   return { ok: true };

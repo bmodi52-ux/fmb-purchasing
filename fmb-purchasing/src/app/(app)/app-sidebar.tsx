@@ -79,7 +79,7 @@ export function AppSidebar({
           <Image src="/fmb-logo.png" alt="FMB" width={34} height={34} className="rounded" />
           {/* Sized above body text so the header anchors the page rather than
               being dwarfed by the title beneath it. */}
-          <span className="brand-wordmark text-[1.15rem] font-semibold leading-none text-ink">FMB Sydney</span>
+          <span className="brand-wordmark text-[1.35rem] leading-none">Mashk</span>
         </Link>
         <div className="flex items-center gap-1">
           <NotificationsBell count={unreadCount} onNavigate={() => setOpen(false)} />
@@ -116,8 +116,8 @@ export function AppSidebar({
           <Link href="/" className="flex items-center gap-3">
             <Image src="/fmb-logo.png" alt="FMB" width={40} height={40} className="rounded" />
             <div>
-              <p className="brand-wordmark text-lg font-semibold leading-tight text-ink">FMB Sydney</p>
-              <p className="text-xs text-ink/60">Faiz ul Mawaid il Burhaniyah</p>
+              <p className="brand-wordmark text-2xl leading-tight">Mashk</p>
+              <p className="text-xs text-ink/60">FMB Sydney</p>
             </div>
           </Link>
           <NotificationsBell count={unreadCount} />

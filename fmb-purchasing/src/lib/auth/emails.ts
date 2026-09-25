@@ -16,9 +16,9 @@ export async function sendWelcomeEmail({
 }): Promise<boolean> {
   return sendEmail({
     to,
-    subject: "Welcome to FMB Sydney — your account is ready",
+    subject: "Welcome to Mashk — your account is ready",
     html: emailTemplate(`
-      <p style="margin:0 0 8px 0;">Hi ${fullName}, an account has been created for you on FMB Sydney.</p>
+      <p style="margin:0 0 8px 0;">Hi ${fullName}, an account has been created for you on Mashk, FMB Sydney's purchasing system.</p>
       ${detailsBox([
         { label: "Email address", value: to },
         { label: "Temporary password", value: temporaryPassword },
@@ -39,9 +39,9 @@ export async function sendTemporaryPasswordEmail({
 }): Promise<boolean> {
   return sendEmail({
     to,
-    subject: "Your FMB Sydney password has been reset",
+    subject: "Your Mashk password has been reset",
     html: emailTemplate(`
-      <p style="margin:0 0 8px 0;">Hi ${fullName}, an administrator has issued a new temporary password for your FMB Sydney account.</p>
+      <p style="margin:0 0 8px 0;">Hi ${fullName}, an administrator has issued a new temporary password for your Mashk account.</p>
       ${detailsBox([
         { label: "Email address", value: to },
         { label: "Temporary password", value: temporaryPassword },
@@ -63,9 +63,9 @@ export async function sendPasswordResetEmail({
 }): Promise<boolean> {
   return sendEmail({
     to,
-    subject: "Reset your FMB Sydney password",
+    subject: "Reset your Mashk password",
     html: emailTemplate(`
-      <p style="margin:0 0 14px 0;">Hi ${fullName}, we received a request to reset the password on your FMB Sydney account.</p>
+      <p style="margin:0 0 14px 0;">Hi ${fullName}, we received a request to reset the password on your Mashk account.</p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px 0;">
         <tr>
           <td style="background-color:#C9962C; border-radius:6px;">

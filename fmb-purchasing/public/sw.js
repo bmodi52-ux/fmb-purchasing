@@ -1,5 +1,5 @@
 /*
- * FMB Purchasing service worker: push notifications (scratchpad #28), and a
+ * Mashk service worker: push notifications (scratchpad #28), and a
  * page for taking receipt photos when there is no connection (#47).
  *
  * Still online-first. Nothing the app shows is ever served from a cache — a
@@ -59,10 +59,10 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: event.data ? event.data.text() : "FMB Purchasing" };
+    data = { title: event.data ? event.data.text() : "Mashk" };
   }
 
-  const title = data.title || "FMB Purchasing";
+  const title = data.title || "Mashk";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || undefined,

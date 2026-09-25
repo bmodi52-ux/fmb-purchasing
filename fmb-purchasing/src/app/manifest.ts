@@ -18,8 +18,8 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "FMB Sydney — Purchasing",
-    short_name: "FMB Purchasing",
+    name: "Mashk · FMB Sydney",
+    short_name: "Mashk",
     description:
       "Submit receipts, track approvals and record payments for Faiz ul Mawaid il Burhaniyah, Sydney.",
     start_url: "/",

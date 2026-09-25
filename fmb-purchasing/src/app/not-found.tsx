@@ -16,7 +16,7 @@ export default function NotFound() {
   return (
     <div className="flex min-h-screen items-center justify-center px-6 py-16">
       <main className="flex max-w-md flex-col gap-4">
-        <p className="text-xs uppercase tracking-[0.06em] text-ink/45">FMB Sydney</p>
+        <p className="text-xs uppercase tracking-[0.06em] text-ink/45">Mashk</p>
         <h1 className="page-title text-ink">We couldn&rsquo;t find that page</h1>
         <p className="page-description">
           The link may be out of date, or the entry it pointed to may have been removed. If you
