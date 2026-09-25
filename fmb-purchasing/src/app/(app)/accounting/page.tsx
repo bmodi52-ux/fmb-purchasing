@@ -105,8 +105,8 @@ export default async function AccountingPage({
         )}
 
         {gst.concerns.length > 0 && (
-          <div className="rounded-lg border border-maroon/25 bg-maroon/5 p-4">
-            <p className="text-sm font-medium text-maroon">
+          <div className="rounded-lg border border-danger/25 bg-danger/5 p-4">
+            <p className="text-sm font-medium text-danger">
               GST that may not be claimable ({gst.concerns.length} {gst.concerns.length === 1 ? "expense" : "expenses"})
             </p>
             <ul className="mt-2 flex flex-col gap-1 text-sm">

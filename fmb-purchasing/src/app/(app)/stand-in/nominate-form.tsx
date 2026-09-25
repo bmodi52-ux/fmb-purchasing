@@ -57,7 +57,7 @@ export function NominateForm({
         <button type="submit" disabled={pending} className="btn btn-primary">
           {pending ? "Saving…" : "Name stand-in"}
         </button>
-        {state.message && <p className={`text-xs ${state.status === "error" ? "text-maroon" : "text-palm"}`}>{state.message}</p>}
+        {state.message && <p className={`text-xs ${state.status === "error" ? "text-danger" : "text-palm"}`}>{state.message}</p>}
       </div>
     </form>
   );

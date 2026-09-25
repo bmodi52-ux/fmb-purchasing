@@ -258,7 +258,7 @@ function PackLine({
           <p className="text-xs text-ink/55">
             Last paid {r.lastPaid.text}
             {drifted && (
-              <span className={`ml-1.5 font-medium ${drift! > 0 ? "text-maroon" : "text-palm"}`}>
+              <span className={`ml-1.5 font-medium ${drift! > 0 ? "text-danger" : "text-palm"}`}>
                 {drift! > 0 ? "▲" : "▼"} {Math.abs(drift! * 100).toFixed(0)}% vs the price on file
               </span>
             )}

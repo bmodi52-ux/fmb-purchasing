@@ -121,7 +121,7 @@ export default async function TeamsAdminPage() {
                           <form action={removeTeamMember}>
                             <input type="hidden" name="team_id" value={team.id} />
                             <input type="hidden" name="user_id" value={userId} />
-                            <SubmitButton className="text-xs text-maroon/70 hover:text-maroon">
+                            <SubmitButton className="text-xs text-danger/70 hover:text-danger">
                               remove
                             </SubmitButton>
                           </form>
@@ -288,7 +288,7 @@ function ScopeToggle({
       <SubmitButton
         aria-label={`${granted ? "Revoke" : "Grant"} ${label}`}
         className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-          granted ? "text-maroon/70 hover:bg-maroon/10" : "text-ink/50 hover:bg-ink/5"
+          granted ? "text-danger/70 hover:bg-danger/10" : "text-ink/50 hover:bg-ink/5"
         }`}
       >
         {granted ? "none" : "all"}

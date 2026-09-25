@@ -210,7 +210,7 @@ function SortableWidgetCard({
             onClick={handleRemoveClick}
             disabled={removing}
             aria-label={`Remove ${widget.title}`}
-            className="text-ink/50 underline hover:text-maroon disabled:opacity-50"
+            className="text-ink/50 underline hover:text-danger disabled:opacity-50"
           >
             {removing ? "…" : "Remove"}
           </button>

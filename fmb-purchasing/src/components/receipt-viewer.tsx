@@ -147,7 +147,7 @@ export function ReceiptViewer({ expenseId, label = "View receipt" }: { expenseId
 
             <div className="overflow-auto bg-ink/5">
               {loading && <p className="p-6 text-sm text-ink/50">Loading…</p>}
-              {failed && <p className="p-6 text-sm text-maroon/70">Couldn&apos;t load this receipt.</p>}
+              {failed && <p className="p-6 text-sm text-danger/70">Couldn&apos;t load this receipt.</p>}
               {current && <ReceiptFileBody file={current} />}
             </div>
           </div>

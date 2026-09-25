@@ -4,7 +4,13 @@
   /* FMB brand tokens — sampled from the FMB logo, see design spec §11 */
   --color-gold: #d89c24;
   --color-gold-deep: #a97614;
-  --color-maroon: #4a160a;
+  /* The brand frame: page titles, sidebar group labels and the current-page
+     marker. Teal on the live site; the sandbox keeps the crest's maroon so
+     nobody mistakes one for the other (html[data-sandbox], below). */
+  --color-brand: #11706c;
+  /* Declined, over budget, delete: things that went or could go wrong. This
+     was maroon until the brand moved to teal; a deep red keeps the meaning. */
+  --color-danger: #8b1e2d;
   --color-palm: #009c48;
   --color-cream: #fbf6ec;
   --color-ink: #2b211c;
@@ -14,10 +20,15 @@
   --color-alert: #c0362c;
 }
 
+html[data-sandbox] {
+  --color-brand: #4a160a;
+}
+
 @theme inline {
   --color-gold: var(--color-gold);
   --color-gold-deep: var(--color-gold-deep);
-  --color-maroon: var(--color-maroon);
+  --color-brand: var(--color-brand);
+  --color-danger: var(--color-danger);
   --color-palm: var(--color-palm);
   --color-cream: var(--color-cream);
   --color-ink: var(--color-ink);
@@ -59,6 +70,7 @@ h1, h2, h3, h4 {
    within a pixel of body text gives a page no hierarchy at all, which is what
    happened on phones before these were raised. */
 .page-title {
+  color: var(--color-brand);
   font-size: clamp(1.25rem, 1.05rem + 0.9vw, 1.6rem);
   font-weight: 600;
   line-height: 1.2;
@@ -165,13 +177,13 @@ h1, h2, h3, h4 {
 
   /* Declining, deleting, discarding. */
   .btn-danger {
-    border-color: rgb(74 22 10 / 0.3);
+    border-color: color-mix(in srgb, var(--color-danger) 30%, transparent);
     background-color: white;
-    color: var(--color-maroon);
+    color: var(--color-danger);
   }
   .btn-danger:hover {
-    border-color: rgb(74 22 10 / 0.55);
-    background-color: rgb(74 22 10 / 0.04);
+    border-color: color-mix(in srgb, var(--color-danger) 55%, transparent);
+    background-color: color-mix(in srgb, var(--color-danger) 4%, transparent);
   }
 
   /* No box until it is pointed at: toolbars, row actions. */
@@ -427,12 +439,12 @@ input[type="radio"] {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  /* Maroon, so the groups read as headings rather than faint print (#31). */
-  color: var(--color-maroon);
+  /* The brand colour, so the groups read as headings rather than faint print (#31). */
+  color: var(--color-brand);
   cursor: pointer;
 }
 .nav-group-label:hover {
-  background-color: rgb(74 22 10 / 0.05);
+  background-color: color-mix(in srgb, var(--color-brand) 6%, transparent);
 }
 .nav-group-label:focus-visible {
   outline: 2px solid var(--color-gold);
@@ -470,7 +482,7 @@ input[type="radio"] {
   bottom: 0.35rem;
   width: 2px;
   border-radius: 1px;
-  background-color: var(--color-gold-deep);
+  background-color: var(--color-brand);
 }
 
 /* Always rendered at a fixed size and revealed with opacity, so appearing

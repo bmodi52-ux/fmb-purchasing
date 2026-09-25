@@ -20,7 +20,7 @@ function isoDate(d: Date): string {
 
 /** The header colours of the sheet this replaces: red, green, blue — and roti. */
 const SECTION_CLASS: Record<SectionKey, string> = {
-  meat: "bg-maroon/10 text-maroon",
+  meat: "bg-danger/10 text-danger",
   produce: "bg-palm/10 text-palm",
   dry: "bg-gold/20 text-gold-deep",
   roti: "bg-ink/10 text-ink/70",

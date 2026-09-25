@@ -117,7 +117,7 @@ export function MergePanel({
       )}
 
       {target && (
-        <form action={formAction} className="rounded-md border border-maroon/30 bg-maroon/5 p-4">
+        <form action={formAction} className="rounded-md border border-danger/30 bg-danger/5 p-4">
           <input type="hidden" name="loser_id" value={itemId} />
           <input type="hidden" name="winner_id" value={target.id} />
           <p className="text-sm text-ink">
@@ -142,7 +142,7 @@ export function MergePanel({
             </li>
           </ul>
           <div className="mt-3 flex gap-3">
-            <SubmitButton disabled={pending} className="rounded-md bg-maroon px-4 py-2 text-sm font-medium text-cream hover:opacity-90 disabled:opacity-50">
+            <SubmitButton disabled={pending} className="rounded-md bg-danger px-4 py-2 text-sm font-medium text-cream hover:opacity-90 disabled:opacity-50">
               {pending ? "Merging…" : "Merge and delete"}
             </SubmitButton>
             <button
@@ -153,7 +153,7 @@ export function MergePanel({
               Cancel
             </button>
           </div>
-          {state.error && <p className="mt-2 text-sm text-maroon">{state.error}</p>}
+          {state.error && <p className="mt-2 text-sm text-danger">{state.error}</p>}
         </form>
       )}
     </div>

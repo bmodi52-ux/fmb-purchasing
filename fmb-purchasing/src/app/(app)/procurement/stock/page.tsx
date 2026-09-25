@@ -217,7 +217,7 @@ export default async function StockCountPage({
                                 <input type="hidden" name="count_id" value={c.id} />
                                 <SubmitButton
                                   aria-label={`Remove the ${item.name} count on ${formatPlainDate(d)}`}
-                                  className="ml-1 text-xs text-ink/30 hover:text-maroon"
+                                  className="ml-1 text-xs text-ink/30 hover:text-danger"
                                 >
                                   ✕
                                 </SubmitButton>
@@ -284,7 +284,7 @@ export default async function StockCountPage({
                   </Link>
                   <form action={removeStockItem}>
                     <input type="hidden" name="item_id" value={item.id} />
-                    <SubmitButton aria-label={`Stop counting ${item.name}`} className="rounded-full px-1.5 text-ink/40 hover:text-maroon">
+                    <SubmitButton aria-label={`Stop counting ${item.name}`} className="rounded-full px-1.5 text-ink/40 hover:text-danger">
                       ✕
                     </SubmitButton>
                   </form>

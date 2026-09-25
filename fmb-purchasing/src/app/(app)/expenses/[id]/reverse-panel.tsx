@@ -38,7 +38,7 @@ export function ReversePanel({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="self-start text-sm text-ink/55 underline hover:text-maroon"
+        className="self-start text-sm text-ink/55 underline hover:text-danger"
       >
         {label}
       </button>
@@ -46,7 +46,7 @@ export function ReversePanel({
   }
 
   return (
-    <form action={action} className="flex flex-col gap-2 rounded-md border border-maroon/25 bg-maroon/5 p-3">
+    <form action={action} className="flex flex-col gap-2 rounded-md border border-danger/25 bg-danger/5 p-3">
       <input type="hidden" name="expense_id" value={expenseId} />
       <p className="text-sm text-ink/75">{helpText}</p>
       <label className="flex flex-col gap-1 text-sm">
@@ -63,7 +63,7 @@ export function ReversePanel({
       <div className="flex gap-2">
         <SubmitButton
           disabled={!reason.trim()}
-          className="rounded-md bg-maroon px-3.5 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-md bg-danger px-3.5 py-1.5 text-sm font-medium text-white disabled:opacity-50"
         >
           {prompt}
         </SubmitButton>

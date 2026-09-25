@@ -12,7 +12,7 @@ export function SandboxBanner() {
   if (!isSandbox()) return null;
 
   return (
-    <div className="sticky top-0 z-50 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 bg-maroon px-4 py-1.5 text-center text-sm text-cream">
+    <div className="sticky top-0 z-50 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 bg-brand px-4 py-1.5 text-center text-sm text-cream">
       <span className="font-semibold uppercase tracking-wide">Sandbox</span>
       <span className="text-cream/85">
         A copy for training. Names, bank details and email addresses are invented, and nothing here is real.

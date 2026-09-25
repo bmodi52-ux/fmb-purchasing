@@ -38,7 +38,7 @@ export function DeleteMenu({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="btn btn-quiet btn-xs text-maroon"
+        className="btn btn-quiet btn-xs text-danger"
       >
         Delete this menu
       </button>
@@ -63,7 +63,7 @@ export function DeleteMenu({
             </button>
             <SubmitButton
               pendingLabel="Deleting…"
-              className="rounded-md bg-maroon px-4 py-2 text-sm font-medium text-cream hover:bg-maroon/90"
+              className="rounded-md bg-danger px-4 py-2 text-sm font-medium text-cream hover:bg-danger/90"
             >
               Delete menu
             </SubmitButton>

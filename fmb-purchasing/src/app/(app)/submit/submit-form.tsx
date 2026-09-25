@@ -1470,8 +1470,8 @@ function ReviewForm(props: {
       )}
 
       {duplicates.length > 0 && (
-        <div className="mb-5 rounded-md border border-maroon/30 bg-maroon/5 px-4 py-3">
-          <p className="text-sm font-medium text-maroon">
+        <div className="mb-5 rounded-md border border-danger/30 bg-danger/5 px-4 py-3">
+          <p className="text-sm font-medium text-danger">
             {duplicates.length === 1 ? "This may already have been submitted" : "These may already have been submitted"}
           </p>
           <ul className="mt-2 flex flex-col gap-1 text-sm text-ink/75">
@@ -1550,7 +1550,7 @@ function ReviewForm(props: {
             </button>
           </div>
           {abnNote && (
-            <p className={`mt-1 text-xs ${abnNote.warn ? "text-maroon" : "text-ink/55"}`}>{abnNote.text}</p>
+            <p className={`mt-1 text-xs ${abnNote.warn ? "text-danger" : "text-ink/55"}`}>{abnNote.text}</p>
           )}
         </Field>
       </div>
@@ -1608,7 +1608,7 @@ function ReviewForm(props: {
               <button
                 type="button"
                 onClick={() => props.setItems(props.items.filter((it) => it.key !== item.key))}
-                className="-mr-1 px-2 py-1 text-xl leading-none text-ink/40 hover:text-maroon"
+                className="-mr-1 px-2 py-1 text-xl leading-none text-ink/40 hover:text-danger"
                 aria-label={`Remove ${item.description || "line"}`}
               >
                 ×
@@ -1906,7 +1906,7 @@ function ReviewForm(props: {
                   <button
                     type="button"
                     onClick={() => props.setItems(props.items.filter((it) => it.key !== item.key))}
-                    className="px-2 py-1 text-lg leading-none text-ink/40 hover:text-maroon"
+                    className="px-2 py-1 text-lg leading-none text-ink/40 hover:text-danger"
                     aria-label={`Remove ${item.description || "line"}`}
                   >
                     ×
@@ -2097,7 +2097,7 @@ function Attachments({
               <button
                 type="button"
                 onClick={() => setAttachments((prev) => prev.filter((x) => x.storagePath !== a.storagePath))}
-                className="shrink-0 text-xs text-maroon/70 hover:underline"
+                className="shrink-0 text-xs text-danger/70 hover:underline"
               >
                 remove
               </button>

@@ -195,7 +195,7 @@ export function AppSidebar({
             Change password
           </Link>
           <form action={signOutAction}>
-            <SubmitButton className="w-full rounded-md px-3 py-2 text-left text-ink/70 transition-colors hover:bg-maroon/10 hover:text-maroon">
+            <SubmitButton className="w-full rounded-md px-3 py-2 text-left text-ink/70 transition-colors hover:bg-danger/10 hover:text-danger">
               Sign out
             </SubmitButton>
           </form>

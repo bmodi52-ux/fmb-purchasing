@@ -212,7 +212,7 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
   const flags: { label: string; serious?: boolean; alert?: boolean }[] = [];
   if (e.flags.duplicateOf.length > 0) flags.push({ label: duplicateLabel(e.flags.duplicateOf), serious: true });
   for (const concern of e.flags.gstConcerns) flags.push({ label: concern, serious: true });
-  // Red, not maroon: these are about the money itself (#63).
+  // Alert red, brighter than danger: these are about the money itself (#63).
   for (const r of e.flags.receipt) flags.push({ ...r, alert: true });
   if (e.flags.unconfirmedAccount) flags.push({ label: "Bank account not confirmed", serious: true });
   if (e.flags.unusualSpend) flags.push({ label: e.flags.unusualSpend, serious: true });
@@ -246,7 +246,7 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
                 f.alert
                   ? "bg-alert/10 font-medium text-alert"
                   : f.serious
-                    ? "bg-maroon/10 text-maroon"
+                    ? "bg-danger/10 text-danger"
                     : "bg-gold/15 text-gold-deep"
               }`}
             >
@@ -259,7 +259,7 @@ function ExpenseSummary({ expense: e, showSubmitter }: { expense: ApprovalRow; s
       {e.budgetNotes.length > 0 && (
         <ul className="flex flex-col gap-0.5 text-xs">
           {e.budgetNotes.map((n) => (
-            <li key={n.text} className={n.over ? "text-maroon" : "text-ink/55"}>
+            <li key={n.text} className={n.over ? "text-danger" : "text-ink/55"}>
               {n.text}
             </li>
           ))}

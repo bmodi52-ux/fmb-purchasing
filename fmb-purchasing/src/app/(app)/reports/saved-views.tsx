@@ -63,7 +63,7 @@ export function SavedViews({
                       <ViewForm key={`${v.id}-${v.updatedAt}`} view={v} teams={teams} query={query} submitLabel="Save changes" />
                       <form action={deleteReportView}>
                         <input type="hidden" name="view_id" value={v.id} />
-                        <SubmitButton pendingLabel="Deleting…" className="text-xs text-maroon/80 underline hover:text-maroon">
+                        <SubmitButton pendingLabel="Deleting…" className="text-xs text-danger/80 underline hover:text-danger">
                           Delete this view
                         </SubmitButton>
                       </form>
@@ -213,7 +213,7 @@ function ViewForm({
           {pending ? "Saving…" : submitLabel}
         </button>
         {state.status !== "idle" && (
-          <p role="status" className={`text-sm ${state.status === "error" ? "text-maroon" : "text-palm"}`}>
+          <p role="status" className={`text-sm ${state.status === "error" ? "text-danger" : "text-palm"}`}>
             {state.message}
           </p>
         )}

@@ -102,7 +102,7 @@ export default async function StandInPage() {
                 {!r.cancelled_at && r.ends_on >= today && (
                   <form action={cancelStandIn}>
                     <input type="hidden" name="stand_in_row_id" value={r.id} />
-                    <SubmitButton pendingLabel="Calling off…" className="text-xs text-maroon/70 underline hover:text-maroon">
+                    <SubmitButton pendingLabel="Calling off…" className="text-xs text-danger/70 underline hover:text-danger">
                       {isActive(r, today) ? "End now" : "Call off"}
                     </SubmitButton>
                   </form>

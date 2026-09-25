@@ -64,16 +64,16 @@ export function BudgetInput({
             commit(e.currentTarget);
           }}
           className={`w-32 rounded border bg-white px-2 py-1 text-right tabular-nums ${
-            conflict ? "border-maroon/50" : "border-ink/15"
+            conflict ? "border-danger/50" : "border-ink/15"
           } ${pending ? "opacity-60" : ""}`}
         />
       </form>
 
-      {state.status === "error" && <p className="max-w-[16rem] text-right text-xs text-maroon">{state.message}</p>}
+      {state.status === "error" && <p className="max-w-[16rem] text-right text-xs text-danger">{state.message}</p>}
 
       {conflict && (
-        <div role="alert" className="max-w-xs rounded-md border border-maroon/30 bg-maroon/5 px-3 py-2 text-left text-xs">
-          <p className="font-medium text-maroon">This changes a budget already set</p>
+        <div role="alert" className="max-w-xs rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-left text-xs">
+          <p className="font-medium text-danger">This changes a budget already set</p>
           <ul className="mt-1 flex flex-col gap-0.5 text-ink/75">
             {conflict.changes.map((c) => (
               <li key={c.label}>
@@ -92,7 +92,7 @@ export function BudgetInput({
             <button
               type="submit"
               disabled={pending}
-              className="rounded-md bg-maroon px-2.5 py-1 font-medium text-cream hover:bg-maroon/90 disabled:opacity-60"
+              className="rounded-md bg-danger px-2.5 py-1 font-medium text-cream hover:bg-danger/90 disabled:opacity-60"
             >
               Override
             </button>

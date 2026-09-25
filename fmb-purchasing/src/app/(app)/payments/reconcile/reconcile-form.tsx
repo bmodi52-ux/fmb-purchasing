@@ -67,7 +67,7 @@ export function ReconcileForm() {
       </label>
 
       {done && <p className="rounded-md bg-palm/10 px-3 py-2 text-sm text-ink/80">{done}</p>}
-      {result && !result.ok && <p className="rounded-md bg-maroon/5 px-3 py-2 text-sm text-maroon">{result.message}</p>}
+      {result && !result.ok && <p className="rounded-md bg-danger/5 px-3 py-2 text-sm text-danger">{result.message}</p>}
 
       {result?.ok && (
         <>
@@ -135,9 +135,9 @@ export function ReconcileForm() {
 
           {result.unmatchedPayments.length > 0 && (
             <section className="flex flex-col gap-2">
-              <h2 className="section-title text-maroon">Recorded as paid, but not on this statement ({result.unmatchedPayments.length})</h2>
+              <h2 className="section-title text-danger">Recorded as paid, but not on this statement ({result.unmatchedPayments.length})</h2>
               <p className="text-xs text-ink/55">Worth a look: a transfer that was never sent, or one sent for a different amount.</p>
-              <ul className="flex flex-col divide-y divide-ink/5 rounded-lg border border-maroon/20 bg-white/60 text-sm">
+              <ul className="flex flex-col divide-y divide-ink/5 rounded-lg border border-danger/20 bg-white/60 text-sm">
                 {result.unmatchedPayments.map((p) => (
                   <li key={p.key} className="flex justify-between gap-3 px-3 py-2">
                     <span>
