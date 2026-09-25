@@ -11,10 +11,13 @@ import Image from "next/image";
  */
 export function AuthCard({
   title,
+  titleArabic,
   subtitle,
   children,
 }: {
   title: string;
+  /** Set beside the title in Arabic script: the name on the sign-in page. */
+  titleArabic?: string;
   subtitle: string;
   children: React.ReactNode;
 }) {
@@ -30,7 +33,14 @@ export function AuthCard({
       />
       <div className="w-full max-w-sm card p-8 shadow-sm">
         <div className="mb-6 text-center">
-          <h1 className="brand-wordmark text-xl font-semibold text-ink">{title}</h1>
+          <h1 className="flex items-baseline justify-center gap-2">
+            <span className="brand-wordmark text-2xl">{title}</span>
+            {titleArabic && (
+              <span lang="ar" dir="rtl" className="brand-arabic text-2xl">
+                {titleArabic}
+              </span>
+            )}
+          </h1>
           <p className="text-sm text-ink/60">{subtitle}</p>
         </div>
         {children}

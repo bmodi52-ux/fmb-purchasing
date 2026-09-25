@@ -95,6 +95,13 @@ h1, h2, h3, h4 {
   color: rgb(43 33 28 / 0.68);
 }
 
+/* The name in Arabic script beside the wordmark: Amiri, in the crest's gold. */
+.brand-arabic {
+  font-family: var(--font-amiri);
+  font-weight: 700;
+  color: var(--color-gold-deep);
+}
+
 /* The Mashk wordmark: Marcellus, in the brand colour. */
 .brand-wordmark {
   font-family: var(--font-marcellus);

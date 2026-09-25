@@ -79,7 +79,10 @@ export function AppSidebar({
           <Image src="/fmb-logo.png" alt="FMB" width={34} height={34} className="rounded" />
           {/* Sized above body text so the header anchors the page rather than
               being dwarfed by the title beneath it. */}
-          <span className="brand-wordmark text-[1.35rem] leading-none">Mashk</span>
+          <span className="flex items-baseline gap-1.5 leading-none">
+            <span className="brand-wordmark text-[1.35rem]">Mashk</span>
+            <span lang="ar" dir="rtl" className="brand-arabic text-[1.3rem]">مشک</span>
+          </span>
         </Link>
         <div className="flex items-center gap-1">
           <NotificationsBell count={unreadCount} onNavigate={() => setOpen(false)} />
@@ -113,10 +116,15 @@ export function AppSidebar({
         className={`${open ? "absolute flex" : "hidden"} inset-x-0 top-full z-40 max-h-[calc(100dvh-4rem)] overflow-y-auto shadow-lg w-full shrink-0 flex-col gap-6 border-b border-gold/20 bg-cream px-6 py-8 md:sticky md:top-0 md:flex md:z-auto md:h-screen md:max-h-none md:w-64 md:overflow-y-auto md:[scrollbar-width:thin] md:border-b-0 md:border-r md:bg-gradient-to-b md:from-gold/10 md:via-cream md:to-cream md:shadow-none`}
       >
         <div className="hidden items-start justify-between gap-2 md:flex">
-          <Link href="/" className="flex items-center gap-3">
-            <Image src="/fmb-logo.png" alt="FMB" width={40} height={40} className="rounded" />
+          {/* Sized so the English and Arabic names sit beside the crest without
+              pushing into the notifications bell. */}
+          <Link href="/" className="flex shrink-0 items-center gap-2.5">
+            <Image src="/fmb-logo.png" alt="FMB" width={34} height={34} className="rounded" />
             <div>
-              <p className="brand-wordmark text-2xl leading-tight">Mashk</p>
+              <p className="flex items-baseline gap-1.5 leading-tight">
+                <span className="brand-wordmark text-[1.2rem]">Mashk</span>
+                <span lang="ar" dir="rtl" className="brand-arabic text-[1.2rem]">مشک</span>
+              </p>
               <p className="text-xs text-ink/60">FMB Sydney</p>
             </div>
           </Link>

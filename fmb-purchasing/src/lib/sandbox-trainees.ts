@@ -19,6 +19,7 @@ export type Trainee = {
 
 export const TRAINEES: Trainee[] = [
   { name: "Burhanuddin Modi", email: "bmodi52@gmail.com", teams: ["Admin"] },
+  { name: "Hasnain Khambati", email: "hasnain.khambati@gmail.com", teams: ["Admin"] },
   // Add trainees here, e.g.:
   // { name: "New Approver", email: "someone@example.org", teams: ["Procurement"] },
 ];
