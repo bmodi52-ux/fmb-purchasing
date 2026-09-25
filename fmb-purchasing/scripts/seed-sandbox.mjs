@@ -46,6 +46,12 @@ const TABLE_ORDER = [
   "pricelist_items", "pricelist_item_history",
   "payees", "payment_runs",
   "expenses", "expense_line_items", "expense_attachments", "expense_status_history",
+  "kitchens", "box_sizes", "dishes", "dish_ingredients", "menu_section_owners",
+  "menu_days", "menu_day_dishes", "menu_day_lines", "menu_day_extras", "menu_day_changes", "menu_requirements",
+  // After menu_requirements, which an allocation can point at.
+  "expense_line_allocations",
+  "saved_menus", "saved_menu_dishes", "saved_menu_lines", "saved_menu_extras",
+  "stock_counts", "stock_count_items",
   "category_budgets", "category_budget_phasing", "category_budget_changes", "locked_periods",
   "saved_report_views", "saved_report_view_teams",
   "alert_rules", "announcements", "notifications", "team_notification_defaults",
