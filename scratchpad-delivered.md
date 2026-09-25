@@ -9,6 +9,18 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 35. Rename the app to Mashk (مشک), and the brand to teal
+
+Raised 2026-09-25, delivered the same day (PRs #91, #92). The live site's brand
+colour is teal (page titles, sidebar group labels, current-page marker, primary
+buttons as a teal gradient with white text); the sandbox keeps the crest's
+maroon, switched by `data-sandbox` on `<html>`. What maroon used to mean in the
+app (declined, over budget, delete) moved to a deep red, `--color-danger`.
+The site is called Mashk everywhere it names itself: wordmark (Marcellus),
+tab titles, sign-in, home-screen icon, push, offline and error pages, account
+emails. Remittance advice and exported reports still say FMB Sydney. Phones
+that already have the icon keep the old label until it is added again.
+
 ### 31–32. Fold any sidebar group; select all on Payments
 
 Raised and delivered 2026-09-24 (PR #90). Every sidebar group folds, is

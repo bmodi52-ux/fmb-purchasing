@@ -68,6 +68,41 @@ Raised 2026-09-20. Both sit in the working tree untracked. To decide: commit
 them, or add them to `.gitignore` if they are working copies of something
 kept elsewhere.
 
+### 33. Backups have never run
+
+Raised 2026-09-24, from a look at what Supabase Pro would add. The backup
+scripts exist (`scripts/backup-data.mjs`, `scripts/backup-receipts.mjs`) and
+Backups & records is ready to show their runs, but on live `backup_runs` and
+`restore_rehearsals` are both empty. No "FMB backups" task is scheduled on
+this PC, and `G:/My Drive/FMB Backups` from the docs doesn't exist here.
+
+To do: point the nightly `schtasks` line in `docs/backup-and-restore.md` at a
+folder that exists (ideally one Google Drive syncs), run both scripts once by
+hand, and confirm the run appears on Backups & records.
+
+Limits of this route, which #34 addresses: it only runs while the laptop is
+on; the JSON dump has no password hashes, so a restore means everyone resets
+their password; and tables are read one by one, not as a single snapshot.
+
+### 34. Nightly backups off the laptop
+
+Raised 2026-09-24 with #33. On the Free plan Supabase keeps no backups we can
+restore from, and Pro's daily backups (7 days kept) still leave out Storage.
+
+The idea: a scheduled GitHub Actions job, like `uptime.yml`, that nightly
+- runs `pg_dump` through the session pooler (the direct host is IPv6-only),
+  giving one consistent snapshot with the schema and `auth.users` password
+  hashes included;
+- mirrors the `receipts` bucket incrementally, as `backup-receipts.mjs` does;
+- stores both in cheap off-site storage (Backblaze B2 or Cloudflare R2;
+  Actions artifacts only keep 90 days, too short for five-year receipts);
+- records its run on Backups & records.
+
+To decide: where the copies live, and the database password and storage keys
+as repo secrets. A restore rehearsal into the sandbox should follow the first
+run. Supabase Pro ($25/month) stays the option for one-click restores, or
+when receipt storage nears the Free plan's 1 GB.
+
 Items 18–50 came from the systems review of 2026-09-11, each with the timing
 decided for it. Everything marked "now" is in Done; what remains here was
 marked "later".
