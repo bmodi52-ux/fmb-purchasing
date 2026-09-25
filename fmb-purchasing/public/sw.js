@@ -8,7 +8,7 @@
  * all, so a receipt can still be photographed in a car park with no signal.
  */
 
-const OFFLINE_CACHE = "fmb-offline-v1";
+const OFFLINE_CACHE = "fmb-offline-v2";
 const OFFLINE_URL = "/offline.html";
 const OFFLINE_ASSETS = [OFFLINE_URL, "/fmb-logo.png"];
 

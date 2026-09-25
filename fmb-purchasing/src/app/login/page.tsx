@@ -5,7 +5,7 @@ export const metadata = { title: "Sign in" };
 
 export default function LoginPage() {
   return (
-    <AuthCard title="Mashk" subtitle="Sign in to continue">
+    <AuthCard title="Mashk" titleArabic="مشک" subtitle="Sign in to continue">
       <LoginForm />
     </AuthCard>
   );
