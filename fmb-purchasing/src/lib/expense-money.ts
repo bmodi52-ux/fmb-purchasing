@@ -146,6 +146,78 @@ export function claimVsReceipt(lines: MoneyLine[], receiptTotal: number): ClaimV
   };
 }
 
+/**
+ * How far quantity × unit price may sit from the line total (#52). Wider than
+ * RECONCILE_TOLERANCE because a weighed line's printed total is rounded from
+ * an unrounded product: 0.734 kg at $12.99 prints as $9.53.
+ */
+export const LINE_MATH_TOLERANCE = 0.02;
+
+export type LineMathMismatch = {
+  /** quantity × unit price, rounded to cents. */
+  expected: number;
+  /**
+   * The whole-number quantity that makes the line add up, when there is one
+   * and it isn't what was entered: $51.62 at $0.89 is 58, so 53 was misread.
+   */
+  suggestedQuantity: number | null;
+};
+
+/**
+ * Whether a line's own arithmetic fails (#52). The receipt total can still
+ * balance when it does: the E-0081 spaghetti line read 53 × $0.89 = $51.62,
+ * and only the quantity was wrong. That quantity is what the Pricelist costs
+ * from, so a line like it is refused rather than warned about.
+ *
+ * Only checked when both quantity and unit price are given.
+ */
+export function lineMathMismatch(line: {
+  quantity: number | null;
+  unitPrice: number | null;
+  lineTotal: number;
+}): LineMathMismatch | null {
+  const { quantity, unitPrice, lineTotal } = line;
+  if (quantity == null || unitPrice == null) return null;
+  const expected = round2(quantity * unitPrice);
+  if (Math.abs(round2(expected - lineTotal)) <= LINE_MATH_TOLERANCE) return null;
+
+  let suggestedQuantity: number | null = null;
+  if (unitPrice !== 0) {
+    const implied = lineTotal / unitPrice;
+    const whole = Math.round(implied);
+    if (whole > 0 && whole !== quantity && Math.abs(round2(whole * unitPrice) - lineTotal) <= LINE_MATH_TOLERANCE) {
+      suggestedQuantity = whole;
+    }
+  }
+  return { expected, suggestedQuantity };
+}
+
+/** What the submitter is told, on the form and from the server alike. */
+export function lineMathMessage(
+  description: string,
+  line: { quantity: number | null; unitPrice: number | null; lineTotal: number },
+  mismatch: LineMathMismatch
+): string {
+  const name = description.trim() ? `"${description.trim()}"` : "A line";
+  const sum = `${line.quantity} × $${line.unitPrice?.toFixed(2)} is $${mismatch.expected.toFixed(2)}, not $${line.lineTotal.toFixed(2)}`;
+  const hint = mismatch.suggestedQuantity != null ? ` Should the quantity be ${mismatch.suggestedQuantity}?` : "";
+  return `${name} doesn't add up: ${sum}. Fix the quantity, unit price or line total.${hint}`;
+}
+
+/**
+ * The normalised amount (kilos, litres) once a line's quantity changes (#52).
+ * It is the per-unit amount times the quantity, so it scales with it: 53 bags
+ * at 26.5 kg becomes 58 at 29 kg. Left alone when there is nothing to scale.
+ */
+export function rescaleNormalizedQuantity(
+  normalized: number | null,
+  oldQuantity: number | null,
+  newQuantity: number | null
+): number | null {
+  if (normalized == null || !oldQuantity || newQuantity == null) return normalized;
+  return Math.round((normalized / oldQuantity) * newQuantity * 10000) / 10000;
+}
+
 /** Whether a total differs from what the scan read (#51) — changing it needs a reason. */
 export function totalChangedFromScan(total: number, scanned: number | null | undefined): boolean {
   return scanned != null && Math.abs(round2(total - scanned)) > RECONCILE_TOLERANCE;

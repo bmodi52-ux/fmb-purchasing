@@ -40,7 +40,15 @@ import { getSetting } from "@/lib/app-settings";
 import { alertOnVendorAdded } from "@/lib/expense-alerts";
 import { markInboundReceiptsUsed } from "@/lib/inbound-email";
 import type { SupplierDefaults } from "@/lib/supplier-defaults";
-import { lineGst, lineSubtotal, round2, sumLineGst, totalChangedFromScan } from "@/lib/expense-money";
+import {
+  lineGst,
+  lineMathMessage,
+  lineMathMismatch,
+  lineSubtotal,
+  round2,
+  sumLineGst,
+  totalChangedFromScan,
+} from "@/lib/expense-money";
 import {
   resolvePayee,
   searchPayees,
@@ -1029,6 +1037,12 @@ function validate(input: CreateExpenseInput): string | null {
   }
   if (totalChangedFromScan(input.total, input.receiptTotalScanned) && !input.receiptTotalNote?.trim()) {
     return `The receipt total was read as $${input.receiptTotalScanned?.toFixed(2)} and has been changed — say why.`;
+  }
+  // A line that doesn't add up on its own is refused (#52): its quantity is
+  // what the Pricelist costs from.
+  for (const line of input.lineItems) {
+    const mismatch = lineMathMismatch(line);
+    if (mismatch) return lineMathMessage(line.description, line, mismatch);
   }
   return null;
 }
