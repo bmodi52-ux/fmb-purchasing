@@ -38,10 +38,13 @@ off false price alerts.
 Expected: flag any line where qty × unit price is more than a cent or so away
 from the line total, both on the form and after the receipt is read. When the
 line total and unit price divide to a whole number, suggest it ("58?").
-Needs deciding: whether it blocks submitting or only warns.
+**Decided 2026-09-27: a mismatch blocks submitting**, not just a warning.
 
-Data to fix once confirmed against the receipt: E-0081 spaghetti quantity
-53 → 58 (normalised 26.5 → 29 kg).
+Found along the way: the quantity on E-0081 was corrected to 58 by hand, but
+`normalized_quantity` stayed at 26.5 kg (it should be 29). Changing a line's
+quantity after it's saved doesn't recompute the normalised amount, so the
+Pricelist keeps the old per-kg price. Fix that as part of this item, and
+correct E-0081's 26.5 → 29.
 
 ### 46. Old prices undercut current ones in thaali costing
 
