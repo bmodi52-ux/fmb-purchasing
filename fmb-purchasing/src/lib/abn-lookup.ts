@@ -5,6 +5,7 @@
  * via a client-side JSONP hack).
  */
 import { reportError } from "@/lib/errors";
+import { isValidAbn } from "@/lib/vendor-names";
 
 export type AbrRegistration = {
   /** Null when the ABR response did not say either way. */
@@ -17,7 +18,15 @@ export type AbrRegistration = {
 
 export type AbnLookupResult =
   | ({ name: string; state: string | null; postcode: string | null } & AbrRegistration)
-  | { error: string };
+  | {
+      error: string;
+      /**
+       * "invalid": the number is wrong, most likely misread (#45). It fails the
+       * checksum, or the ABR has no such ABN. "unavailable": the ABR couldn't
+       * be asked, which says nothing about the number.
+       */
+      reason: "invalid" | "unavailable";
+    };
 
 /**
  * GST registration and ABN status from an AbnDetails response.
@@ -51,9 +60,9 @@ export type AbnNameMatch = {
   postcode: string | null;
 };
 
-function requireGuid(): string | { error: string } {
+function requireGuid(): string | { error: string; reason: "unavailable" } {
   const guid = process.env.ABN_LOOKUP_GUID;
-  if (!guid) return { error: "ABN Lookup isn't configured yet (missing ABN_LOOKUP_GUID)." };
+  if (!guid) return { error: "ABN Lookup isn't configured yet (missing ABN_LOOKUP_GUID).", reason: "unavailable" };
   return guid;
 }
 
@@ -81,7 +90,15 @@ function parseAbrBody(body: string): unknown {
 
 export async function lookupAbn(abn: string): Promise<AbnLookupResult> {
   const digits = abn.replace(/\D/g, "");
-  if (digits.length !== 11) return { error: "ABN must be 11 digits." };
+  if (digits.length !== 11) return { error: "ABN must be 11 digits.", reason: "invalid" };
+  // The ABR's own check digit (#45). A misread digit almost always fails it,
+  // and there is no point asking the ABR about a number that can't exist.
+  if (!isValidAbn(digits)) {
+    return {
+      error: "That isn't a valid ABN. Check it against the receipt: a digit was probably misread.",
+      reason: "invalid",
+    };
+  }
 
   const guid = requireGuid();
   if (typeof guid !== "string") return guid;
@@ -91,18 +108,22 @@ export async function lookupAbn(abn: string): Promise<AbnLookupResult> {
   let data: Record<string, unknown>;
   try {
     const res = await fetch(url);
-    if (!res.ok) return { error: "Could not reach the ABN Lookup service." };
+    if (!res.ok) return { error: "Could not reach the ABN Lookup service.", reason: "unavailable" };
     data = parseAbrBody(await res.text()) as Record<string, unknown>;
   } catch (err) {
     await reportError({ source: "abn-lookup", error: err, detail: `ABN ${digits}` });
-    return { error: "The ABN Lookup service returned something unreadable." };
+    return { error: "The ABN Lookup service returned something unreadable.", reason: "unavailable" };
   }
 
-  if (data.Message) return { error: String(data.Message) };
+  // A message about the GUID is the service refusing us, not a verdict on the number.
+  if (data.Message) {
+    const message = String(data.Message);
+    return { error: message, reason: /guid/i.test(message) ? "unavailable" : "invalid" };
+  }
 
   const businessNames = data.BusinessName as string[] | undefined;
   const name = (data.EntityName as string) || businessNames?.[0];
-  if (!name) return { error: "No registered name found for this ABN." };
+  if (!name) return { error: "The ABR has no business with this ABN. Check it against the receipt.", reason: "invalid" };
 
   return {
     name,

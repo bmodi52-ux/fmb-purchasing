@@ -18,6 +18,7 @@ import {
   chosenOffer,
   chosenPack,
   createChosenPackSize,
+  findVendorByLooseName,
   preferredVendor,
 } from "@/lib/expense-matching";
 import {
@@ -409,7 +410,7 @@ export async function resolveVendorAction(
   if (!cleanAbn && !trimmed) return null;
 
   const admin = createAdminClient();
-  const select = "id, vendor_number, name, status, created_at, default_category_id, default_payee, gst_treatment";
+  const select = "id, vendor_number, name, abn, status, created_at, default_category_id, default_payee, gst_treatment";
 
   let match = cleanAbn
     ? preferredVendor(
@@ -427,6 +428,10 @@ export async function resolveVendorAction(
           .limit(20)
       ).data ?? []
     );
+  }
+
+  if (!match && trimmed) {
+    match = await findVendorByLooseName<NonNullable<typeof match>>(admin, trimmed, cleanAbn, select);
   }
 
   if (!match) return null;
@@ -1063,6 +1068,31 @@ function claimTotal(input: CreateExpenseInput): number {
   return round2(input.lineItems.reduce((sum, l) => sum + l.lineTotal, 0));
 }
 
+/**
+ * Why this ABN can't be used, or null (#45). Checked on every submission, not
+ * only when somebody presses "Look up vendor".
+ *
+ * An ABN already on a vendor is that vendor: nothing more to ask. Otherwise
+ * the ABR is asked before a vendor can be created from it. A number that fails
+ * the checksum, or that the ABR has never heard of, was misread, and filing it
+ * would create a second copy of a vendor we already have: Nimco Foods, read as
+ * 03 003 900 427 instead of 37. When the ABR can't be reached, the number is
+ * let through: that says nothing about whether it's right.
+ */
+async function misreadAbn(admin: ReturnType<typeof createAdminClient>, abn: string | null): Promise<string | null> {
+  const digits = abn?.replace(/\D/g, "") || null;
+  if (!digits) return null;
+  const { data: onFile, error } = await admin.from("vendors").select("id").eq("abn", digits).limit(1);
+  if (error) throw error;
+  if (onFile?.length) return null;
+
+  const result = await lookupAbn(digits);
+  if ("error" in result && result.reason === "invalid") {
+    return `ABN ${abn}: ${result.error} Correct the ABN, or clear it.`;
+  }
+  return null;
+}
+
 export async function createExpense(
   input: CreateExpenseInput
 ): Promise<{ error: string } | { expenseId: string }> {
@@ -1074,6 +1104,9 @@ export async function createExpense(
   if (invalid) return { error: invalid };
 
   const admin = createAdminClient();
+
+  const abnProblem = await misreadAbn(admin, input.abn);
+  if (abnProblem) return { error: abnProblem };
 
   const vendor = await matchOrCreateVendor(admin, {
     name: input.vendorName,
@@ -1329,6 +1362,9 @@ export async function updateExpense(
   if (invalid) return { error: invalid };
 
   const admin = createAdminClient();
+
+  const abnProblem = await misreadAbn(admin, input.abn);
+  if (abnProblem) return { error: abnProblem };
 
   const vendor = await matchOrCreateVendor(admin, {
     name: input.vendorName,
