@@ -29,6 +29,8 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 
 ### 53. Install as a real app, so notifications don't show the web address
 
+**Built 2026-09-28 in bmodi52-ux/fmb-purchasing#107, waiting to be merged.**
+
 Raised 2026-09-28. Push notifications still show "www.fmbpurchasin…" even
 with "Mashk · " in the title (#48). Another site installed on the same phone
 shows none. Chrome does that for a site installed as a real app (a WebAPK):
