@@ -27,26 +27,6 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 
 <!-- Existing things that should work better. -->
 
-### 48. Push notifications show the web address, not the system name
-
-Raised 2026-09-27, from an Android screenshot. Each notification shows
-"www.fmbpurchasin…" above its title. Wanted: the system name (Mashk)
-instead.
-
-Checked that day: Chrome adds that line to every web push notification to
-show where it came from, and a site can't remove it or change it. What the
-site does control:
-- The group heading above the notifications, which comes from the installed
-  app's name. The phone still shows "FMB Sydney", although `manifest.ts` now
-  says "Mashk · FMB Sydney" / "Mashk". Chrome refreshes an installed app's name
-  on its own schedule; removing the app and adding it to the home screen
-  again updates it straight away.
-- The title and body. "Mashk" could lead the title, e.g. "Mashk · Submitted
-  E-0077", at the cost of room for the rest.
-
-Decided the same day: "Mashk · " leads every push title. Built in
-bmodi52-ux/fmb-purchasing#95, not merged yet.
-
 ### 12. Check on live what has never been seen working
 
 _Was #64._

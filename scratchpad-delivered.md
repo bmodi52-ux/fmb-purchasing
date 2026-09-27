@@ -9,6 +9,12 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 48. Push notifications start with Mashk
+
+Raised 2026-09-27, delivered the same day (PR #95), confirmed on a phone
+2026-09-28. Chrome shows the site address above every web push and a site
+can't change it, so every title now starts "Mashk · ".
+
 ### 44. Merge two vendors
 
 Raised 2026-09-27, delivered 2026-09-28 (PR #106, migration 0080). On a
