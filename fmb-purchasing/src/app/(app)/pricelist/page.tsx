@@ -104,7 +104,7 @@ export default async function PricelistPage() {
           .order("offer_id")
           .range(from, to)
       ),
-      admin.from("vendors").select("id, name, vendor_number").order("name"),
+      admin.from("vendors").select("id, name, vendor_number").is("merged_into", null).order("name"),
       admin.from("categories").select("id, name, parent_category_id, code").order("sort_order"),
       admin.from("units").select("id, code, label").order("sort_order"),
       getColumnPreference(user.id, PAGE_KEY, DEFAULT_VISIBLE),

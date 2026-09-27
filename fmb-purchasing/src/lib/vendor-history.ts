@@ -22,7 +22,10 @@ export type VendorChangeKind =
   | "bank_account_proposed"
   | "bank_account_confirmed"
   | "bank_account_discarded"
-  | "gst_registration_changed";
+  | "gst_registration_changed"
+  // Written by merge_vendors and undo_vendor_merge (#44, migration 0080).
+  | "merged"
+  | "merge_undone";
 
 export type FieldChanges = Record<string, { old: unknown; new: unknown }>;
 
@@ -98,6 +101,8 @@ const KIND_TEXT: Record<VendorChangeKind, string> = {
   bank_account_confirmed: "A proposed bank account was confirmed and is now the one paid",
   bank_account_discarded: "A proposed bank account was discarded",
   gst_registration_changed: "GST registration changed, according to the ABR",
+  merged: "Merged",
+  merge_undone: "Merge undone",
 };
 
 export function vendorChangeTitle(kind: string, changes: unknown): string {

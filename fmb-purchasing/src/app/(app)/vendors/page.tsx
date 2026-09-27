@@ -25,6 +25,8 @@ export default async function VendorsPage() {
     admin
       .from("vendors")
       .select("id, vendor_number, name, abn, status, billing_address")
+      // A vendor merged into another (#44) lives on only for undo.
+      .is("merged_into", null)
       .order("status")
       .order("name"),
     admin.from("vendor_contacts").select("vendor_id, name, phone"),
