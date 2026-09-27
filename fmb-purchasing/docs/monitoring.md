@@ -7,16 +7,15 @@ How breakage is noticed without anyone having to look (scratchpad #46).
 `GET /api/health` answers `200` with `{"status":"ok"}` when the database is reachable and has every migration the
 deployed code expects, and `503` otherwise, with which of the two is wrong. It is public and says nothing more.
 
-`.github/workflows/uptime.yml` calls it every 15 minutes, trying three times before giving up. A failed run shows
-red in the repository's **Actions** tab, and GitHub emails whoever last changed that file. GitHub can run
-scheduled checks a few minutes late, and turns a schedule off after 60 days with no commits; the Actions tab has
-a button to turn it back on.
+UptimeRobot (free plan) calls it every 5 minutes and emails when it fails. Set it up with a new HTTP(s) monitor on
+`https://www.fmbpurchasing.com.au/api/health`, alerting on anything but `200`.
+
+There used to be a GitHub Actions check, `.github/workflows/uptime.yml`, every 15 minutes. It was removed on
+2026-09-27 when the repository went private (scratchpad #37): private repositories get 2,000 free Actions minutes
+a month, and that check alone used about 2,900.
 
 A `503` straight after a deploy usually means a migration hasn't been run in the Supabase SQL editor yet —
 **Admin → System errors** lists which.
-
-For checks from outside GitHub (every minute, or by text message), point any uptime service — UptimeRobot and
-Better Stack both have free plans — at `https://www.fmbpurchasing.com.au/api/health`.
 
 ## Did something fail?
 
