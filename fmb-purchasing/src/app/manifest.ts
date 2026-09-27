@@ -32,19 +32,18 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#D89C24",
     lang: "en-AU",
     categories: ["business", "finance", "productivity"],
+    // 192 and 512 (#53). With only the 400px crest, Chrome on Android added
+    // the site as a shortcut rather than installing it as an app (a WebAPK),
+    // and a shortcut's notifications come from Chrome, headed by the site's
+    // address. An installed app's are headed by its own name. Made from the
+    // 400px crest, so the 512 is a slight upscale.
     icons: [
-      {
-        src: "/fmb-logo.png",
-        // The real size of the file. Chrome needs at least 192px to offer
-        // installation, so 400 qualifies; a 512px version would give a
-        // sharper Android splash screen, and is worth adding if anyone has
-        // the crest at that size.
-        sizes: "400x400",
-        type: "image/png",
-        // Not "maskable": the crest has detail close to its edge, and a
-        // launcher cropping it to a circle would cut into the design.
-        purpose: "any",
-      },
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      // The crest has detail close to its edge, so the maskable one sits on
+      // cream inside the safe zone: a launcher cropping to a circle takes
+      // background, not design.
+      { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }
