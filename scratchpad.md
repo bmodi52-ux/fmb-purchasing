@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #44.** To see what's open, list the headings
+**Next number: #46.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -23,6 +23,22 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 
 <!-- What happened, where, and what you expected instead. -->
 
+### 45. A second Nimco Foods vendor was created on submit
+
+Raised 2026-09-27. Nimco Foods was already on file. The first time, the ABN
+lookup button was clicked when it was added. On a later expense the lookup
+wasn't clicked, and submitting quietly created a second Nimco Foods vendor.
+Nothing on the form made it noticeable. Expected: the existing vendor is
+matched, or at least there's a clear warning before a new one is made.
+
+Unchecked guess: `resolveVendorAction` / `matchOrCreateVendor` in
+`submit/actions.ts` match on the ABN first, then on the exact name
+(`ilike`, no wildcards). With no ABN on the second expense, the match depends
+on the name being exactly the same. If the lookup had saved the first vendor
+under its ABR name (e.g. "NIMCO FOODS PTY LTD"), "Nimco Foods" wouldn't match.
+Compare the two records to confirm. Cleaning up needs #44 (merge vendors) or a
+manual fix.
+
 ## Improvements
 
 <!-- Existing things that should work better. -->
@@ -36,6 +52,34 @@ Each pack holds, Name, the smaller-packs checkbox and "Shows as". It looks as
 if the page is waiting for something to be filled in. Collapse it to a single
 "+ Add pack size" button, and open the fields only when someone wants to add
 a size.
+
+### 44. Merge two vendors
+
+Raised 2026-09-27. There is no way in the app to combine duplicate vendors.
+The only vendor merge was the one-off pass in migration 0034, which grouped
+vendors by ABN and then by name. Duplicates made since then, like a misspelt
+name or one copy with an ABN and one without, can only be fixed in the database.
+
+Decided that day:
+
+- **Who:** anyone who can edit vendors, not only admins.
+- **Vendor number:** the original one stays, meaning the number of whichever
+  vendor was created first. That holds even when the newer record is the one
+  kept, because it is the number already written on paper.
+- **Undo:** yes. The merge keeps a record of which rows it moved, and Undo
+  moves them back. There is no time limit. Undo is blocked once a new expense
+  has been added to an offer the merge combined (the same pack sold by both
+  vendors), because that expense can't be split back between the two. The
+  undo button then says why it's unavailable.
+
+Shape: follow the item merge on the Pricelist (`pricelist/[id]/merge-panel.tsx`).
+On the duplicate vendor's page there would be a "Merge into…" option, a preview
+of what moves, then Confirm. The repointing SQL in 0034 covers expenses,
+addresses, contacts, payees, pricelist offers (combining the same pack) and item
+descriptions. Every table that has pointed at vendors since then needs its own
+rule too: payee account history (0037), price alerts, procurement and menus,
+records, GST checks, notification rules and anything newer. Go through the
+migrations for `vendor_id` when this is picked up.
 
 ### 12. Check on live what has never been seen working
 
