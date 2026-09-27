@@ -136,25 +136,44 @@ export async function createItem(_prev: CreateItemState, formData: FormData): Pr
   return { error: null, success: true };
 }
 
-export async function addPackSize(formData: FormData) {
+export type AddPackSizeState = { error: string | null; success: boolean };
+
+/**
+ * Says why when the pack can't be added (#49). It used to ignore the insert's
+ * error, so a pack refused by the uniqueness key just reloaded the form.
+ */
+export async function addPackSize(_prev: AddPackSizeState, formData: FormData): Promise<AddPackSizeState> {
   const user = await requirePricelistEdit();
 
   const itemId = String(formData.get("item_id") ?? "");
   const pack = packFieldsFrom(formData, "label");
-  if (!itemId || pack.inner_quantity == null || !pack.inner_unit_id) return;
+  if (!itemId) return { error: "Item not found.", success: false };
+  if (pack.inner_quantity == null || !(pack.inner_quantity > 0) || !pack.inner_unit_id) {
+    return { error: "Say how much each pack holds, and in what unit.", success: false };
+  }
 
   const admin = createAdminClient();
-  await admin.from("item_pack_sizes").insert({
+  const { error } = await admin.from("item_pack_sizes").insert({
     item_id: itemId,
     ...pack,
     // entered by a human, so its contents are known by definition
     contents_confirmed: true,
     created_by: user.id,
   });
+  if (error) {
+    if (error.code === "23505") {
+      return {
+        error: "This item already has that pack size, with the same packaging and name. Give it a name to tell them apart.",
+        success: false,
+      };
+    }
+    return { error: `The pack size couldn't be added: ${error.message}`, success: false };
+  }
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
   revalidateReports();
+  return { error: null, success: true };
 }
 
 const PACK_SIZE_TRACKED_FIELDS = [

@@ -372,15 +372,26 @@ async function matchOrCreatePackSize(
   const innerQuantity = statedUnitId ? stated!.innerQuantity : 1;
   const packCount = statedUnitId ? stated!.packCount : 1;
 
-  const { data: existing } = await admin
+  // Since 0077 a loose 1 L and a 1 L bottle can both exist (#49), so the same
+  // shape can be more than one pack. The one whose packaging the line states
+  // wins, then one nobody has described (which takes what the line says),
+  // then a loose one when the line says loose.
+  const { data: sameShape, error: shapeError } = await admin
     .from("item_pack_sizes")
-    .select("id")
+    .select("id, sold_loose, packaging")
     .eq("item_id", itemId)
     .eq("inner_quantity", innerQuantity)
     .eq("inner_unit_id", innerUnitId)
     .eq("pack_count", packCount)
     .is("label", null)
-    .maybeSingle();
+    .limit(10);
+  if (shapeError) throw shapeError;
+  const candidates = sameShape ?? [];
+  const existing =
+    (readPackaging ? candidates.find((p) => p.packaging === readPackaging) : undefined) ??
+    (details?.packaging === "loose" ? candidates.find((p) => p.sold_loose) : undefined) ??
+    candidates.find((p) => !p.sold_loose && p.packaging == null) ??
+    (readPackaging ? undefined : candidates[0]);
   if (existing) {
     // A pack nobody has said the packaging of takes what the line says; one
     // somebody has described is left alone.
@@ -1047,15 +1058,22 @@ export async function createChosenPackSize(
   const count = loose ? 1 : packCount;
   if (!innerUnitId || !(quantity > 0) || !(count > 0)) return null;
 
-  const { data: existing } = await admin
+  // The same pack means the same packaging too (#49): a 1 L bottle described
+  // here is not the loose 1 L the item already has.
+  const packaging = loose ? null : isPackaging(soldAs) ? soldAs : null;
+  let query = admin
     .from("item_pack_sizes")
     .select("id")
     .eq("item_id", itemId)
     .eq("inner_quantity", quantity)
     .eq("inner_unit_id", innerUnitId)
     .eq("pack_count", count)
-    .maybeSingle();
-  if (existing) return existing.id as string;
+    .eq("sold_loose", loose)
+    .is("label", null);
+  query = packaging ? query.eq("packaging", packaging) : query.is("packaging", null);
+  const { data: existing, error: findError } = await query.limit(1);
+  if (findError) throw findError;
+  if (existing?.length) return existing[0]!.id as string;
 
   const { data: created, error } = await admin
     .from("item_pack_sizes")
@@ -1065,7 +1083,7 @@ export async function createChosenPackSize(
       inner_unit_id: innerUnitId,
       pack_count: count,
       sold_loose: loose,
-      packaging: loose ? null : isPackaging(soldAs) ? soldAs : null,
+      packaging,
       contents_confirmed: true,
       created_by: userId,
     })

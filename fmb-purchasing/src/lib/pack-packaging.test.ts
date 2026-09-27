@@ -89,3 +89,26 @@ describe("item_pack_sizes.packaging", () => {
     );
   });
 });
+
+describe("the pack key includes packaging and sold loose (#49, migration 0077)", () => {
+  async function packOn(itemId: string, soldLoose: boolean, packaging: string | null) {
+    return db.query(
+      `insert into item_pack_sizes (item_id, inner_quantity, inner_unit_id, pack_count, sold_loose, packaging)
+       values ($1, 1, $2, 1, $3, $4)`,
+      [itemId, unitKg, soldLoose, packaging]
+    );
+  }
+
+  test("a loose 1 kg and a 1 kg bag can both exist; the same pack twice still can't", async () => {
+    seq += 1;
+    const itemId = await scalar<string>(
+      db,
+      "insert into items (name, canonical_unit_id, category_id) values ($1, $2, $3) returning id",
+      [`Pack key test ${seq}`, unitKg, category]
+    );
+    await packOn(itemId, true, null);
+    await packOn(itemId, false, "bag");
+    await assert.rejects(packOn(itemId, false, "bag"), /item_pack_sizes_shape_key/);
+    await assert.rejects(packOn(itemId, true, null), /item_pack_sizes_shape_key/);
+  });
+});
