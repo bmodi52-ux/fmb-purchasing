@@ -28,6 +28,7 @@ import { formatPackPrice, formatUnitCost, packTitle, priceFieldLabel } from "@/l
 import { allRows } from "@/lib/supabase/all-rows";
 import { AddProductModal, type OfferableItem } from "./add-product-modal";
 import { VendorProducts, type VendorProductRow } from "./vendor-products";
+import { UndoVendorMerge, VendorMergePanel } from "./vendor-merge-panel";
 
 type VendorOfferRow = {
   id: string;
@@ -101,24 +102,39 @@ export default async function VendorDetailPage({
   const showProducts = tab === "products";
 
   const admin = createAdminClient();
-  const [{ data: vendor }, { count: productCount }] = await Promise.all([
+  const [{ data: vendor }, { count: productCount }, { count: expenseCount }, { data: merges }] = await Promise.all([
     admin
       .from("vendors")
       .select(
-        "id, name, abn, vendor_number, status, billing_address, gst_registered, gst_registered_from, abn_active, abr_checked_at, default_category_id, default_payee, gst_treatment, order_lead_days"
+        "id, name, abn, vendor_number, status, billing_address, gst_registered, gst_registered_from, abn_active, abr_checked_at, default_category_id, default_payee, gst_treatment, order_lead_days, merged_into, created_at"
       )
       .eq("id", id)
-      .maybeSingle<Vendor>(),
+      .maybeSingle<Vendor & { merged_into: string | null; created_at: string }>(),
     admin
       .from("pricelist_items")
       .select("id", { count: "exact", head: true })
       .eq("vendor_id", id)
       .neq("status", "rejected"),
+    admin.from("expenses").select("id", { count: "exact", head: true }).eq("vendor_id", id),
+    // Merges this vendor is part of that still stand (#44), for Undo.
+    admin
+      .from("vendor_merges")
+      .select("id, kept_id, merged_id, merged_at, kept_before, merged_before")
+      .or(`kept_id.eq.${id},merged_id.eq.${id}`)
+      .is("undone_at", null)
+      .order("merged_at", { ascending: false }),
   ]);
 
   if (!vendor) notFound();
 
   const canApproveVendor = can(permissions, "vendors", "approve_master_data");
+  const canEditVendor = can(permissions, "vendors", "edit_master_data");
+  const numberAndName = (snapshot: unknown) => {
+    const s = snapshot as { vendor_number?: string; name?: string } | null;
+    return `${s?.vendor_number ?? ""} ${s?.name ?? ""}`.trim();
+  };
+  const mergedAway = (merges ?? []).find((m) => m.merged_id === id);
+  const mergedIn = (merges ?? []).filter((m) => m.kept_id === id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -133,6 +149,42 @@ export default async function VendorDetailPage({
           <span className="tabular-nums text-sm text-ink/50">{vendor.vendor_number}</span>
           <StatusPill status={vendor.status} />
         </div>
+
+        {/* Merged away (#44): kept only so the merge can be undone. */}
+        {vendor.merged_into && (
+          <div className="mt-3 flex flex-col gap-2 rounded-md border border-gold/40 bg-gold/10 p-3 text-sm">
+            <p className="text-ink/80">
+              This vendor was merged into{" "}
+              <Link href={`/vendors/${vendor.merged_into}`} className="underline underline-offset-2">
+                {(mergedAway?.kept_before as { vendor_number?: string } | undefined)?.vendor_number ?? "another vendor"}
+              </Link>
+              {mergedAway && ` on ${formatDate(mergedAway.merged_at as string)}`}. Everything it had is there now.
+            </p>
+            {canEditVendor && mergedAway && (
+              <UndoVendorMerge mergeId={mergedAway.id as string} label="Split them apart again:" />
+            )}
+          </div>
+        )}
+
+        {!vendor.merged_into && canEditVendor && (
+          <>
+            {mergedIn.map((m) => (
+              <div key={m.id as string} className="mt-3">
+                <UndoVendorMerge
+                  mergeId={m.id as string}
+                  label={`${numberAndName(m.merged_before)} was merged in on ${formatDate(m.merged_at as string)}.`}
+                />
+              </div>
+            ))}
+            <VendorMergePanel
+              vendorId={vendor.id}
+              vendorLabel={`${vendor.vendor_number ?? ""} ${vendor.name}`.trim()}
+              createdAt={vendor.created_at}
+              expenseCount={expenseCount ?? 0}
+              offerCount={productCount ?? 0}
+            />
+          </>
+        )}
 
         {canApproveVendor && vendor.status === "pending" && (
           <ReviewDecision

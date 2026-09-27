@@ -170,6 +170,7 @@ export async function searchVendorSuggestions(query: string): Promise<VendorSugg
       .from("vendors")
       .select("id, vendor_number, name, abn")
       .ilike("name", `%${trimmed}%`)
+      .is("merged_into", null)
       .limit(6),
     searchAbnByName(trimmed),
   ]);

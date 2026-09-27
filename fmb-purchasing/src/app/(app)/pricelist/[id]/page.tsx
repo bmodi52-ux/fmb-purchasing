@@ -141,7 +141,7 @@ export default async function ItemDetailPage({
   const [{ data: item }, { data: vendors }, { data: categories }, { data: units }, { data: packSizes }, { data: itemHistory }] =
     await Promise.all([
       admin.from("items").select("*").eq("id", id).maybeSingle(),
-      admin.from("vendors").select("id, name, vendor_number").order("name"),
+      admin.from("vendors").select("id, name, vendor_number").is("merged_into", null).order("name"),
       admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
       admin.from("units").select("id, code, label, base_unit_code").order("sort_order"),
       admin.from("item_pack_sizes").select("*").eq("item_id", id).order("total_quantity"),
