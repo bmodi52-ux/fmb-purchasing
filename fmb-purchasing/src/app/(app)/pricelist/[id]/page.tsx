@@ -7,7 +7,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateTime } from "@/lib/format";
 import {
   updateItem,
-  addPackSize,
   removePackSize,
   addOffer,
   updateOffer,
@@ -21,7 +20,7 @@ import {
 import { ReviewDecision, StatusPill } from "@/components/review-decision";
 import { OfferForm } from "./offer-form";
 import { PackSizeForm } from "./pack-size-form";
-import { PackFields } from "../pack-fields";
+import { AddPackSizeForm } from "./add-pack-size-form";
 import {
   formatPackPrice,
   formatUnitCost,
@@ -931,16 +930,7 @@ export default async function ItemDetailPage({
             <summary className="btn btn-secondary w-fit cursor-pointer list-none [&::-webkit-details-marker]:hidden">
               + Add pack size
             </summary>
-            <form action={addPackSize} className="mt-3 flex flex-col gap-3">
-              <input type="hidden" name="item_id" value={item.id} />
-              <FormResetBoundary>
-                <PackFields
-                  units={units ?? []}
-                  defaults={{ soldAs: "", innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
-                />
-              </FormResetBoundary>
-              <SubmitButton className="btn btn-primary self-start">Add pack size</SubmitButton>
-            </form>
+            <AddPackSizeForm itemId={item.id} canonicalUnitId={item.canonical_unit_id} units={units ?? []} />
           </details>
         )}
       </section>
