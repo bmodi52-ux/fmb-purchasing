@@ -577,10 +577,19 @@ async function fillMissingPackPrice(
   if (packPrice == null) return;
   await admin
     .from("pricelist_items")
-    .update({ pack_price: packPrice })
+    .update({ pack_price: packPrice, price_set_at: PROVISIONAL_PRICE_DATE })
     .eq("id", offerId)
     .is("pack_price", null);
 }
+
+/**
+ * The date a price from a receipt carries until the expense is saved (#46).
+ * The receipt's own date isn't known this deep in matching;
+ * price_offers_from_expense, which runs once the expense exists, dates the
+ * price from the receipt and takes it over. "-infinity" so that receipt
+ * always counts as newer, never as older than a price that has none yet.
+ */
+const PROVISIONAL_PRICE_DATE = "-infinity";
 
 /**
  * Put a receipt's brand and product code on a pending offer that lacks them
@@ -685,6 +694,7 @@ async function offerForPack(
       vendor_id: vendorId,
       pack_size_id: packSizeId,
       pack_price: packPrice,
+      price_set_at: packPrice == null ? null : PROVISIONAL_PRICE_DATE,
       brand: details?.brand ?? null,
       vendor_sku: details?.productCode ?? null,
       status: "pending",

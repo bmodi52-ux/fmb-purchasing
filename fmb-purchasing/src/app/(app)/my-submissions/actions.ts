@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { reportError } from "@/lib/errors";
+import { restoreOfferPrices } from "@/lib/offer-prices";
 
 /**
  * Withdraws the expenses among these that the user may withdraw — their own,
@@ -30,6 +31,9 @@ async function withdraw(userId: string, expenseIds: string[]): Promise<void> {
     await reportError({ source: "expense-withdraw", error: error.message, userId });
     throw new Error("The submission could not be withdrawn, and nothing was changed. Try again.");
   }
+
+  // A withdrawn receipt no longer sets any offer's price (#46).
+  await restoreOfferPrices(createAdminClient(), expenseIds, userId);
 }
 
 function revalidateAll() {

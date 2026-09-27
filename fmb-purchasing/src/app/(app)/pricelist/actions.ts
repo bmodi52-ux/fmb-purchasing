@@ -486,15 +486,32 @@ export async function removePackSize(formData: FormData) {
   revalidateReports();
 }
 
-export async function addOffer(formData: FormData) {
+/** Why an offer wasn't saved (#46): the store already has one on that pack. */
+export type OfferFormState = { error: string | null };
+
+/**
+ * One live offer per store + pack size + brand (#46, migration 0078). Said
+ * in words when the database refuses a second one, which is how Cream came
+ * to be costed from a July price: editing an offer's pack onto a pack the
+ * store already had an offer on.
+ */
+function duplicateOfferMessage(error: { code?: string; message?: string } | null): string | null {
+  if (!error) return null;
+  if (error.code === "23505" && error.message?.includes("pricelist_items_one_live_offer")) {
+    return "This store already has a live offer on that pack size in that brand. Update that offer's price instead, or reject one of the two.";
+  }
+  return `The offer couldn't be saved: ${error.message ?? "unknown error"}`;
+}
+
+export async function addOffer(_prev: OfferFormState, formData: FormData): Promise<OfferFormState> {
   const user = await requirePricelistEdit();
 
   const itemId = String(formData.get("item_id") ?? "");
   const packSizeId = String(formData.get("pack_size_id") ?? "");
-  if (!itemId || !packSizeId) return;
+  if (!itemId || !packSizeId) return { error: "Choose a pack size." };
 
   const admin = createAdminClient();
-  await admin.from("pricelist_items").insert({
+  const { error } = await admin.from("pricelist_items").insert({
     pack_size_id: packSizeId,
     vendor_id: fieldOrNull(formData, "vendor_id"),
     brand: fieldOrNull(formData, "brand"),
@@ -507,12 +524,15 @@ export async function addOffer(formData: FormData) {
     reviewed_at: new Date().toISOString(),
     updated_by: user.id,
   });
+  const refused = duplicateOfferMessage(error);
+  if (refused) return { error: refused };
 
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
   const vendorId = fieldOrNull(formData, "vendor_id");
   if (vendorId) revalidatePath(`/vendors/${vendorId}`);
   revalidateReports();
+  return { error: null };
 }
 
 export type AddVendorOfferState = { error: string | null; success: boolean };
@@ -831,12 +851,12 @@ const OFFER_TRACKED_FIELDS = [
 ] as const;
 type OfferTrackedRow = Record<(typeof OFFER_TRACKED_FIELDS)[number], unknown>;
 
-export async function updateOffer(formData: FormData) {
+export async function updateOffer(_prev: OfferFormState, formData: FormData): Promise<OfferFormState> {
   const user = await requirePricelistEdit();
 
   const offerId = String(formData.get("offer_id"));
   const itemId = String(formData.get("item_id"));
-  if (!offerId || !itemId) return;
+  if (!offerId || !itemId) return { error: "Offer not found." };
 
   const admin = createAdminClient();
   const { data: before } = await admin
@@ -844,7 +864,7 @@ export async function updateOffer(formData: FormData) {
     .select(OFFER_TRACKED_FIELDS.join(", "))
     .eq("id", offerId)
     .single<OfferTrackedRow>();
-  if (!before) return;
+  if (!before) return { error: "Offer not found." };
 
   const next: OfferTrackedRow = {
     vendor_id: fieldOrNull(formData, "vendor_id"),
@@ -863,10 +883,12 @@ export async function updateOffer(formData: FormData) {
   }
 
   if (Object.keys(changes).length > 0) {
-    await admin
+    const { error } = await admin
       .from("pricelist_items")
       .update({ ...next, updated_at: new Date().toISOString(), updated_by: user.id })
       .eq("id", offerId);
+    const refused = duplicateOfferMessage(error);
+    if (refused) return { error: refused };
 
     await admin.from("pricelist_item_history").insert({ item_id: offerId, changed_by: user.id, changes });
   }
@@ -874,6 +896,7 @@ export async function updateOffer(formData: FormData) {
   revalidatePath(`/pricelist/${itemId}`);
   revalidatePath("/pricelist");
   revalidateReports();
+  return { error: null };
 }
 
 export type ItemSearchResult = {

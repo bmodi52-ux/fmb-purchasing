@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { notifyExpenseDecision } from "@/lib/expense-notifications";
 import { reportError } from "@/lib/errors";
+import { priceOffersFromExpense, restoreOfferPrices } from "@/lib/offer-prices";
 
 type DecidedExpense = {
   id: string;
@@ -54,6 +55,9 @@ async function decide(
     });
     throw new Error("The decision could not be recorded, and nothing was changed. Try again.");
   }
+
+  // A declined receipt no longer sets any offer's price (#46).
+  if (decision === "declined") await restoreOfferPrices(createAdminClient(), expenseIds, userId);
 
   // Notifications are a courtesy; a failure there must not look like the
   // decision failed, because it did not.
@@ -127,6 +131,9 @@ export async function reopenExpense(formData: FormData): Promise<void> {
     await reportError({ source: "expense-reopen", error: error.message, userId: user.id, expenseId });
     throw new Error("The decision could not be reopened, and nothing was changed. Try again.");
   }
+
+  // Back in play, so its prices count again (#46).
+  await priceOffersFromExpense(createAdminClient(), expenseId, user.id);
 
   revalidateAll();
 }
