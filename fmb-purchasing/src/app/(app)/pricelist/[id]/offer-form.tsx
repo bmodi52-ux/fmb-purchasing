@@ -2,11 +2,14 @@
 
 import { SubmitButton } from "@/components/submit-button";
 import { formatUnitCost } from "@/lib/pack-description";
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
+import type { OfferFormState } from "../actions";
 
 type Vendor = { id: string; name: string; vendor_number: string | null };
 type PackSizeOption = { id: string; label: string };
+
+const initialState: OfferFormState = { error: null };
 
 export function OfferForm({
   action,
@@ -27,7 +30,7 @@ export function OfferForm({
 }: {
   /** What the price is for — "Price per box". */
   priceLabel?: string;
-  action: (formData: FormData) => void | Promise<void>;
+  action: (prev: OfferFormState, formData: FormData) => Promise<OfferFormState>;
   itemId: string;
   packSizeId: string;
   offerId?: string;
@@ -44,6 +47,7 @@ export function OfferForm({
   vendors: Vendor[];
   submitLabel: string;
 }) {
+  const [state, formAction] = useActionState(action, initialState);
   const [packPriceStr, setPackPriceStr] = useState(packPrice != null ? String(packPrice) : "");
 
   const costPerUnit = useMemo(() => {
@@ -53,7 +57,7 @@ export function OfferForm({
   }, [packPriceStr, totalQuantity]);
 
   return (
-    <form action={action} className="flex flex-col gap-3">
+    <form action={formAction} className="flex flex-col gap-3">
       <FormResetBoundary>
       <input type="hidden" name="item_id" value={itemId} />
       {offerId && <input type="hidden" name="offer_id" value={offerId} />}
@@ -129,6 +133,11 @@ export function OfferForm({
         {submitLabel}
       </SubmitButton>
       </FormResetBoundary>
+      {state.error && (
+        <p className="text-sm text-danger" role="alert">
+          {state.error}
+        </p>
+      )}
     </form>
   );
 }

@@ -76,6 +76,7 @@ const OFFER_FIELD_LABELS: Record<string, string> = {
   vendor_sku: "Vendor's product code",
   pack_size_id: "Pack size",
   pack_price: "Pack price",
+  price_source: "Price from",
   status: "Status",
   comments: "Comments",
   // retained so history written before 0009 still reads sensibly
@@ -84,6 +85,16 @@ const OFFER_FIELD_LABELS: Record<string, string> = {
   per_unit_cost: "Per-unit cost",
   per_unit_cost_unit_id: "Per-unit cost unit",
 };
+
+/** The date a price was set, or null for none (or a provisional "-infinity"). */
+function priceDay(value: unknown): string | null {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+}
+
+/** Offer history keys starting "_" are bookkeeping for undoing, not changes to show. */
+function shownChanges(changes: unknown): [string, { old: unknown; new: unknown }][] {
+  return Object.entries(changes as Record<string, { old: unknown; new: unknown }>).filter(([k]) => !k.startsWith("_"));
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -683,7 +694,7 @@ export default async function ItemDetailPage({
                   </div>
                   {/* A special, where the price came from and when (#29). Prices don't
                       expire, so the date is how an old one shows. */}
-                  {(o.sale_price != null || o.source_url || o.price_read_at || o.gst_basis === "added") && (
+                  {(o.sale_price != null || o.source_url || priceDay(o.price_set_at) || o.gst_basis === "added") && (
                     <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink/55">
                       {o.sale_price != null && o.sale_ends_on && String(o.sale_ends_on) >= todayIso() && (
                         <span className="text-palm">
@@ -692,7 +703,14 @@ export default async function ItemDetailPage({
                           {o.sale_end_assumed && " (end date assumed)"}
                         </span>
                       )}
-                      {o.price_read_at && <span>Price from {formatPlainDate(String(o.price_read_at).slice(0, 10))}</span>}
+                      {/* When the price was set (#46): a receipt's date when a
+                          receipt set it, else when it was typed or read. */}
+                      {priceDay(o.price_set_at) && (
+                        <span>
+                          Price from {o.price_source_line_id ? "a receipt of " : ""}
+                          {formatPlainDate(priceDay(o.price_set_at)!)}
+                        </span>
+                      )}
                       {o.gst_basis === "added" && <span>+GST added</span>}
                       {o.source_url && (
                         <a href={String(o.source_url)} target="_blank" rel="noreferrer" className="underline underline-offset-2">
@@ -811,7 +829,7 @@ export default async function ItemDetailPage({
                                 {h.changed_by && ` · ${profileNameById.get(h.changed_by) ?? "unknown"}`}
                               </p>
                               <ul>
-                                {Object.entries(h.changes as Record<string, { old: unknown; new: unknown }>).map(
+                                {shownChanges(h.changes).map(
                                   ([field, diff]) => (
                                     <li key={field} className="text-ink/70">
                                       <span className="text-ink/40">{OFFER_FIELD_LABELS[field] ?? field}:</span>{" "}

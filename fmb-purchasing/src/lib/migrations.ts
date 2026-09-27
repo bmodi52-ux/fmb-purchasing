@@ -50,6 +50,7 @@ export const LEDGERED_MIGRATIONS = [
   "0075_stock_counts.sql",
   "0076_prices_from_links.sql",
   "0077_pack_key_packaging.sql",
+  "0078_offer_current_price.sql",
 ] as const;
 
 export type MigrationStatus =

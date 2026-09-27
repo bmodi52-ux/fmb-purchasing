@@ -211,63 +211,48 @@ export async function loadMenuLines(
 }
 
 /**
- * The prices for a set of items (#29): every store's offer, and what was last
- * paid at each store in each brand, reduced to the cheapest — within the
- * item's preferred brand when it has one. Prices never expire; the date is
- * carried so it can be shown. Costing always uses an offer's regular price —
- * a special is for the buying list, not for what a thaali costs.
+ * The prices for a set of items (#29): every store's offer, per pack size,
+ * reduced to the cheapest — within the item's preferred brand when it has
+ * one. Prices never expire; the date is carried so it can be shown. Costing
+ * always uses an offer's regular price — a special is for the buying list,
+ * not for what a thaali costs.
+ *
+ * Offers only, since #46: a newer receipt now updates its offer's price
+ * (migration 0078), so what was last paid is already on the offer. Reading
+ * receipts here as well kept the latest receipt per store and brand rather
+ * than per pack, and let an old price on a second offer undercut the current
+ * one.
  */
 export async function loadItemPrices(admin: SupabaseClient, itemIds: string[]): Promise<Map<string, ItemPrices>> {
   const prices = new Map<string, ItemPrices>();
   if (itemIds.length === 0) return prices;
 
-  const [{ data: items }, { data: offers }, { data: paid }] = await Promise.all([
+  const [{ data: items }, { data: offers }] = await Promise.all([
     admin.from("items").select("id, preferred_brand").in("id", itemIds),
     admin
       .from("offer_unit_costs")
       .select("offer_id, item_id, vendor_id, status, cost_per_base_unit")
       .in("item_id", itemIds)
       .neq("status", "rejected"),
-    admin
-      .from("item_paid_unit_costs")
-      .select("item_id, vendor_id, line_item_id, receipt_date, submitted_at, expense_status, cost_per_base_unit, pack_disagrees")
-      .in("item_id", itemIds),
   ]);
 
-  // A cost from a receipt whose pack size disagrees with the Pricelist is
-  // not a price anybody paid per kg; declined and withdrawn spend never was.
-  const paidRows = (paid ?? []).filter(
-    (p) =>
-      p.cost_per_base_unit != null &&
-      !p.pack_disagrees &&
-      p.expense_status !== "declined" &&
-      p.expense_status !== "withdrawn"
-  );
-
-  // Brand, date and store names for both.
-  const lineIds = paidRows.map((p) => p.line_item_id as string);
-  const { data: lines } = lineIds.length
-    ? await admin.from("expense_line_items").select("id, pricelist_item_id").in("id", lineIds)
-    : { data: [] };
-  const offerOfLine = new Map((lines ?? []).map((l) => [l.id as string, l.pricelist_item_id as string | null]));
-  const offerIds = [
-    ...new Set([
-      ...(offers ?? []).map((o) => o.offer_id as string),
-      ...[...offerOfLine.values()].filter((id): id is string => !!id),
-    ]),
-  ];
+  const offerIds = [...new Set((offers ?? []).map((o) => o.offer_id as string))];
   const vendorIds = [
-    ...new Set([...(offers ?? []), ...paidRows].map((r) => r.vendor_id as string | null).filter((id): id is string => !!id)),
+    ...new Set((offers ?? []).map((r) => r.vendor_id as string | null).filter((id): id is string => !!id)),
   ];
   const [{ data: offerRows }, { data: vendors }] = await Promise.all([
     offerIds.length
-      ? admin.from("pricelist_items").select("id, brand, price_read_at, updated_at, created_at").in("id", offerIds)
+      ? admin
+          .from("pricelist_items")
+          .select("id, brand, price_set_at, price_source_line_id, price_read_at, created_at")
+          .in("id", offerIds)
       : Promise.resolve({ data: [] }),
     vendorIds.length ? admin.from("vendors").select("id, name").in("id", vendorIds) : Promise.resolve({ data: [] }),
   ]);
   const offerById = new Map((offerRows ?? []).map((o) => [o.id as string, o]));
   const vendorName = new Map((vendors ?? []).map((v) => [v.id as string, v.name as string]));
-  const day = (v: unknown) => (typeof v === "string" && v ? v.slice(0, 10) : null);
+  // A provisional "-infinity" (see expense-matching) is no date to show.
+  const day = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
 
   const candidates = new Map<string, PriceCandidate[]>();
   const add = (itemId: string, c: PriceCandidate) => candidates.set(itemId, [...(candidates.get(itemId) ?? []), c]);
@@ -276,31 +261,11 @@ export async function loadItemPrices(admin: SupabaseClient, itemIds: string[]): 
     const row = offerById.get(o.offer_id as string);
     add(o.item_id as string, {
       perUnit: Number(o.cost_per_base_unit),
-      source: "quoted",
+      // Taken from a receipt, or typed or read from a link.
+      source: row?.price_source_line_id ? "paid" : "quoted",
       vendorName: vendorName.get(o.vendor_id as string) ?? null,
-      date: day(row?.price_read_at ?? row?.updated_at ?? row?.created_at),
+      date: day(row?.price_set_at ?? row?.price_read_at ?? row?.created_at),
       brand: (row?.brand as string | null) ?? null,
-    });
-  }
-
-  // What was last paid at each store, in each brand: the latest receipt, not
-  // every one — an old price at a store that has since gone up isn't on offer.
-  const latestPaid = new Map<string, (typeof paidRows)[number] & { brand: string | null }>();
-  for (const p of paidRows) {
-    const offerId = offerOfLine.get(p.line_item_id as string);
-    const brand = offerId ? ((offerById.get(offerId)?.brand as string | null) ?? null) : null;
-    const key = `${p.item_id}|${p.vendor_id}|${(brand ?? "").toLowerCase()}`;
-    const when = String(p.receipt_date ?? p.submitted_at ?? "");
-    const current = latestPaid.get(key);
-    if (!current || when > String(current.receipt_date ?? current.submitted_at ?? "")) latestPaid.set(key, { ...p, brand });
-  }
-  for (const p of latestPaid.values()) {
-    add(p.item_id as string, {
-      perUnit: Number(p.cost_per_base_unit),
-      source: "paid",
-      vendorName: vendorName.get(p.vendor_id as string) ?? null,
-      date: day(p.receipt_date ?? p.submitted_at),
-      brand: p.brand,
     });
   }
 

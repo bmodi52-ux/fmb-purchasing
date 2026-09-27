@@ -36,6 +36,7 @@ import { leafCategories } from "@/lib/categories";
 import { packTitle } from "@/lib/pack-description";
 import { itemIdsByRetiredNumber, itemMatchFilter } from "@/lib/item-search";
 import { reportError } from "@/lib/errors";
+import { priceOffersFromExpense } from "@/lib/offer-prices";
 import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { getSetting } from "@/lib/app-settings";
 import { alertOnVendorAdded } from "@/lib/expense-alerts";
@@ -1179,6 +1180,9 @@ export async function createExpense(
     submitted_by: user.id,
   });
 
+  // A newer receipt keeps its offers' prices current (#46).
+  await priceOffersFromExpense(admin, created.id, user.id);
+
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
   revalidateReports();
@@ -1422,6 +1426,9 @@ export async function updateExpense(
   } catch (err) {
     await reportError({ source: "menu-allocation", error: err, userId: user.id, expenseId });
   }
+
+  // The edit may have changed what was paid (#46).
+  await priceOffersFromExpense(admin, expenseId, user.id);
 
   revalidatePath("/my-submissions");
   revalidatePath("/expenses");
