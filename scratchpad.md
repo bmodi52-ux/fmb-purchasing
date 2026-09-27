@@ -43,8 +43,8 @@ line total and unit price divide to a whole number, suggest it ("58?").
 Found along the way: the quantity on E-0081 was corrected to 58 by hand, but
 `normalized_quantity` stayed at 26.5 kg (it should be 29). Changing a line's
 quantity after it's saved doesn't recompute the normalised amount, so the
-Pricelist keeps the old per-kg price. Fix that as part of this item, and
-correct E-0081's 26.5 → 29.
+Pricelist keeps the old per-kg price. Fix that as part of this item. (E-0081
+itself was set to 29 kg by hand on 2026-09-27.)
 
 ### 46. Old prices undercut current ones in thaali costing
 
