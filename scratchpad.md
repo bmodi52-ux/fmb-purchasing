@@ -1,5 +1,8 @@
 # Scratch pad
 
+**Next number: #43.** To see what's open, list the headings
+(`grep '^### ' scratchpad.md`) and read only the item you need.
+
 A running list of ideas and bug reports, grouped by category. Recording an item
 here is not a go-ahead: nothing on this pad is worked on until it is explicitly
 picked up.
@@ -23,6 +26,16 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 ## Improvements
 
 <!-- Existing things that should work better. -->
+
+### 42. The "Add another pack size" form is always open
+
+Raised 2026-09-27. On a price list item's page
+(`src/app/(app)/pricelist/[id]/page.tsx`, fields in `pack-fields.tsx`), the
+form for another pack size sits fully open below the existing sizes: Comes as,
+Each pack holds, Name, the smaller-packs checkbox and "Shows as". It looks as
+if the page is waiting for something to be filled in. Collapse it to a single
+"+ Add pack size" button, and open the fields only when someone wants to add
+a size.
 
 ### 12. Check on live what has never been seen working
 
@@ -103,6 +116,63 @@ as repo secrets. A restore rehearsal into the sandbox should follow the first
 run. Supabase Pro ($25/month) stays the option for one-click restores, or
 when receipt storage nears the Free plan's 1 GB.
 
+Items 36–41 came from the security review of 2026-09-27, done alongside the
+running-costs slide. None of them costs anything.
+
+### 36. Anyone can create an account through Supabase
+
+Raised 2026-09-27. The app has no sign-up page, but "Allow new users to sign
+up" is still on in Supabase (`disable_signup: false` on both live and the
+sandbox). With the public anon key, anyone can register through the Auth API,
+confirm their own address, and `handle_new_user()` puts them in the default
+team: they can submit expense claims with their own bank details, and each
+claim costs a receipt read.
+
+To do: Authentication → Sign In / Providers → turn off "Allow new users to
+sign up", on live and the sandbox. Adding users from Admin → Users keeps
+working, because it uses `auth.admin.createUser`. Then check the 6 existing
+accounts are all people we know.
+
+### 37. The GitHub repository is public, and `main` is unprotected
+
+Raised 2026-09-27. `bmodi52-ux/fmb-purchasing` is public, and `main` has no
+branch protection or ruleset. No passwords or keys are in it (the history was
+checked), but it shows anyone how the system and its access rules work, plus
+test receipt details in `scripts/extraction-ground-truth.json`.
+
+To do: make it private, and add a rule that CI (Tests, Lint, Types) must pass
+before changes reach `main`.
+
+Knock-on cost: private repositories get 2,000 free Actions minutes a month,
+and `uptime.yml`, every 15 minutes, uses about 2,900 on its own (each run is
+billed as a whole minute). Moving that check to a free service such as
+UptimeRobot, or running it hourly, keeps GitHub at $0.
+
+### 38. Two-factor sign-in on every service account
+
+Raised 2026-09-27. Turn it on for Supabase, Vercel, GitHub, Crazy Domains,
+Resend, Anthropic, and the Google account that will hold the backups (#33).
+Those backups will contain everyone's bank details.
+
+### 39. Protect the domain at Crazy Domains
+
+Raised 2026-09-27. Turn on domain lock and auto-renew with a card that's still
+valid, and keep the registrant contact details current. If the domain lapses,
+the site goes down and email on the domain could be taken over.
+
+### 40. Email spoofing protection
+
+Raised 2026-09-27. The DMARC record is `v=DMARC1; p=none;`, which only
+monitors. Change it to `p=quarantine` so nobody can send convincing fake
+emails in the site's name asking members for payment details. If nothing
+sends mail from the main domain (Resend sends from `send.`), also add
+`v=spf1 -all` there.
+
+### 41. Run the Supabase Security Advisor
+
+Raised 2026-09-27. Run it once from the Supabase dashboard, on live and the
+sandbox, and bring anything it flags back here. It's free.
+
 Items 18–50 came from the systems review of 2026-09-11, each with the timing
 decided for it. Everything marked "now" is in Done; what remains here was
 marked "later".
@@ -137,6 +207,10 @@ _Was #26._
 
 An authenticator-app code required for anyone with Mark paid, Manage users or
 Manage teams; optional for everyone else.
+
+Raised again in the security review of 2026-09-27, for admins and payers,
+since they can change bank details and approve payments. Supabase's
+authenticator-app sign-in is free on every plan; the work is in the app.
 
 ### 4. Payment terms and due dates
 
