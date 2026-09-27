@@ -269,17 +269,3 @@ Two-factor sign-in is #3.
 ## Ideas
 
 <!-- Worth considering, not yet decided. -->
-
-### 54. Mashk as an Android app, so notifications carry no web address
-
-Raised 2026-09-28, after #53. Installed from Chrome, Mashk now shows as its
-own app on notifications, but Chrome still adds "www.fmbpurchasin…" to every
-notification from a website; a site can't turn that off. Apps that show no
-address are Android apps wrapping a website (a Trusted Web Activity), whose
-notifications Android treats as the app's own.
-
-What it would take: package the site with Bubblewrap or PWABuilder, publish
-/.well-known/assetlinks.json on the site to prove they belong together, and
-install it through Google Play (developer account, US$25 once) or by sharing
-the APK. No change to the site otherwise; iPhones unaffected. To check first:
-which app on the user's phone shows no address, and how it was installed.

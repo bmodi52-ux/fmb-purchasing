@@ -14,7 +14,7 @@ Delivered items from before the 2026-09-23 restart are in
 Raised and delivered 2026-09-28 (PR #107). 192 and 512 icons (plus maskable)
 in the manifest, so Chrome installs Mashk as an app (WebAPK) rather than a
 shortcut; notifications are now headed "Mashk" with its icon. Chrome still
-adds the web address to them, which only an Android app wrapper removes (#54).
+adds the web address to them, which only an Android app wrapper would remove (considered, not pursued).
 
 ### 48. Push notifications start with Mashk
 
