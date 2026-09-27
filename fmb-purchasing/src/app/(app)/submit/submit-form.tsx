@@ -814,22 +814,36 @@ export function SubmitForm({
             </p>
           </label>
           {/* Phones only. Most receipts start as a photo, and the file picker is
-              a detour on the way to the camera; capture opens it directly. */}
-          <label
-            className={`self-center rounded-md bg-gold px-5 py-2.5 text-sm font-medium text-ink md:hidden ${
-              busy ? "cursor-progress opacity-60" : "cursor-pointer hover:bg-gold-deep"
-            }`}
-          >
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              disabled={busy}
-              className="hidden"
-              onChange={handleReceiptChosen}
-            />
-            Take a photo of the receipt
-          </label>
+              a detour on the way to the camera; capture opens it directly.
+              The gallery button is its partner (#51): the picker above also
+              takes PDFs and emails, and with that mix Android opens Files
+              rather than the gallery. Images alone, without capture, opens
+              the gallery. */}
+          <div className="flex flex-wrap justify-center gap-2 md:hidden">
+            <label
+              className={`rounded-md bg-gold px-5 py-2.5 text-sm font-medium text-ink ${
+                busy ? "cursor-progress opacity-60" : "cursor-pointer hover:bg-gold-deep"
+              }`}
+            >
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                disabled={busy}
+                className="hidden"
+                onChange={handleReceiptChosen}
+              />
+              Take a photo of the receipt
+            </label>
+            <label
+              className={`rounded-md border border-ink/15 bg-white px-5 py-2.5 text-sm font-medium text-ink ${
+                busy ? "cursor-progress opacity-60" : "cursor-pointer"
+              }`}
+            >
+              <input type="file" accept="image/*" disabled={busy} className="hidden" onChange={handleReceiptChosen} />
+              Choose from gallery
+            </label>
+          </div>
           {/* Reading a receipt is the longest wait in the app — ten to twenty
               seconds against the model — and it used to show one line of static
               text, which after a few seconds is indistinguishable from a page
