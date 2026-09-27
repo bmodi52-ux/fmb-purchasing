@@ -31,13 +31,32 @@ wasn't clicked, and submitting quietly created a second Nimco Foods vendor.
 Nothing on the form made it noticeable. Expected: the existing vendor is
 matched, or at least there's a clear warning before a new one is made.
 
-Unchecked guess: `resolveVendorAction` / `matchOrCreateVendor` in
-`submit/actions.ts` match on the ABN first, then on the exact name
-(`ilike`, no wildcards). With no ABN on the second expense, the match depends
-on the name being exactly the same. If the lookup had saved the first vendor
-under its ABR name (e.g. "NIMCO FOODS PTY LTD"), "Nimco Foods" wouldn't match.
-Compare the two records to confirm. Cleaning up needs #44 (merge vendors) or a
-manual fix.
+Checked on live the same day. The ABN *was* read from the second receipt,
+but wrongly:
+
+| | V-0017 (E-0061) | V-0019 (E-0070) |
+|---|---|---|
+| Name | FULBECK PTY. LIMITED T/A Nimco Foods | Nimco Foods |
+| ABN | 37 003 900 427 (ABR-checked) | **03** 003 900 427 (never checked) |
+
+`matchOrCreateVendor` (`src/lib/expense-matching.ts`) tries the ABN first,
+then the exact name. The misread ABN matched nothing. The name didn't match
+either, because V-0017 had taken the ABR's legal name. So a new vendor was
+made, and nothing checked it before submit.
+
+03 003 900 427 fails the ABN checksum (37 003 900 427 passes), so this was
+catchable. Possible fixes:
+- Validate the ABN checksum on extraction and on submit. A number that fails
+  is flagged as a likely misread and never used to create a vendor.
+- Match on the last 9 digits (the ACN part of a company ABN) when the full
+  ABN doesn't match, and ask "Is this V-0017?"
+- Match names loosely: ignore case, "Pty Ltd" and the like, and match either
+  side of "T/A".
+- Run the ABR check automatically on a new vendor, rather than only when the
+  button is clicked.
+
+Cleanup: fold V-0019 into V-0017 with #44 (merge vendors), or move E-0070
+across by hand.
 
 ## Improvements
 
