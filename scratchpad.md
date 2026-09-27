@@ -25,6 +25,8 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 
 ### 52. A line whose qty × unit price ≠ line total is accepted
 
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#99, waiting to be merged.**
+
 Raised 2026-09-27. E-0081 (ALDI, invoice 000168) went through with
 "Spaghetti 500g: 53 × $0.89 = $51.62", although 53 × 0.89 is $47.17. The
 line total is right: $51.62 ÷ 0.89 is exactly 58, and the three lines add up
@@ -48,6 +50,8 @@ Pricelist keeps the old per-kg price. Fix that as part of this item. (E-0081
 itself was set to 29 kg by hand on 2026-09-27.)
 
 ### 46. Old prices undercut current ones in thaali costing
+
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#103, waiting to be merged.**
 
 Raised 2026-09-27, from Cream (thick) DRY-0002. Costing takes the cheapest
 price for an item from any store, paid or quoted (#29). Campbells has two
@@ -108,6 +112,8 @@ each, move their receipt lines onto it, price from the latest receipt.
 
 ### 47. Releasing a menu can suggest a store from a rejected offer
 
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#101, waiting to be merged.**
+
 Raised 2026-09-27, found while checking #46. The store suggested for each
 item on release is the cheapest offer, and rejected offers aren't skipped
 (`src/app/(app)/menus/release-actions.ts`, the `cheapVendors` query).
@@ -115,6 +121,8 @@ Expected: rejected offers are ignored, the same way costing and the buying
 list ignore them.
 
 ### 45. A second Nimco Foods vendor was created on submit
+
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#100, waiting to be merged.**
 
 Raised 2026-09-27. Nimco Foods was already on file. The first time, the ABN
 lookup button was clicked when it was added. On a later expense the lookup
@@ -159,6 +167,8 @@ doesn't know it) blocks submitting until it's corrected or cleared. Loose name
 matching is built too; the last-9-digit match is not.
 
 ### 49. A 1 L pack can't be added next to a loose 1 L, and no error shows
+
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#102, waiting to be merged.**
 
 Raised 2026-09-27, from Milk - Longlife DRY-0008. The item has a loose 1 L
 pack and a 6 L carton. Adding a 1 L pack, first on a receipt line and then
@@ -211,6 +221,8 @@ bmodi52-ux/fmb-purchasing#95, not merged yet.
 
 ### 50. Paste or drag in the screenshot on Add by photo or link
 
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#97, waiting to be merged.**
+
 Raised 2026-09-27. When a link can't be read, Pricelist → Add by photo or
 link offers "Choose the screenshot" (`pricelist/add-by-photo/add-by-photo-form.tsx`),
 which only opens a file picker. Also allow pasting a copied screenshot
@@ -218,6 +230,8 @@ which only opens a file picker. Also allow pasting a copied screenshot
 where the screenshot is usually already on the clipboard.
 
 ### 51. Choose a photo from the gallery on a phone
+
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#97, waiting to be merged.**
 
 Raised 2026-09-27. On a phone, it should be easy to upload a picture already
 in the gallery, not only to take a new one.
@@ -234,6 +248,8 @@ for that. **Decided 2026-09-27:** both pages.
 
 ### 42. The "Add another pack size" form is always open
 
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#98, waiting to be merged.**
+
 Raised 2026-09-27. On a price list item's page
 (`src/app/(app)/pricelist/[id]/page.tsx`, fields in `pack-fields.tsx`), the
 form for another pack size sits fully open below the existing sizes: Comes as,
@@ -243,6 +259,8 @@ if the page is waiting for something to be filled in. Collapse it to a single
 a size.
 
 ### 44. Merge two vendors
+
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#106, waiting to be merged.**
 
 Raised 2026-09-27. There is no way in the app to combine duplicate vendors.
 The only vendor merge was the one-off pass in migration 0034, which grouped
@@ -370,6 +388,8 @@ working, because it uses `auth.admin.createUser`. Then check the 6 existing
 accounts are all people we know.
 
 ### 37. The GitHub repository is public, and `main` is unprotected
+
+**2026-09-27:** removing uptime.yml is in bmodi52-ux/fmb-purchasing#96. Making the repo private is on hold: GitHub Free has no branch protection or rulesets for private repos (needs Pro, US$4/month), so "private" and "CI must pass" can't both be free. Waiting on a decision.
 
 Raised 2026-09-27. `bmodi52-ux/fmb-purchasing` is public, and `main` has no
 branch protection or ruleset. No passwords or keys are in it (the history was
@@ -513,6 +533,8 @@ Two-factor sign-in is #3.
 
 ### 43. A description field on vendors?
 
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#105, waiting to be merged.**
+
 Raised 2026-09-27. To decide whether vendors should have a description,
 e.g. what they supply or anything worth knowing about them. There isn't one
 at the moment: a vendor has its name, ABN, addresses, GST status and order
@@ -523,6 +545,8 @@ store's own name for the product. When an offer is made from a link, the
 name shown on the website is copied into it.
 
 ### 30. Old prices, without expiring them
+
+**Built 2026-09-27 in bmodi52-ux/fmb-purchasing#104, waiting to be merged.**
 
 Raised 2026-09-24 with #29. Prices never expire (decided that day), so an
 old web price can make a thaali look cheaper than it is; the date is shown
