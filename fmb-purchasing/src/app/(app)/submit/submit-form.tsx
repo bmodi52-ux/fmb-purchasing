@@ -410,13 +410,27 @@ export function SubmitForm({
    * keystrokes, and never while editing an existing expense — that name is
    * already settled.
    *
-   * Silent on failure. This is a convenience running in the background; the
-   * "Look up vendor" button is still there to try again and to say why.
+   * No longer silent when the ABN is wrong (#45). It used to be, and a receipt
+   * whose ABN was misread (Nimco Foods, 03 for 37) quietly became a second
+   * vendor. An ABN that fails the checksum, or that the ABR doesn't know, is
+   * now said beside the field and blocks submitting until it is corrected or
+   * cleared; the server refuses it too. Only an ABR that can't be reached
+   * stays silent, since that says nothing about the number.
    */
+  const [abnProblem, setAbnProblem] = useState<{ digits: string; message: string } | null>(null);
   useEffect(() => {
     if (seed) return;
     const digits = abn.replace(/\D/g, "");
-    if (digits.length !== 11) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (abnProblem && abnProblem.digits !== digits) setAbnProblem(null);
+    if (!digits) return;
+    if (digits.length !== 11) {
+      if (abnProblem?.digits !== digits) {
+        setAbnProblem({ digits, message: "An ABN has 11 digits. Check it against the receipt, or clear it." });
+      }
+      return;
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
     if (abrCheckedAbn.current === digits) return;
     // Let the local check settle first — it decides whether to ask at all.
     if (resolvingVendor) return;
@@ -426,22 +440,23 @@ export function SubmitForm({
     }
 
     abrCheckedAbn.current = digits;
-    let cancelled = false;
     void (async () => {
       try {
         const result = await lookupAbnAction(digits);
-        if (cancelled || "error" in result) return;
+        // Typed on since: this answer is for a number no longer in the field.
+        if (abrCheckedAbn.current !== digits) return;
+        if ("error" in result) {
+          if (result.reason === "invalid") setAbnProblem({ digits, message: result.error });
+          return;
+        }
         setVendorName((current) =>
           !current.trim() || current === nameFromExtraction.current ? result.name : current
         );
       } catch {
-        // Never blocks the form; the write path matches on its own regardless.
+        // The ABR couldn't be asked. The server asks again on submit.
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [abn, seed, resolvedVendor, resolvingVendor]);
+  }, [abn, seed, resolvedVendor, resolvingVendor, abnProblem]);
 
   // Fill the Vendor # the submitter did not have to know, once matching has
   // found it. Only when blank, so it never fights a number they typed.
@@ -957,6 +972,7 @@ export function SubmitForm({
       defaultsNote={defaultsNote}
       restoredDraft={restoredDraft}
       resolvedVendor={resolvedVendor}
+      abnProblem={abnProblem?.digits === abn.replace(/\D/g, "") ? abnProblem.message : null}
       resolvingVendor={resolvingVendor}
       onDiscard={discard}
       onSubmitted={clearDraft}
@@ -977,6 +993,8 @@ function ReviewForm(props: {
   vendorNumber: string;
   setVendorNumber: (v: string) => void;
   resolvedVendor: ResolvedVendor | null;
+  /** Why the ABN in the field can't be used (#45); blocks submitting. */
+  abnProblem: string | null;
   resolvingVendor: boolean;
   abn: string;
   setAbn: (v: string) => void;
@@ -1372,6 +1390,10 @@ function ReviewForm(props: {
 
   function handleSubmit() {
     setError(null);
+    if (props.abnProblem) {
+      setError(`ABN: ${props.abnProblem} Correct the ABN, or clear it.`);
+      return;
+    }
     if (!props.vendorName.trim()) {
       setError("Vendor is required.");
       return;
@@ -1538,7 +1560,8 @@ function ReviewForm(props: {
             <input
               value={props.abn}
               onChange={(e) => props.setAbn(e.target.value)}
-              className="flex-1 rounded-md border border-ink/15 bg-white px-3 py-2"
+              aria-invalid={props.abnProblem ? true : undefined}
+              className={`flex-1 rounded-md border bg-white px-3 py-2 ${props.abnProblem ? "border-danger" : "border-ink/15"}`}
             />
             <button
               type="button"
@@ -1549,8 +1572,14 @@ function ReviewForm(props: {
               {lookingUpAbn ? "Looking up…" : "Look up vendor"}
             </button>
           </div>
-          {abnNote && (
-            <p className={`mt-1 text-xs ${abnNote.warn ? "text-danger" : "text-ink/55"}`}>{abnNote.text}</p>
+          {props.abnProblem ? (
+            <p className="mt-1 text-xs text-danger" role="alert">
+              {props.abnProblem} Correct it, or clear the field.
+            </p>
+          ) : (
+            abnNote && (
+              <p className={`mt-1 text-xs ${abnNote.warn ? "text-danger" : "text-ink/55"}`}>{abnNote.text}</p>
+            )
           )}
         </Field>
       </div>

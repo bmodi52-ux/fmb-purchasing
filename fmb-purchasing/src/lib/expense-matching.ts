@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordVendorChange } from "@/lib/vendor-history";
+import { abnsCompatible, vendorNamesMatch } from "@/lib/vendor-names";
 import { canonicalUnitCode } from "@/lib/units";
 import { packShapeFromDescription, type PackShape } from "@/lib/pack-shape";
 import { isPackaging, packagingFromText } from "@/lib/pack-description";
@@ -65,9 +66,31 @@ async function findVendor(
 const VENDOR_MATCH_CANDIDATES = 20;
 
 /**
+ * A vendor whose name matches loosely (#45): case, punctuation and "Pty Ltd"
+ * ignored, and either side of "X T/A Y". So "Nimco Foods" finds "FULBECK PTY.
+ * LIMITED T/A Nimco Foods", which the ABR lookup had named it. A vendor with a
+ * different ABN is a different business and never matches.
+ *
+ * Reads the whole vendors table, which is a few dozen rows; the comparison
+ * isn't one Postgres can do with an index anyway.
+ */
+export async function findVendorByLooseName<T extends VendorCandidate & { name: string; abn: string | null }>(
+  admin: SupabaseClient,
+  name: string,
+  abn: string | null,
+  select: string
+): Promise<T | null> {
+  if (!name.trim()) return null;
+  const { data, error } = await admin.from("vendors").select(select).limit(2000);
+  if (error) throw error;
+  const rows = (data ?? []) as unknown as T[];
+  return preferredVendor(rows.filter((v) => vendorNamesMatch(v.name, name) && abnsCompatible(v.abn, abn)));
+}
+
+/**
  * Match the extracted/typed vendor against the Vendors table (§3.1.1).
- * ABN is the strongest signal when present; otherwise falls back to a
- * case-insensitive exact name match. No match -> new provisional vendor.
+ * ABN is the strongest signal when present; then a case-insensitive exact
+ * name, then a loose one (#45). No match -> new provisional vendor.
  */
 export async function matchOrCreateVendor(
   admin: SupabaseClient,
@@ -82,6 +105,9 @@ export async function matchOrCreateVendor(
 
   const byName = await findVendor(admin, "name", normalize(name));
   if (byName) return { id: byName, status: "matched" };
+
+  const loosely = await findVendorByLooseName(admin, name, cleanAbn, "id, name, abn, status, created_at");
+  if (loosely) return { id: loosely.id, status: "matched" };
 
   const { data: created, error } = await admin
     .from("vendors")
