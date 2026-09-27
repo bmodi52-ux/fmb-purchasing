@@ -39,6 +39,7 @@ Expected: flag any line where qty × unit price is more than a cent or so away
 from the line total, both on the form and after the receipt is read. When the
 line total and unit price divide to a whole number, suggest it ("58?").
 **Decided 2026-09-27: a mismatch blocks submitting**, not just a warning.
+Tolerance: 2 cents.
 
 Found along the way: the quantity on E-0081 was corrected to 58 by hand, but
 `normalized_quantity` stayed at 26.5 kg (it should be 29). Changing a line's
@@ -153,6 +154,10 @@ have caught it. Extra safeguards to consider alongside:
 Cleanup: fold V-0019 into V-0017 with #44 (merge vendors), or move E-0070
 across by hand.
 
+**Decided 2026-09-27 (later):** a bad ABN (fails the checksum, or the ABR
+doesn't know it) blocks submitting until it's corrected or cleared. Loose name
+matching is built too; the last-9-digit match is not.
+
 ### 49. A 1 L pack can't be added next to a loose 1 L, and no error shows
 
 Raised 2026-09-27, from Milk - Longlife DRY-0008. The item has a loose 1 L
@@ -225,7 +230,7 @@ well (`image/*,application/pdf,…`). With that mix, Android tends to open the
 Files app rather than the gallery, so photos are there but hard to find.
 Likely fix: a "Choose from gallery" button beside each camera button, with
 `accept="image/*"` and no `capture`. Android offers the gallery straight away
-for that.
+for that. **Decided 2026-09-27:** both pages.
 
 ### 42. The "Add another pack size" form is always open
 
@@ -264,6 +269,9 @@ descriptions. Every table that has pointed at vendors since then needs its own
 rule too: payee account history (0037), price alerts, procurement and menus,
 records, GST checks, notification rules and anything newer. Go through the
 migrations for `vendor_id` when this is picked up.
+
+Cleanup approved 2026-09-27, once built: V-0019 → V-0017 (Nimco Foods),
+V-0022 "Aldi" → V-0015.
 
 ### 12. Check on live what has never been seen working
 
@@ -376,6 +384,10 @@ and `uptime.yml`, every 15 minutes, uses about 2,900 on its own (each run is
 billed as a whole minute). Moving that check to a free service such as
 UptimeRobot, or running it hourly, keeps GitHub at $0.
 
+**Decided 2026-09-27:** the owner can bypass the rule, so scratchpad pushes
+keep working. The uptime check moves to UptimeRobot, once the user has
+created an account. `uptime.yml` is removed now, leaving no check until then.
+
 ### 38. Two-factor sign-in on every service account
 
 Raised 2026-09-27. Turn it on for Supabase, Vercel, GitHub, Crazy Domains,
@@ -400,6 +412,10 @@ sends mail from the main domain (Resend sends from `send.`), also add
 
 Raised 2026-09-27. Run it once from the Supabase dashboard, on live and the
 sandbox, and bring anything it flags back here. It's free.
+
+#36, #40 and #41: decided 2026-09-27 to do them in the in-app browser, with
+each change confirmed before it's saved. #40: the main domain has no MX or
+SPF records, so nothing sends from it and `v=spf1 -all` is safe.
 
 Items 18–50 came from the systems review of 2026-09-11, each with the timing
 decided for it. Everything marked "now" is in Done; what remains here was
@@ -502,6 +518,10 @@ e.g. what they supply or anything worth knowing about them. There isn't one
 at the moment: a vendor has its name, ABN, addresses, GST status and order
 lead days, but no free-text field.
 
+**Decided 2026-09-27:** not on the vendor page, but on each vendor offer: the
+store's own name for the product. When an offer is made from a link, the
+name shown on the website is copied into it.
+
 ### 30. Old prices, without expiring them
 
 Raised 2026-09-24 with #29. Prices never expire (decided that day), so an
@@ -519,3 +539,5 @@ costed at a 45+ day old price had the same figure as their newest), and
 dropping old prices would leave rarely bought items unpriced. Suggested:
 the age beside every price, highlighted past ~60 days on costing and the
 buying list, oldest listed on Needs attention.
+
+**Decided 2026-09-27:** flag, don't drop, as suggested above.
