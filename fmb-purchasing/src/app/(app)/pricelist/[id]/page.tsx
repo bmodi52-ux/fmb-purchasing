@@ -74,6 +74,7 @@ const OFFER_FIELD_LABELS: Record<string, string> = {
   vendor_id: "Vendor",
   brand: "Brand",
   vendor_sku: "Vendor's product code",
+  store_product_name: "Store's name for it",
   pack_size_id: "Pack size",
   pack_price: "Pack price",
   price_source: "Price from",
@@ -682,6 +683,10 @@ export default async function ItemDetailPage({
                       {o.brand && <span className="ml-1 text-xs text-ink/40">({o.brand})</span>}
                       {o.vendor_sku && <span className="ml-1 tabular-nums text-xs text-ink/40">#{o.vendor_sku}</span>}
                       <OfferStatus status={o.status} />
+                      {/* What the store calls it (#43). */}
+                      {o.store_product_name && (
+                        <span className="block text-xs text-ink/55">&ldquo;{o.store_product_name}&rdquo;</span>
+                      )}
                     </div>
                     <span className="tabular-nums text-ink/70">
                       {o.pack_price != null ? formatPackPrice(Number(o.pack_price), packShapeOf(p)) : "—"}
@@ -773,6 +778,7 @@ export default async function ItemDetailPage({
                             vendorId={o.vendor_id}
                             brand={o.brand}
                             vendorSku={o.vendor_sku}
+                            storeProductName={o.store_product_name}
                             packPrice={o.pack_price}
                             comments={o.comments}
                             vendors={vendors ?? []}

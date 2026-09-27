@@ -21,6 +21,7 @@ export function OfferForm({
   vendorId,
   brand,
   vendorSku,
+  storeProductName,
   packPrice,
   comments,
   vendors,
@@ -42,6 +43,8 @@ export function OfferForm({
   vendorId?: string | null;
   brand?: string | null;
   vendorSku?: string | null;
+  /** What the store calls it (#43), e.g. as its website shows it. */
+  storeProductName?: string | null;
   packPrice?: number | null;
   comments?: string | null;
   vendors: Vendor[];
@@ -101,6 +104,18 @@ export function OfferForm({
             Vendor&apos;s product code <span className="text-ink/40">(optional)</span>
           </span>
           <input name="vendor_sku" defaultValue={vendorSku ?? ""} placeholder="as printed on their invoice" className="input" />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+          <span className="text-ink/70">
+            Store&apos;s name for it <span className="text-ink/40">(optional)</span>
+          </span>
+          <input
+            name="store_product_name"
+            defaultValue={storeProductName ?? ""}
+            placeholder="e.g. Tilda Pure Basmati Rice 10kg, as their website shows it"
+            className="input"
+          />
         </label>
 
         <div className="flex gap-2">
