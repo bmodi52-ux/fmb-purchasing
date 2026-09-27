@@ -32,6 +32,11 @@ const GROUPS: { kind: QueueItemKind; heading: string; why: string }[] = [
     heading: "Unconfirmed pack contents",
     why: "How much is actually in the pack is not on the receipt. Until someone says, every per-unit cost derived from it is provisional.",
   },
+  {
+    kind: "old_price",
+    heading: "Oldest prices",
+    why: "Prices never expire, so these are still what costing and the buying list use. Past two months they are worth checking: a new receipt, a fresh link or a phone call updates them.",
+  },
 ];
 
 export default async function ReviewQueuePage() {

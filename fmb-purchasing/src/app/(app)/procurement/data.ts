@@ -213,7 +213,7 @@ async function loadBuyOptions(
   const offerIds = priced.map((c) => c.offer_id as string);
   const vendorIds = [...new Set(priced.map((c) => c.vendor_id as string))];
   const [{ data: offers }, { data: vendors }] = await Promise.all([
-    admin.from("pricelist_items").select("id, brand, sale_price, sale_ends_on").in("id", offerIds),
+    admin.from("pricelist_items").select("id, brand, sale_price, sale_ends_on, price_set_at").in("id", offerIds),
     admin.from("vendors").select("id, name").in("id", vendorIds),
   ]);
   const offerById = new Map((offers ?? []).map((o) => [o.id as string, o]));
@@ -250,6 +250,8 @@ async function loadBuyOptions(
       price: soldLoose ? perUnit! : now.price,
       onSpecial: now.onSpecial,
       saleEndsOn: now.onSpecial ? ((offer?.sale_ends_on as string | null) ?? null) : null,
+      // A provisional "-infinity" isn't a date to show.
+      priceDate: /^\d{4}-\d{2}-\d{2}/.test(String(offer?.price_set_at ?? "")) ? String(offer!.price_set_at).slice(0, 10) : null,
     };
     const itemId = c.item_id as string;
     result.set(itemId, [...(result.get(itemId) ?? []), option]);

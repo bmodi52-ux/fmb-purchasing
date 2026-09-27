@@ -71,6 +71,8 @@ export type BuyOption = {
   price: number;
   onSpecial: boolean;
   saleEndsOn: string | null;
+  /** When the regular price was set, YYYY-MM-DD, so an old one shows (#30). */
+  priceDate?: string | null;
 };
 
 export type CheapestBuy = BuyOption & {

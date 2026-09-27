@@ -292,12 +292,19 @@ export function priceFromLabel(c: PriceCandidate & { brandMissing?: boolean }): 
   return c.brandMissing ? `${label} — the preferred brand has no price yet` : label;
 }
 
-export function priceFor(prices: ItemPrices | undefined): { perUnit: number | null; basis: PriceBasis; from?: string } {
+export function priceFor(prices: ItemPrices | undefined): {
+  perUnit: number | null;
+  basis: PriceBasis;
+  from?: string;
+  /** When the price was set, YYYY-MM-DD, so its age can be shown (#30). */
+  priceDate?: string | null;
+} {
   if (prices?.cheapest && prices.cheapest.perUnit > 0) {
     return {
       perUnit: prices.cheapest.perUnit,
       basis: prices.cheapest.source === "paid" ? "cheapest_paid" : "cheapest_quoted",
       from: priceFromLabel(prices.cheapest),
+      priceDate: prices.cheapest.date,
     };
   }
   if (prices?.latestPaid != null && prices.latestPaid > 0) {
@@ -317,6 +324,8 @@ export type CostedLine = RequirementLine & {
   basis: PriceBasis;
   /** Where the price is from, when known: "Taj at Coles, quoted 24/09". */
   from?: string;
+  /** When that price was set, YYYY-MM-DD (#30). */
+  priceDate?: string | null;
   cost: number | null;
 };
 
@@ -336,8 +345,8 @@ export function costMenuDay(
   pricesByItem: Map<string, ItemPrices>
 ): MenuDayCost {
   const lines = requirementsFor(menu, thaalis).map((line) => {
-    const { perUnit, basis, from } = priceFor(pricesByItem.get(line.itemId));
-    return { ...line, perUnit, basis, from, cost: perUnit == null ? null : round2(line.quantity * perUnit) };
+    const { perUnit, basis, from, priceDate } = priceFor(pricesByItem.get(line.itemId));
+    return { ...line, perUnit, basis, from, priceDate, cost: perUnit == null ? null : round2(line.quantity * perUnit) };
   });
 
   const total = round2(lines.reduce((sum, l) => sum + (l.cost ?? 0), 0));
