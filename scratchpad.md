@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #51.** To see what's open, list the headings
+**Next number: #52.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -188,6 +188,21 @@ link offers "Choose the screenshot" (`pricelist/add-by-photo/add-by-photo-form.t
 which only opens a file picker. Also allow pasting a copied screenshot
 (Ctrl+V) and dragging an image file onto it. That's quicker on a computer,
 where the screenshot is usually already on the clipboard.
+
+### 51. Choose a photo from the gallery on a phone
+
+Raised 2026-09-27. On a phone, it should be easy to upload a picture already
+in the gallery, not only to take a new one.
+
+Checked in the code that day. Both places that take photos have a
+camera-only button (`capture="environment"`, which skips straight to the
+camera): "Take a photo of the receipt" on Submit, and "Take a photo" on Add by
+photo or link. The other picker on each page accepts PDFs and other files as
+well (`image/*,application/pdf,…`). With that mix, Android tends to open the
+Files app rather than the gallery, so photos are there but hard to find.
+Likely fix: a "Choose from gallery" button beside each camera button, with
+`accept="image/*"` and no `capture`. Android offers the gallery straight away
+for that.
 
 ### 42. The "Add another pack size" form is always open
 
