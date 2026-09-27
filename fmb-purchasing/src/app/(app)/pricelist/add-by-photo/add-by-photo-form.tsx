@@ -112,6 +112,7 @@ export function AddByPhotoForm({
   // A shop's page, pasted (#29).
   const [link, setLink] = useState("");
   const [linkFailed, setLinkFailed] = useState(false);
+  const [draggingOver, setDraggingOver] = useState(false);
   const [source, setSource] = useState<ReadPhotosResult["source"]>(null);
   /** The store as the reading recognised it, so its id goes with the save. */
   const [readVendor, setReadVendor] = useState<{ id: string; name: string } | null>(null);
@@ -128,6 +129,10 @@ export function AddByPhotoForm({
     const input = e.currentTarget;
     const chosen = [...(input.files ?? [])];
     input.value = "";
+    await addFiles(chosen);
+  }
+
+  async function addFiles(chosen: File[]) {
     setError(null);
     const added: Photo[] = [];
     for (const file of chosen.slice(0, MAX_PHOTOS - photos.length)) {
@@ -140,6 +145,27 @@ export function AddByPhotoForm({
     }
     setPhotos((current) => [...current, ...added].slice(0, MAX_PHOTOS));
   }
+
+  /**
+   * A screenshot pasted anywhere on the page (#50), as on Submit. Only while
+   * photos are being gathered, and only a file on the clipboard: pasting a
+   * link into its box is text and goes where it was typed.
+   */
+  useEffect(() => {
+    if (phase !== "capture") return;
+    function onPaste(event: ClipboardEvent) {
+      const files = Array.from(event.clipboardData?.items ?? [])
+        .filter((i) => i.kind === "file")
+        .map((i) => i.getAsFile())
+        .filter((f): f is File => f !== null);
+      if (files.length === 0) return;
+      event.preventDefault();
+      void addFiles(files);
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, photos.length]);
 
   function removePhoto(index: number) {
     setPhotos((current) => {
@@ -338,7 +364,28 @@ export function AddByPhotoForm({
       </div>
 
       {(phase === "capture" || phase === "reading") && (
-        <div className="flex flex-col gap-4 rounded-lg border-2 border-dashed border-ink/20 bg-white/50 p-5">
+        <div
+          // A drop target, as the dashed border suggests (#50). dragover has to
+          // be cancelled or the browser opens the dropped file instead.
+          onDragOver={(e) => {
+            if (phase !== "capture") return;
+            e.preventDefault();
+            setDraggingOver(true);
+          }}
+          onDragLeave={(e) => {
+            if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+            setDraggingOver(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDraggingOver(false);
+            if (phase !== "capture") return;
+            void addFiles([...(e.dataTransfer.files ?? [])]);
+          }}
+          className={`flex flex-col gap-4 rounded-lg border-2 border-dashed bg-white/50 p-5 transition-colors ${
+            draggingOver ? "border-gold-deep bg-gold/10" : "border-ink/20"
+          }`}
+        >
           {photos.length > 0 && (
             <ul className="flex flex-wrap gap-2">
               {photos.map((p, i) => (
@@ -388,6 +435,15 @@ export function AddByPhotoForm({
                   >
                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={addPhotos} />
                     {photos.length === 0 ? "Take a photo" : "Add another photo"}
+                  </label>
+                )}
+                {/* Phones: straight to the gallery (#51). The picker beside it
+                    also takes PDFs and spreadsheets, and with that mix Android
+                    opens Files rather than the gallery. */}
+                {photos.length < MAX_PHOTOS && (
+                  <label className="cursor-pointer rounded-md border border-ink/15 bg-white px-4 py-3 text-sm text-ink md:hidden">
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={addPhotos} />
+                    Choose from gallery
                   </label>
                 )}
                 {photos.length < MAX_PHOTOS && (
@@ -447,6 +503,9 @@ export function AddByPhotoForm({
                       <p>
                         Take a screenshot of that page, with the price showing, and read it instead. The link is still
                         kept with the price.
+                      </p>
+                      <p className="text-xs text-ink/60">
+                        Choose it, drag it onto this box, or paste it with Ctrl+V.
                       </p>
                       <label className="btn btn-primary cursor-pointer self-start">
                         <input type="file" accept="image/*" className="hidden" onChange={addPhotos} />
