@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #52.** To see what's open, list the headings
+**Next number: #53.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -22,6 +22,26 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 ## Bugs
 
 <!-- What happened, where, and what you expected instead. -->
+
+### 52. A line whose qty × unit price ≠ line total is accepted
+
+Raised 2026-09-27. E-0081 (ALDI, invoice 000168) went through with
+"Spaghetti 500g: 53 × $0.89 = $51.62", although 53 × 0.89 is $47.17. The
+line total is right: $51.62 ÷ 0.89 is exactly 58, and the three lines add up
+to the receipt's $112.02. So the quantity was misread (58 read as 53), and
+because the total still matched, nothing flagged it.
+
+Harm: the Pricelist works from the quantity. It saved 26.5 kg instead of
+29 kg, so spaghetti costs $1.95/kg in it instead of $1.78/kg, which could set
+off false price alerts.
+
+Expected: flag any line where qty × unit price is more than a cent or so away
+from the line total, both on the form and after the receipt is read. When the
+line total and unit price divide to a whole number, suggest it ("58?").
+Needs deciding: whether it blocks submitting or only warns.
+
+Data to fix once confirmed against the receipt: E-0081 spaghetti quantity
+53 → 58 (normalised 26.5 → 29 kg).
 
 ### 46. Old prices undercut current ones in thaali costing
 
