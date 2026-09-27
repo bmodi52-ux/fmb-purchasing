@@ -74,8 +74,11 @@ export async function TodayPanel({ user }: { user: User }) {
       note: money(toPay.data.reduce((sum, e) => sum + Number(e.total ?? 0), 0)),
     });
 
-  if (queue && queue.items.length > 0)
-    tiles.push({ href: "/review-queue", figure: String(queue.items.length), label: "need attention" });
+  // Old prices (#30) are a list to work through when there's time, not a
+  // decision anyone is waiting on, so they don't count towards the tile.
+  const waitingOnSomeone = queue?.items.filter((i) => i.kind !== "old_price").length ?? 0;
+  if (waitingOnSomeone > 0)
+    tiles.push({ href: "/review-queue", figure: String(waitingOnSomeone), label: "need attention" });
 
   if (menuToday.data && menuToday.data.length > 0) {
     const thaalis = menuToday.data.reduce(

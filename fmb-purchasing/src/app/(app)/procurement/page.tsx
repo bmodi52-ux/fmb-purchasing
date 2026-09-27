@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { formatPlainDate } from "@/lib/format";
+import { describePriceAge, isOldPrice, priceAgeDays } from "@/lib/price-age";
 import { SECTIONS, SECTION_LABEL, type SectionKey } from "@/lib/menu-sections";
 import { isoDate, rangeFromParams } from "@/lib/buying-week";
 import { loadProcurement, type ProcurementLine } from "./data";
@@ -206,6 +207,12 @@ export default async function ProcurementPage({
                                 </span>
                               )}
                               {line.buy.brandMissing && <span className="text-ink/50"> · the preferred brand has no price yet</span>}
+                              {/* Still the price used, but worth checking (#30). */}
+                              {isOldPrice(line.buy.priceDate, today) && (
+                                <span className="ml-1 rounded bg-gold/20 px-1 text-ink/70">
+                                  price {describePriceAge(priceAgeDays(line.buy.priceDate, today)!)}
+                                </span>
+                              )}
                             </p>
                           )}
 

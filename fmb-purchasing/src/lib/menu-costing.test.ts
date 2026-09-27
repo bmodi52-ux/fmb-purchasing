@@ -424,6 +424,7 @@ describe("the cheapest price wins (#29)", () => {
       perUnit: 6.6,
       basis: "cheapest_quoted",
       from: "Tilda at Costco, quoted 12/09",
+      priceDate: "2026-09-12",
     });
   });
 

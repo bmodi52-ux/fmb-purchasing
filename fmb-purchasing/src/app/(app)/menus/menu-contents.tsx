@@ -13,6 +13,19 @@ import {
   type MenuExtra,
 } from "@/lib/menu-costing";
 import { REMOVE_BUTTON } from "./[date]/styles";
+import { describePriceAge, isOldPrice, priceAgeDays } from "@/lib/price-age";
+import { todayIso } from "@/lib/periods-data";
+
+/** A price past 60 days, said beside it (#30). Still counted: prices never expire. */
+function OldPriceNote({ date }: { date: string | null | undefined }) {
+  const today = todayIso();
+  if (!isOldPrice(date, today)) return null;
+  return (
+    <span className="mt-0.5 block w-fit rounded bg-gold/20 px-1 text-xs text-ink/70">
+      {describePriceAge(priceAgeDays(date, today)!)}
+    </span>
+  );
+}
 
 /**
  * The parts of a menu that are the same wherever the menu lives: on a day, or
@@ -339,6 +352,7 @@ export function CostLinesTable({ lines }: { lines: CostedLine[] }) {
                       {money(line.perUnit)}/{line.baseUnitCode}
                     </span>
                     <span className="block text-xs text-ink/45">{line.from ?? PRICE_BASIS_LABEL[line.basis]}</span>
+                    <OldPriceNote date={line.priceDate} />
                   </>
                 )}
               </td>

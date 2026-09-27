@@ -2,6 +2,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { categoryLabelsById } from "@/lib/categories";
 import { describePack } from "@/lib/pack-description";
+import { OLD_PRICE_DAYS, describePriceAge, priceAgeDays } from "@/lib/price-age";
+import { todayIso } from "@/lib/periods-data";
 
 /**
  * Everything currently waiting on a person's judgement, in one place.
@@ -24,7 +26,8 @@ export type QueueItemKind =
   | "uncategorised_line"
   | "pending_vendor"
   | "pending_item"
-  | "unconfirmed_pack";
+  | "unconfirmed_pack"
+  | "old_price";
 
 export type QueueItem = {
   kind: QueueItemKind;
@@ -44,6 +47,12 @@ export type ReviewQueue = {
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
+/** The date `days` before today in Sydney, YYYY-MM-DD. */
+function daysAgo(days: number): string {
+  const [y, m, d] = todayIso().split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d! - days)).toISOString().slice(0, 10);
+}
+
 export async function loadReviewQueue(): Promise<ReviewQueue> {
   const admin = createAdminClient();
 
@@ -55,6 +64,7 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
     { data: packs },
     { data: categoryRows },
     { data: units },
+    { data: oldPrices },
   ] = await Promise.all([
     // Money recorded against an expense that nobody has said what it was for.
     // Top of the list: it is the only entry here that represents spend with no
@@ -95,6 +105,19 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
     admin.from("categories").select("id, name, parent_category_id"),
 
     admin.from("units").select("id, label"),
+
+    // The oldest live prices (#30): still used, since prices never expire,
+    // but past OLD_PRICE_DAYS they are worth a phone call or a fresh link.
+    admin
+      .from("pricelist_items")
+      .select("id, pack_price, price_set_at, item_pack_sizes ( items ( id, name ) ), vendors ( name )")
+      .neq("status", "rejected")
+      .not("vendor_id", "is", null)
+      .not("pack_price", "is", null)
+      .lt("price_set_at", daysAgo(OLD_PRICE_DAYS))
+      .gt("price_set_at", "1900-01-01")
+      .order("price_set_at")
+      .limit(20),
   ]);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id as string, u.label as string]));
 
@@ -170,6 +193,24 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
       href: `/pricelist/${row.item_id}`,
       weight: 4,
       amount: null,
+    });
+  }
+
+  const today = todayIso();
+  for (const row of oldPrices ?? []) {
+    const pack = row.item_pack_sizes as unknown as { items: { id: string; name: string } | null } | null;
+    const vendor = row.vendors as unknown as { name: string } | null;
+    const day = String(row.price_set_at).slice(0, 10);
+    const age = priceAgeDays(day, today) ?? 0;
+    items.push({
+      kind: "old_price",
+      id: row.id as string,
+      title: `${pack?.items?.name ?? "Unnamed item"} at ${vendor?.name ?? "a store"}`,
+      detail: `${money(Number(row.pack_price))}, set ${day.split("-").reverse().join("/")} — ${describePriceAge(age)}`,
+      href: pack?.items?.id ? `/pricelist/${pack.items.id}` : "/pricelist",
+      weight: 5,
+      // Oldest first: the sort below puts the larger amount first.
+      amount: age,
     });
   }
 
