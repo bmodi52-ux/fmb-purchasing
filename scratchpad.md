@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #49.** To see what's open, list the headings
+**Next number: #50.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -129,6 +129,33 @@ have caught it. Extra safeguards to consider alongside:
 
 Cleanup: fold V-0019 into V-0017 with #44 (merge vendors), or move E-0070
 across by hand.
+
+### 49. A 1 L pack can't be added next to a loose 1 L, and no error shows
+
+Raised 2026-09-27, from Milk - Longlife DRY-0008. The item has a loose 1 L
+pack and a 6 L carton. Adding a 1 L pack, first on a receipt line and then
+on the item page, didn't create it, and nothing said why.
+
+Cause: a pack must be unique on item, quantity, unit, count and label
+(`item_pack_sizes_shape_key`, migration 0009). Packaging and "loose" came
+later (0040) and were never added to that key, so a 1 L bottle and a loose
+1 L count as the same pack.
+- Item page: `addPackSize` (`src/app/(app)/pricelist/actions.ts`) ignores
+  the insert error, so the form just reloads.
+- Submit: `createChosenPackSize` (`src/lib/expense-matching.ts`) looks for
+  an existing pack by quantity, unit and count only, finds the loose 1 L and
+  quietly reuses it. That submission put a pending ALDI offer at $1.85 on the
+  loose 1 L pack (created 8:07 pm).
+
+Expected: a 1 L bottle and a loose 1 L can both exist, and a pack that
+really does exist already gets a clear message, not silence.
+
+Likely fix: add `sold_loose` and `packaging` to the key (new migration),
+have both paths match on them, and show errors on the item-page form.
+`merge_items` and `matchOrCreatePackSize` also match packs by shape, so check
+them at the same time.
+
+Cleanup once built: move the pending ALDI $1.85 offer onto the new 1 L pack.
 
 ## Improvements
 
