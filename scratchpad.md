@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #50.** To see what's open, list the headings
+**Next number: #51.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -177,6 +177,17 @@ site does control:
   again updates it straight away.
 - The title and body. "Mashk" could lead the title, e.g. "Mashk · Submitted
   E-0077", at the cost of room for the rest.
+
+Decided the same day: "Mashk · " leads every push title. Built in
+bmodi52-ux/fmb-purchasing#95, not merged yet.
+
+### 50. Paste or drag in the screenshot on Add by photo or link
+
+Raised 2026-09-27. When a link can't be read, Pricelist → Add by photo or
+link offers "Choose the screenshot" (`pricelist/add-by-photo/add-by-photo-form.tsx`),
+which only opens a file picker. Also allow pasting a copied screenshot
+(Ctrl+V) and dragging an image file onto it. That's quicker on a computer,
+where the screenshot is usually already on the clipboard.
 
 ### 42. The "Add another pack size" form is always open
 
