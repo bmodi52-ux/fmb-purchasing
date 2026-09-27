@@ -389,7 +389,7 @@ accounts are all people we know.
 
 ### 37. The GitHub repository is public, and `main` is unprotected
 
-**2026-09-27:** removing uptime.yml is in bmodi52-ux/fmb-purchasing#96. Making the repo private is on hold: GitHub Free has no branch protection or rulesets for private repos (needs Pro, US$4/month), so "private" and "CI must pass" can't both be free. Waiting on a decision.
+**2026-09-27:** removing uptime.yml is in bmodi52-ux/fmb-purchasing#96. Making the repo private is on hold: GitHub Free has no branch protection or rulesets for private repos (needs Pro, US$4/month), so "private" and "CI must pass" can't both be free. On hold (2026-09-28): the user will decide and do this later; not to be done by Claude until asked.
 
 Raised 2026-09-27. `bmodi52-ux/fmb-purchasing` is public, and `main` has no
 branch protection or ruleset. No passwords or keys are in it (the history was
