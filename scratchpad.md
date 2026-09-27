@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #43.** To see what's open, list the headings
+**Next number: #44.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -266,6 +266,13 @@ Two-factor sign-in is #3.
 ## Ideas
 
 <!-- Worth considering, not yet decided. -->
+
+### 43. A description field on vendors?
+
+Raised 2026-09-27. To decide whether vendors should have a description,
+e.g. what they supply or anything worth knowing about them. There isn't one
+at the moment: a vendor has its name, ABN, addresses, GST status and order
+lead days, but no free-text field.
 
 ### 30. Old prices, without expiring them
 
