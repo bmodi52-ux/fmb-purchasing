@@ -548,6 +548,7 @@ export async function saveProductsAction(input: {
       // This store's offer on it, in this brand: two brands of the same size
       // at one shop are two prices, so the cheapest of each can be found.
       const brand = p.brand?.trim() || null;
+      const storeName = p.printedName?.trim() || null;
       const { data: offers } = await admin
         .from("pricelist_items")
         .select("id, status, pack_price, brand, created_at")
@@ -576,12 +577,16 @@ export async function saveProductsAction(input: {
         // special, source and date with it; one kept for review changes none.
         const { data: onFile } = await admin
           .from("pricelist_items")
-          .select("sale_price")
+          .select("sale_price, store_product_name")
           .eq("id", existingOffer.id)
           .maybeSingle();
         const currentSale = onFile?.sale_price != null ? Number(onFile.sale_price) : null;
         if (!keptPrice && currentSale !== sale.sale_price) {
           changes.sale_price = { old: currentSale, new: sale.sale_price };
+        }
+        // The store's own name for it (#43), when the offer has none yet.
+        if (storeName && !onFile?.store_product_name) {
+          changes.store_product_name = { old: null, new: storeName };
         }
         if (Object.keys(changes).length > 0 || !keptPrice) {
           await admin
@@ -605,6 +610,8 @@ export async function saveProductsAction(input: {
           vendor_id: vendorId,
           brand,
           pack_price: packPrice,
+          // What the page or label calls it (#43).
+          store_product_name: storeName,
           ...sale,
           ...provenance,
           status,
