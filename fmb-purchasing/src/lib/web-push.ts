@@ -25,6 +25,14 @@ export function pushConfigured(): boolean {
 }
 
 /**
+ * Chrome heads every web push with the site's address and gives a site no way
+ * to replace it, so the system's name leads the title instead (#48).
+ */
+export function pushTitle(title: string): string {
+  return title.startsWith("Mashk") ? title : `Mashk · ${title}`;
+}
+
+/**
  * Sends to every device each person has allowed. A device the push service
  * reports gone (404/410) is forgotten, so a lost phone does not fail every
  * send for ever. Never throws.
@@ -50,7 +58,7 @@ export async function sendPush(admin: SupabaseClient, sends: { userId: string; p
         try {
           await webpush.sendNotification(
             { endpoint: s.endpoint as string, keys: { p256dh: s.p256dh as string, auth: s.auth as string } },
-            JSON.stringify(payload),
+            JSON.stringify({ ...payload, title: pushTitle(payload.title) }),
             { TTL: 60 * 60 * 24 }
           );
           delivered.push(s.id as string);
