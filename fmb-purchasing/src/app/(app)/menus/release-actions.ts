@@ -82,11 +82,14 @@ export async function releaseDay(formData: FormData) {
     null;
 
   // The cheapest this was bought for lately is the vendor to try first; the
-  // person buying can change it.
+  // person buying can change it. Not from a rejected offer (#47): costing and
+  // the buying list ignore those, and a store somebody decided against
+  // shouldn't come back as the suggestion.
   const { data: cheapVendors } = await admin
     .from("offer_unit_costs")
     .select("item_id, vendor_id, cost_per_base_unit")
     .in("item_id", itemIds)
+    .neq("status", "rejected")
     .order("cost_per_base_unit");
   const vendorFor = new Map<string, string>();
   for (const row of cheapVendors ?? []) {
