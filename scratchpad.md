@@ -44,16 +44,21 @@ then the exact name. The misread ABN matched nothing. The name didn't match
 either, because V-0017 had taken the ABR's legal name. So a new vendor was
 made, and nothing checked it before submit.
 
-03 003 900 427 fails the ABN checksum (37 003 900 427 passes), so this was
-catchable. Possible fixes:
-- Validate the ABN checksum on extraction and on submit. A number that fails
-  is flagged as a likely misread and never used to create a vendor.
+**Decided 2026-09-27: the ABN check always runs, whether or not anyone clicks
+the button.** That is what the ABR lookup was built for. The order when a
+receipt has an ABN:
+1. Is that ABN already on a vendor? If so, use that vendor.
+2. If not, look it up with the ABR automatically, before the vendor can be
+   created. A number the ABR doesn't know, or one that fails the checksum,
+   means the ABN was misread. It gets flagged for the submitter and is never
+   used to create a vendor.
+
+03 003 900 427 fails the ABN checksum (37 003 900 427 passes), so step 2 would
+have caught it. Extra safeguards to consider alongside:
 - Match on the last 9 digits (the ACN part of a company ABN) when the full
   ABN doesn't match, and ask "Is this V-0017?"
 - Match names loosely: ignore case, "Pty Ltd" and the like, and match either
   side of "T/A".
-- Run the ABR check automatically on a new vendor, rather than only when the
-  button is clicked.
 
 Cleanup: fold V-0019 into V-0017 with #44 (merge vendors), or move E-0070
 across by hand.
