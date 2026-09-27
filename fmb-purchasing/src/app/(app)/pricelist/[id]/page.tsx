@@ -923,20 +923,25 @@ export default async function ItemDetailPage({
           {(packSizes ?? []).length === 0 && <p className="text-sm text-ink/50">No pack sizes yet.</p>}
         </div>
 
+        {/* Collapsed behind its button (#42): laid out open, the empty fields
+            read as something the page was waiting for. Open only when the item
+            has no pack sizes yet, when adding one is the obvious next step. */}
         {canEdit && (
-          <form action={addPackSize} className="mt-5 flex flex-col gap-3 border-t border-ink/10 pt-4">
-            <input type="hidden" name="item_id" value={item.id} />
-            <p className="text-xs font-medium uppercase tracking-wide text-ink/40">Add another pack size</p>
-            <FormResetBoundary>
-              <PackFields
-                units={units ?? []}
-                defaults={{ soldAs: "", innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
-              />
-            </FormResetBoundary>
-            <SubmitButton className="btn btn-secondary self-start">
+          <details className="mt-5 flex flex-col border-t border-ink/10 pt-4" open={(packSizes ?? []).length === 0}>
+            <summary className="btn btn-secondary w-fit cursor-pointer list-none [&::-webkit-details-marker]:hidden">
               + Add pack size
-            </SubmitButton>
-          </form>
+            </summary>
+            <form action={addPackSize} className="mt-3 flex flex-col gap-3">
+              <input type="hidden" name="item_id" value={item.id} />
+              <FormResetBoundary>
+                <PackFields
+                  units={units ?? []}
+                  defaults={{ soldAs: "", innerQuantity: "1", innerUnitId: item.canonical_unit_id, packCount: "1" }}
+                />
+              </FormResetBoundary>
+              <SubmitButton className="btn btn-primary self-start">Add pack size</SubmitButton>
+            </form>
+          </details>
         )}
       </section>
         </>
