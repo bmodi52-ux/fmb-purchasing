@@ -41,7 +41,16 @@ import {
 } from "./reconciliation-strip";
 import { shrinkImageForUpload, MAX_UPLOAD_BYTES, formatBytes } from "@/lib/image-resize";
 import { normalizeReceiptDate } from "@/lib/format";
-import { round2, sumLines, residualFor, claimVsReceipt, totalChangedFromScan } from "@/lib/expense-money";
+import {
+  round2,
+  sumLines,
+  residualFor,
+  claimVsReceipt,
+  totalChangedFromScan,
+  lineMathMessage,
+  lineMathMismatch,
+  rescaleNormalizedQuantity,
+} from "@/lib/expense-money";
 import { discountAmount, discountBase } from "@/lib/discount-percent";
 import { packDefaultsForLine, packFromFields } from "@/lib/new-pack";
 import type { PackFieldValues } from "../pricelist/pack-fields";
@@ -1202,6 +1211,11 @@ function ReviewForm(props: {
       prev.map((it) => {
         if (it.key !== key) return it;
         const next = { ...it, ...patch };
+        // The kilos or litres are per-unit amount × quantity, so they follow a
+        // corrected quantity (#52) — otherwise 53 → 58 bags stays at 26.5 kg.
+        if (patch.quantity !== undefined && patch.normalizedQuantity === undefined) {
+          next.normalizedQuantity = rescaleNormalizedQuantity(it.normalizedQuantity, it.quantity, next.quantity);
+        }
         if (patch.quantity !== undefined || patch.unitPrice !== undefined) {
           if (next.quantity != null && next.unitPrice != null) {
             next.lineTotal = round2(next.quantity * next.unitPrice);
@@ -1428,6 +1442,14 @@ function ReviewForm(props: {
     if (needsMismatchConfirm) {
       setError("The lines don't match the receipt total — tick \"Submit anyway\" above the button, or fix the lines.");
       return;
+    }
+    // Refused, not confirmable (#52): the quantity is what the Pricelist costs from.
+    for (const it of props.items) {
+      const mismatch = lineMathMismatch(it);
+      if (mismatch) {
+        setError(lineMathMessage(it.description, it, mismatch));
+        return;
+      }
     }
     startSubmit(async () => {
       const payload = {
@@ -1724,6 +1746,7 @@ function ReviewForm(props: {
                 />
               </label>
             </div>
+            <LineMathNote item={item} onUseQuantity={(q) => updateItem(item.key, { quantity: q })} />
 
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink/60">
               <label className="flex items-center gap-2">
@@ -1927,6 +1950,13 @@ function ReviewForm(props: {
                   </button>
                 </td>
               </tr>
+              {lineMathMismatch(item) && (
+                <tr>
+                  <td colSpan={11} className="px-1 pb-2">
+                    <LineMathNote item={item} onUseQuantity={(q) => updateItem(item.key, { quantity: q })} />
+                  </td>
+                </tr>
+              )}
               {item.notOnReceipt && (
                 <tr className="bg-gold/5">
                   <td colSpan={11} className="px-1 pb-2">
@@ -2068,6 +2098,36 @@ function NotOnReceiptNote({ value, onChange }: { value: string; onChange: (v: st
         className={`w-full rounded border bg-white px-2 py-1 text-sm text-ink ${value.trim() ? "border-ink/15" : "border-gold-deep/50"}`}
       />
     </label>
+  );
+}
+
+/**
+ * A line whose quantity × unit price isn't its total (#52), said on the line
+ * itself, with the whole-number quantity that fits offered as one tap.
+ */
+function LineMathNote({
+  item,
+  onUseQuantity,
+}: {
+  item: { quantity: number | null; unitPrice: number | null; lineTotal: number };
+  onUseQuantity: (quantity: number) => void;
+}) {
+  const mismatch = lineMathMismatch(item);
+  if (!mismatch) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-xs text-danger" role="alert">
+      {item.quantity} × {formatMoney(item.unitPrice ?? 0)} is {formatMoney(mismatch.expected)}, not{" "}
+      {formatMoney(item.lineTotal)}.
+      {mismatch.suggestedQuantity != null && (
+        <button
+          type="button"
+          onClick={() => onUseQuantity(mismatch.suggestedQuantity!)}
+          className="rounded border border-danger/40 px-2 py-0.5 font-medium hover:bg-danger/10"
+        >
+          Quantity {mismatch.suggestedQuantity}?
+        </button>
+      )}
+    </p>
   );
 }
 

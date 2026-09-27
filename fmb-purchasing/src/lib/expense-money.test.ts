@@ -12,6 +12,8 @@ import {
   residualFor,
   claimVsReceipt,
   totalChangedFromScan,
+  lineMathMismatch,
+  rescaleNormalizedQuantity,
   type MoneyLine,
 } from "./expense-money.ts";
 
@@ -280,5 +282,47 @@ describe("totalChangedFromScan (#51)", () => {
     assert.equal(totalChangedFromScan(990, 990), false);
     assert.equal(totalChangedFromScan(990.004, 990), false);
     assert.equal(totalChangedFromScan(1140, null), false, "nothing was scanned");
+  });
+});
+
+describe("lineMathMismatch (#52)", () => {
+  test("E-0081: 53 × $0.89 is not $51.62, and 58 is suggested", () => {
+    assert.deepEqual(lineMathMismatch({ quantity: 53, unitPrice: 0.89, lineTotal: 51.62 }), {
+      expected: 47.17,
+      suggestedQuantity: 58,
+    });
+  });
+
+  test("a line that adds up passes", () => {
+    assert.equal(lineMathMismatch({ quantity: 58, unitPrice: 0.89, lineTotal: 51.62 }), null);
+  });
+
+  test("a weighed line rounded on the receipt passes", () => {
+    assert.equal(lineMathMismatch({ quantity: 0.734, unitPrice: 12.99, lineTotal: 9.53 }), null);
+    assert.equal(lineMathMismatch({ quantity: 3, unitPrice: 0.333, lineTotal: 1 }), null);
+  });
+
+  test("a gap with no whole-number explanation suggests nothing", () => {
+    assert.deepEqual(lineMathMismatch({ quantity: 2, unitPrice: 5, lineTotal: 8 }), {
+      expected: 10,
+      suggestedQuantity: null,
+    });
+  });
+
+  test("nothing to check without both quantity and unit price", () => {
+    assert.equal(lineMathMismatch({ quantity: null, unitPrice: 0.89, lineTotal: 51.62 }), null);
+    assert.equal(lineMathMismatch({ quantity: 53, unitPrice: null, lineTotal: 51.62 }), null);
+  });
+});
+
+describe("rescaleNormalizedQuantity (#52)", () => {
+  test("the kilos follow the quantity", () => {
+    assert.equal(rescaleNormalizedQuantity(26.5, 53, 58), 29);
+  });
+
+  test("left alone when there is nothing to scale", () => {
+    assert.equal(rescaleNormalizedQuantity(null, 53, 58), null);
+    assert.equal(rescaleNormalizedQuantity(26.5, null, 58), 26.5);
+    assert.equal(rescaleNormalizedQuantity(26.5, 0, 58), 26.5);
   });
 });
