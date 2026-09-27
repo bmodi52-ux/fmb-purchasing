@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #46.** To see what's open, list the headings
+**Next number: #49.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -22,6 +22,73 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 ## Bugs
 
 <!-- What happened, where, and what you expected instead. -->
+
+### 46. Old prices undercut current ones in thaali costing
+
+Raised 2026-09-27, from Cream (thick) DRY-0002. Costing takes the cheapest
+price for an item from any store, paid or quoted (#29). Campbells has two
+approved offers on the same 3 × 5 L carton: $114 ($7.60/L, current) and $98
+($6.53/L, the July receipt's price). Costing uses $6.53.
+
+Checked on live the same day (read-only). The same happens elsewhere:
+
+| Item | Costed at | Latest receipt at that store |
+|---|---|---|
+| Cream (thick), Campbells | $6.53/L (July) | $7.60/L on 19/09 |
+| Chicken Whole, Fresh Poultry | $7.34 (August) | $9.00 on 15/09 |
+| Ginger, KMA (three offers: $75, $100, $120 on one pack) | $12.50/kg | $16.67 on 15/09; $14.00 on another pack on 19/09 |
+
+Other things found:
+- A receipt never updates an offer's price: it only fills an empty one
+  (`fillMissingPackPrice`, `src/lib/expense-matching.ts`). Lamb Mince at
+  Foodworks is offered at $26 but was bought at $27 on 22/09.
+- The receipt side of costing keeps the latest receipt per store and brand,
+  not per pack size (`loadItemPrices`, `src/app/(app)/menus/data.ts`), so 12
+  item/store pairs lose one pack's price whenever the other is bought.
+- An offer's date comes from `updated_at`, so editing a product code makes
+  an old price look new. 22 items are costed at a price 45–66 days old
+  shown with a September date (same figure as their newest, so harmless
+  today).
+- The buying list (`src/app/(app)/procurement/data.ts`) and the Pricelist's
+  collapsed row read the same offers, so they're wrong too.
+- No menu had been released yet, so no wrong price was frozen into
+  `menu_requirements`.
+
+How the duplicates get in: editing an offer's pack size doesn't check the
+new size already has an offer from that store (`updateOffer`,
+`src/app/(app)/pricelist/actions.ts`) — this is how Cream's happened on
+27/09; "Add offer" on the item page doesn't check either (`addOffer`; the
+vendor-page `addVendorOffer` does); and nothing in the database stops it.
+
+**Decided 2026-09-27:**
+- **One current price per store + pack size + brand.** A database rule
+  allows only one live offer for that combination. Editing a pack size or
+  adding an offer where one exists refuses, or offers to merge.
+- **A newer receipt updates the offer's price automatically**, logged in
+  its history as coming from that receipt. Not from a line whose pack
+  disagrees, a declined or withdrawn expense, or a credit line. Big jumps
+  are still flagged by the price alerts. A receipt older than the offer's
+  price (e.g. an old one re-matched) is recorded but never becomes current.
+- **The offer records when its price was set** (a new column), used as the
+  price's date instead of `updated_at`.
+- Costing and the buying list then read offers only, per pack size; the
+  cheapest current price across stores still wins (#29). How to treat a
+  price's age is still #30.
+
+To watch: Ginger has two KMA receipts at $2.08/kg and $8.33/kg on the same
+pack, which look like misread quantities the pack check didn't catch. With
+auto-update, a line like that could overwrite an offer.
+
+Cleanup once built: merge the three duplicates above — keep one offer
+each, move their receipt lines onto it, price from the latest receipt.
+
+### 47. Releasing a menu can suggest a store from a rejected offer
+
+Raised 2026-09-27, found while checking #46. The store suggested for each
+item on release is the cheapest offer, and rejected offers aren't skipped
+(`src/app/(app)/menus/release-actions.ts`, the `cheapVendors` query).
+Expected: rejected offers are ignored, the same way costing and the buying
+list ignore them.
 
 ### 45. A second Nimco Foods vendor was created on submit
 
@@ -66,6 +133,23 @@ across by hand.
 ## Improvements
 
 <!-- Existing things that should work better. -->
+
+### 48. Push notifications show the web address, not the system name
+
+Raised 2026-09-27, from an Android screenshot. Each notification shows
+"www.fmbpurchasin…" above its title. Wanted: the system name (Mashk)
+instead.
+
+Checked that day: Chrome adds that line to every web push notification to
+show where it came from, and a site can't remove it or change it. What the
+site does control:
+- The group heading above the notifications, which comes from the installed
+  app's name. The phone still shows "FMB Sydney", although `manifest.ts` now
+  says "Mashk · FMB Sydney" / "Mashk". Chrome refreshes an installed app's name
+  on its own schedule; removing the app and adding it to the home screen
+  again updates it straight away.
+- The title and body. "Mashk" could lead the title, e.g. "Mashk · Submitted
+  E-0077", at the cost of room for the rest.
 
 ### 42. The "Add another pack size" form is always open
 
@@ -350,3 +434,12 @@ beside every price. Ways to weigh later: flag rather than drop an old price
 (a faint "6 months old" beside it); re-read saved links on a schedule so
 prices refresh themselves; let a new receipt from the same store replace its
 quote; or list the oldest prices on Needs attention to be checked.
+
+Update 2026-09-27: a new receipt replacing its store's quote is decided in
+#46. Still open: whether old prices drop out of costing or are just flagged.
+Leaning towards flagging: on live that day, once #46's duplicates are
+merged, no item's cost would change under an age cutoff (all 22 items
+costed at a 45+ day old price had the same figure as their newest), and
+dropping old prices would leave rarely bought items unpriced. Suggested:
+the age beside every price, highlighted past ~60 days on costing and the
+buying list, oldest listed on Needs attention.
