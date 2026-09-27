@@ -9,6 +9,13 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 53. Mashk installs as a real app on Android
+
+Raised and delivered 2026-09-28 (PR #107). 192 and 512 icons (plus maskable)
+in the manifest, so Chrome installs Mashk as an app (WebAPK) rather than a
+shortcut; notifications are now headed "Mashk" with its icon. Chrome still
+adds the web address to them, which only an Android app wrapper removes (#54).
+
 ### 48. Push notifications start with Mashk
 
 Raised 2026-09-27, delivered the same day (PR #95), confirmed on a phone

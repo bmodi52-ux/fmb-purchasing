@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #54.** To see what's open, list the headings
+**Next number: #55.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -26,25 +26,6 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 ## Improvements
 
 <!-- Existing things that should work better. -->
-
-### 53. Install as a real app, so notifications don't show the web address
-
-**Built 2026-09-28 in bmodi52-ux/fmb-purchasing#107, waiting to be merged.**
-
-Raised 2026-09-28. Push notifications still show "www.fmbpurchasin…" even
-with "Mashk · " in the title (#48). Another site installed on the same phone
-shows none. Chrome does that for a site installed as a real app (a WebAPK):
-Android then treats it as its own app and names it on its notifications. A
-site added only as a home-screen shortcut stays under Chrome, which shows the
-address.
-
-Cause found that day: the manifest (`src/app/manifest.ts`) lists a single
-400×400 icon. Chrome needs 192×192 and 512×512 icons (ideally a maskable one
-too) before it installs a site as a real app, so it falls back to a shortcut.
-
-Fix: add 192 and 512 PNG icons (plus maskable) from the Mashk artwork and
-list them in the manifest. Then each phone removes the old "FMB Sydney"
-shortcut and installs again from Chrome's menu ("Install app").
 
 ### 12. Check on live what has never been seen working
 
@@ -288,3 +269,17 @@ Two-factor sign-in is #3.
 ## Ideas
 
 <!-- Worth considering, not yet decided. -->
+
+### 54. Mashk as an Android app, so notifications carry no web address
+
+Raised 2026-09-28, after #53. Installed from Chrome, Mashk now shows as its
+own app on notifications, but Chrome still adds "www.fmbpurchasin…" to every
+notification from a website; a site can't turn that off. Apps that show no
+address are Android apps wrapping a website (a Trusted Web Activity), whose
+notifications Android treats as the app's own.
+
+What it would take: package the site with Bubblewrap or PWABuilder, publish
+/.well-known/assetlinks.json on the site to prove they belong together, and
+install it through Google Play (developer account, US$25 once) or by sharing
+the APK. No change to the site otherwise; iPhones unaffected. To check first:
+which app on the user's phone shows no address, and how it was installed.
