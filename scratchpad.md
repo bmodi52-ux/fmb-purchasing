@@ -433,9 +433,12 @@ sends mail from the main domain (Resend sends from `send.`), also add
 Raised 2026-09-27. Run it once from the Supabase dashboard, on live and the
 sandbox, and bring anything it flags back here. It's free.
 
-#36, #40 and #41: decided 2026-09-27 to do them in the in-app browser, with
-each change confirmed before it's saved. #40: the main domain has no MX or
-SPF records, so nothing sends from it and `v=spf1 -all` is safe.
+#36, #40 and #41: on hold (2026-09-28). The user will do these themselves
+later, after understanding them better; not to be done by Claude until asked.
+Useful facts found on 2026-09-27: nothing in the app relies on self sign-up
+(adding users and password resets use admin calls), so #36 is safe; and the
+main domain has no MX or SPF records, so nothing sends from it and
+`v=spf1 -all` is safe for #40.
 
 Items 18–50 came from the systems review of 2026-09-11, each with the timing
 decided for it. Everything marked "now" is in Done; what remains here was
