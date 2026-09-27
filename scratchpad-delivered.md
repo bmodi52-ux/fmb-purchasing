@@ -9,6 +9,63 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 44. Merge two vendors
+
+Raised 2026-09-27, delivered 2026-09-28 (PR #106, migration 0080). On a
+duplicate vendor's page, "Merge this vendor into another…". The vendor created
+first keeps its number; the chosen vendor's details are kept. Undo from either
+vendor's page, refused once a new expense lands on an offer the merge
+combined. Used the same day for V-0019 → V-0017 (Nimco Foods) and V-0022
+"Aldi" → V-0015.
+
+### 43. The store's own name for a product, on each offer
+
+Raised 2026-09-27, delivered 2026-09-28 (PR #105, migration 0079). Not on the
+vendor: each offer has "Store's name for it", copied from a link or photo.
+
+### 30. Old prices, flagged not dropped
+
+Raised 2026-09-24, delivered 2026-09-28 (PR #104). Prices over 60 days old
+show their age on costing and the buying list; the oldest 20 are listed on
+Needs attention (not counted on the Today tile).
+
+### 46. One current price per store, pack and brand
+
+Raised 2026-09-27, delivered 2026-09-28 (PR #103, migration 0078). A newer
+receipt updates its offer's price (history says which receipt); a declined or
+withdrawn one puts the old price back; costing reads offers only, dated by
+price_set_at. On live the migration changed 15 prices (e.g. Cream kept at
+$114, Lamb Mince $26 → $27, Garlic $5 → $50) and rejected two duplicates.
+
+### 49. A 1 L pack next to a loose 1 L
+
+Raised 2026-09-27, delivered 2026-09-28 (PR #102, migration 0077). Packaging
+and "sold loose" are part of what makes a pack; a refused pack says why.
+
+### 42. The Add pack size form stays collapsed
+
+Raised and delivered 2026-09-27/28 (PR #98).
+
+### 47. Menu release ignores rejected offers
+
+Raised 2026-09-27, delivered 2026-09-28 (PR #101).
+
+### 45. Every ABN is checked before a vendor is made
+
+Raised 2026-09-27, delivered 2026-09-28 (PR #100). Existing ABN first, then
+the ABR automatically; a misread ABN blocks submitting. Vendor names match
+loosely (case, "Pty Ltd", either side of "T/A").
+
+### 52. Lines whose qty × unit price ≠ total are refused
+
+Raised 2026-09-27, delivered 2026-09-28 (PR #99). More than 2 cents off
+blocks submitting, with a "Quantity 58?" button; kilos follow a corrected
+quantity.
+
+### 50–51. Paste or drag a screenshot; choose from the gallery
+
+Raised 2026-09-27, delivered 2026-09-28 (PR #97).
+
 ### 35. Rename the app to Mashk (مشک), and the brand to teal
 
 Raised 2026-09-25, delivered the same day (PRs #91, #92). The live site's brand
