@@ -9,6 +9,14 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 56. The Reports page loads again
+
+Raised and delivered 2026-09-28 (PR #109), found while testing #55. Since
+0078 (#46) receipt lines and offers are linked twice, and two queries didn't
+say which link: the Reports page failed, the budget check after each
+submission failed, and the Expenses line view came back empty. Both now name
+the link, and a test fails on any embed between the two that doesn't.
+
 ### 55. Two brands of one pack at one store keep their own prices
 
 Raised and delivered 2026-09-28 (PR #108, migration 0081, run on live the

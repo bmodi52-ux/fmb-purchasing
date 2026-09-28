@@ -23,26 +23,6 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 
 <!-- What happened, where, and what you expected instead. -->
 
-### 56. The Reports page fails, and expense line details come back empty, since #46
-
-Raised 2026-09-28, found while testing #55 on the sandbox. 0078 added
-`pricelist_items.price_source_line_id`, a second link between receipt lines
-and offers, so the database API now refuses a query that goes from a line to
-its offer without saying which link ("more than one relationship was found for
-'expense_line_items' and 'pricelist_items'"). Two queries do:
-
-- `src/app/(app)/reports/data.ts`: the Reports page shows "Something went
-  wrong" on the sandbox, and the budget check after every submission fails
-  (`checkBudgetThresholds`, logged, not shown to anyone).
-- `src/app/(app)/expenses/page.tsx`: the line details on the Expenses page. The
-  error is ignored there, so the lines just come back empty.
-
-Live has had 0078 since #46, so it should be the same there. Not checked on
-live, which needs signing in.
-
-Fix: name the link in both, `pricelist_items!expense_line_items_pricelist_item_id_fkey ( … )`.
-A small change, separate from #55.
-
 ## Improvements
 
 <!-- Existing things that should work better. -->
