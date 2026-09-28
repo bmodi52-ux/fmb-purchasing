@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #59.** To see what's open, list the headings
+**Next number: #60.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -26,6 +26,19 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 ## Improvements
 
 <!-- Existing things that should work better. -->
+
+### 59. Typed text in fields looks like placeholder text
+
+Raised 2026-09-28, from an offer's edit form (brand "Riviana", product
+code, price 38.09 all look greyed out). Filled-in values read as suggestions
+rather than what was typed.
+
+Cause found that day: `.input` in `src/app/globals.css` sets no text
+colour, so a field takes the colour of the label around it, often faded
+(`text-ink/55`, `/70`), and placeholders are the browser's default grey,
+much the same. Likely fix: give `.input` (and textarea) full ink colour, and
+a clearly lighter placeholder (`.input::placeholder`), so typed and
+suggested text look different everywhere at once.
 
 ### 58. Show the receipt behind an item or offer when approving it
 
