@@ -49,8 +49,12 @@ To do (a migration): write the undo entry when the price is unchanged too,
 hidden from the history like the rest of `_restore`; restore only the date and
 source when there is no price change to undo; and a one-off repair for any
 offer whose source is a withdrawn or declined receipt, re-dated from its
-latest receipt that still counts. How many offers on live are affected has not
-been checked.
+latest receipt that still counts.
+
+**Checked on live 2026-09-28:** none affected yet. 129 offers are priced from
+a receipt, and none of those receipts has been withdrawn or declined. It
+happens the first time one that confirmed an existing price is, so the repair
+step is only a safeguard.
 
 ## Improvements
 
