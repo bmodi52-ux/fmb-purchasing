@@ -23,43 +23,6 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 
 <!-- What happened, where, and what you expected instead. -->
 
-### 57. A withdrawn receipt can leave its date on an offer's price
-
-**2026-09-28:** built in bmodi52-ux/fmb-purchasing#110, which also covers
-edited receipts (an edit replaces the lines, and withdrawing one left even its
-price behind). 0082 is on the sandbox, not yet on live.
-
-Raised 2026-09-28, seen on the sandbox while testing #55: test receipt E-0057
-confirmed Jumbo Ginger's existing $75, and after it was withdrawn the offer
-was still dated 28/09 and still named E-0057's line as its source.
-
-Since #46 (0078) `price_offers_from_expense` moves an offer's price date and
-source to every newer receipt, but writes a history entry, which carries the
-undo, only when the price changes. `restore_offer_prices`, run when an expense
-is withdrawn or declined, finds nothing to undo for a receipt that confirmed
-the same price, so the date and source stay. The amount is never wrong, but:
-
-- The item page says "Price from a receipt of …" for a receipt that no longer
-  counts.
-- The old-price flag (#30) reads that date, so an old price can look current.
-- A genuine receipt dated before it is treated as older than the current price
-  and skipped: $75 from 17/08, a withdrawn receipt of 28/09 at $75, then a
-  late receipt of 20/09 at $80 never becomes the price.
-
-Expected: withdrawing or declining a receipt puts the offer's date and source
-back as they were, whatever the price did.
-
-To do (a migration): write the undo entry when the price is unchanged too,
-hidden from the history like the rest of `_restore`; restore only the date and
-source when there is no price change to undo; and a one-off repair for any
-offer whose source is a withdrawn or declined receipt, re-dated from its
-latest receipt that still counts.
-
-**Checked on live 2026-09-28:** none affected yet. 129 offers are priced from
-a receipt, and none of those receipts has been withdrawn or declined. It
-happens the first time one that confirmed an existing price is, so the repair
-step is only a safeguard.
-
 ## Improvements
 
 <!-- Existing things that should work better. -->

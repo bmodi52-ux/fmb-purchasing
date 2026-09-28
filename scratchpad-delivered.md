@@ -9,6 +9,17 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 57. Withdrawing a receipt puts its offers' prices back, date included
+
+Raised and delivered 2026-09-28 (PR #110, migration 0082, run on live the same
+day), found while testing #55. A receipt that confirmed an offer's existing
+price wrote no undo, so withdrawing or declining it left its date and source
+on the offer; editing an expense (which replaces its lines) left even the
+price. Every receipt now writes its undo, one undo steps back past earlier
+receipts that no longer count, and an edit undoes its old lines before
+replacing them. No live offers needed the one-off repair. The item page loads
+only its own offers' history and hides undo-only entries.
+
 ### 56. The Reports page loads again
 
 Raised and delivered 2026-09-28 (PR #109), found while testing #55. Since
