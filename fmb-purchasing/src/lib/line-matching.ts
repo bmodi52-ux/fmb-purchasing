@@ -334,3 +334,193 @@ export function choosePack(
   const [first, second] = scored;
   return first!.score > 0 && first!.score > (second?.score ?? -1) ? first!.pack.id : null;
 }
+
+/**
+ * A brand as offers are told apart by it (#55): case, surrounding spaces and
+ * doubled spaces don't make a different brand. "" is an offer with no brand.
+ * Never looser than the unique index from 0078, which compares
+ * lower(btrim(brand)), so two brands this calls different can always both be
+ * stored.
+ */
+export function brandKey(brand: string | null | undefined): string {
+  return (brand ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** One of this store's live offers on a pack, as the submit form weighs them. */
+export type OfferOption = {
+  id: string;
+  packSizeId: string;
+  brand: string | null;
+  /** What the store calls it, e.g. as its website shows it (0079). */
+  storeName: string | null;
+  /** What this store's receipts have called this offer before (0081). */
+  wordings: string[];
+  price: number | null;
+};
+
+/**
+ * The brand a line files under: an existing offer's brand ("" for the one with
+ * no brand), or a new one. Null when the line doesn't say and the store sells
+ * more than one — which the form then asks.
+ */
+export type BrandPick = { brand: string | null; confidence: MatchConfidence };
+
+/** Every word of the brand is on the line: "TILDA BASMATI 10KG" names Tilda. */
+function namesBrand(brand: string, lineWords: string[]): "exact" | "close" | null {
+  const words = brandWords(brand);
+  if (words.length === 0) return null;
+  let result: "exact" | "close" = "exact";
+  for (const w of words) {
+    const found = lineWords.map((l) => sameWord(w, l)).find(Boolean) ?? null;
+    if (!found) return null;
+    if (found === "close") result = "close";
+  }
+  return result;
+}
+
+/** A brand's words. Unlike coreWords, a short brand ("SPC", "Coles") counts. */
+function brandWords(text: string): string[] {
+  return (text.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length >= 2 && !FILLER_WORDS.has(w));
+}
+
+/**
+ * Which of this store's offers on a pack a line is (#55), for the lines no
+ * product code or remembered wording has already settled.
+ *
+ * Tried in order:
+ *   1. The brand the receipt printed, or a brand whose name is on the line.
+ *   2. A word on the line that only one offer's "Store's name for it" or past
+ *      receipt wordings use, beyond the item's own name.
+ *   3. The only offer the store has on the pack.
+ * A brand the receipt names that the store has no offer for is a new brand,
+ * with its own price. Nothing to go on, with several to choose from, is asked.
+ *
+ * One offer with no brand recorded is taken to be the brand the receipt names:
+ * that offer was set up before anyone said which brand it was, and receipts
+ * fill a pending offer's brand in (#79).
+ */
+export function chooseOffer(
+  offers: OfferOption[],
+  line: { description: string; scannedBrand: string | null },
+  itemName = ""
+): BrandPick {
+  const scanned = line.scannedBrand?.trim() ?? "";
+  if (offers.length === 0) return { brand: scanned, confidence: "sure" };
+
+  const lineWords = brandWords(line.description);
+  const scannedWords = brandWords(scanned);
+  const byBrand = offers.flatMap((o) => {
+    if (!brandKey(o.brand)) return [];
+    if (scanned && brandKey(o.brand) === brandKey(scanned)) return [{ offer: o, how: "exact" as const }];
+    const how = namesBrand(o.brand!, [...lineWords, ...scannedWords]);
+    return how ? [{ offer: o, how }] : [];
+  });
+  if (byBrand.length === 1) {
+    return { brand: byBrand[0]!.offer.brand!, confidence: byBrand[0]!.how === "exact" ? "sure" : "likely" };
+  }
+  if (byBrand.length > 1) {
+    // "Sun Rice" and "Sun Rice Premium" both named: the longest name is the
+    // one the line says in full.
+    const longest = [...byBrand].sort((a, b) => brandWords(b.offer.brand!).length - brandWords(a.offer.brand!).length);
+    if (brandWords(longest[0]!.offer.brand!).length > brandWords(longest[1]!.offer.brand!).length) {
+      return { brand: longest[0]!.offer.brand!, confidence: "likely" };
+    }
+    return { brand: null, confidence: "none" };
+  }
+
+  if (scanned) {
+    const blank = offers.filter((o) => !brandKey(o.brand));
+    if (offers.length === 1 && blank.length === 1) return { brand: "", confidence: "likely" };
+    return { brand: scanned, confidence: "likely" };
+  }
+
+  // Words only one offer's store name or past wordings use, beyond the item's
+  // own name: "Pure" in "Tilda Pure Basmati Rice 10kg".
+  const nameWords = coreWords(itemName);
+  const ownWords = offers.map((o) =>
+    [o.storeName ?? "", ...o.wordings]
+      .flatMap((text) => coreWords(text))
+      .filter((w) => !nameWords.some((n) => sameWord(n, w)))
+  );
+  const lineCore = coreWords(line.description);
+  const setApart = offers.filter((_, i) =>
+    ownWords[i]!.some(
+      (w) =>
+        lineCore.some((l) => sameWord(w, l)) &&
+        !ownWords.some((other, j) => j !== i && other.some((x) => sameWord(w, x)))
+    )
+  );
+  if (setApart.length === 1) return { brand: setApart[0]!.brand ?? "", confidence: "likely" };
+
+  if (offers.length === 1) return { brand: offers[0]!.brand ?? "", confidence: "sure" };
+  return { brand: null, confidence: "none" };
+}
+
+/** An offer as the store's product codes and remembered wordings point at it. */
+export type StoreOffer = OfferOption & { itemId: string; vendorSku: string | null };
+
+/**
+ * The offer a line is outright, before any item matching (#55): a product code
+ * printed on the line that exactly one of this store's offers carries, else
+ * this store's exact wording, remembered against one offer (0081). Null when
+ * neither settles it.
+ */
+export function pinnedStoreOffer(
+  line: { description: string; productCode: string | null },
+  offers: StoreOffer[],
+  wordings: { description: string; offerId: string | null }[]
+): StoreOffer | null {
+  const code = line.productCode?.trim().toLowerCase();
+  if (code) {
+    const coded = offers.filter((o) => o.vendorSku?.trim().toLowerCase() === code);
+    if (coded.length === 1) return coded[0]!;
+  }
+  const wording = normalizeWording(line.description);
+  if (!wording) return null;
+  const byId = new Map(offers.map((o) => [o.id, o]));
+  const ids = new Set(
+    wordings
+      .filter((w) => w.offerId && byId.has(w.offerId) && normalizeWording(w.description) === wording)
+      .map((w) => w.offerId!)
+  );
+  return ids.size === 1 ? byId.get([...ids][0]!)! : null;
+}
+
+/**
+ * Which of this store's live offers on a pack a submitted line files against
+ * (#55), or the brand of the new one it adds.
+ *
+ * `chosen` is the brand the submit form settled on — an existing offer's, or a
+ * new one — and is taken as said. Without it (a line from somewhere other than
+ * the form) the brand the receipt printed decides: the offer of that brand, the
+ * only offer when it has no brand yet, or a new offer for it. With neither,
+ * the store's reviewed offer, else its oldest, as before #55.
+ */
+export function offerForBrand(
+  offers: { id: string; status: string; createdAt: string; brand: string | null }[],
+  chosen: string | null | undefined,
+  scanned: string | null | undefined
+): { offerId: string } | { newBrand: string | null } {
+  const live = offers
+    .filter((o) => o.status !== "rejected")
+    .sort(
+      (a, b) =>
+        Number(b.status === "approved") - Number(a.status === "approved") || a.createdAt.localeCompare(b.createdAt)
+    );
+  const ofBrand = (brand: string) => live.find((o) => brandKey(o.brand) === brandKey(brand));
+
+  if (chosen != null) {
+    const found = ofBrand(chosen);
+    return found ? { offerId: found.id } : { newBrand: chosen.trim() || null };
+  }
+
+  const read = scanned?.trim();
+  if (read) {
+    const found = ofBrand(read);
+    if (found) return { offerId: found.id };
+    if (live.length === 1 && !brandKey(live[0]!.brand)) return { offerId: live[0]!.id };
+    return { newBrand: read };
+  }
+
+  return live[0] ? { offerId: live[0].id } : { newBrand: null };
+}

@@ -56,22 +56,36 @@ function migrationFiles(): string[] {
  * can insert freely without the sequence-burning problem that rules out
  * testing against the real database.
  */
-export async function createTestDb(): Promise<TestDb> {
+export async function createTestDb(
+  options: {
+    /** Stop before this migration file, so a test can apply it with applyMigration. */
+    stopBefore?: string;
+  } = {}
+): Promise<TestDb> {
   const db = new PGlite({ extensions: { pg_trgm, pgcrypto } });
 
   await db.exec(AUTH_STUB);
 
   for (const file of migrationFiles()) {
-    const sql = readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
-    try {
-      await db.exec(sql);
-    } catch (error) {
-      // Without the filename a failure here is a wall of anonymous SQL.
-      throw new Error(`Migration ${file} failed: ${(error as Error).message}`);
-    }
+    if (options.stopBefore && file >= options.stopBefore) break;
+    await applyMigration(db, file);
   }
 
   return db;
+}
+
+/**
+ * Run one migration file, for a test that sets rows up the way they were
+ * before it and then checks what the migration makes of them.
+ */
+export async function applyMigration(db: TestDb, file: string): Promise<void> {
+  const sql = readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
+  try {
+    await db.exec(sql);
+  } catch (error) {
+    // Without the filename a failure here is a wall of anonymous SQL.
+    throw new Error(`Migration ${file} failed: ${(error as Error).message}`);
+  }
 }
 
 /** First column of the first row, for the many single-value assertions. */

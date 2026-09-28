@@ -53,6 +53,7 @@ import {
 } from "@/lib/expense-money";
 import { discountAmount, discountBase } from "@/lib/discount-percent";
 import { packDefaultsForLine, packFromFields } from "@/lib/new-pack";
+import { brandKey, chooseOffer } from "@/lib/line-matching";
 import type { PackFieldValues } from "../pricelist/pack-fields";
 import type { PackUnit } from "./line-match";
 import { categoriesForLineGroup, lineGroupFor } from "@/lib/categories";
@@ -245,8 +246,65 @@ function withMatch(item: ReviewItem, result: LineMatchResult | null): ReviewItem
     itemId: result.itemId,
     packSizeId: result.packSizeId,
     pricelistItemId: null,
+    offerBrand: result.brand,
     itemNumber: result.itemNumber ?? item.itemNumber,
     categoryName: result.categoryName ?? item.categoryName,
+  };
+}
+
+/**
+ * Lines that are the same pack of the same item, in the same brand, at
+ * different prices (#55). On one receipt that is nearly always two brands the
+ * scan didn't tell apart — two 10 kg bags of rice at $54 and $48 — and filed
+ * as one brand they would share one price.
+ */
+function samePackAtAnotherPrice(items: ReviewItem[]): Set<string> {
+  const groups = new Map<string, { key: string; price: number }[]>();
+  for (const it of items) {
+    if (it.kind !== "goods" || !it.itemId || it.notOnReceipt) continue;
+    const pack = it.newPackFields ? `new:${JSON.stringify(packFromFields(it.newPackFields))}` : it.packSizeId;
+    const price = it.unitPrice ?? (it.quantity ? it.lineTotal / it.quantity : null);
+    if (!pack || price == null || !(price > 0)) continue;
+    const group = `${it.itemId}|${pack}|${brandKey(it.offerBrand)}`;
+    groups.set(group, [...(groups.get(group) ?? []), { key: it.key, price: round2(price) }]);
+  }
+  const flagged = new Set<string>();
+  for (const lines of groups.values()) {
+    if (new Set(lines.map((l) => l.price)).size > 1) for (const l of lines) flagged.add(l.key);
+  }
+  return flagged;
+}
+
+/**
+ * This store's offers on the pack a line is filed against (#55). A match kept
+ * in a draft from before brands were matched has none listed.
+ */
+function offersOnPack(match: LineMatchResult | null | undefined, packSizeId: string | null | undefined) {
+  if (!match || !packSizeId) return [];
+  return (match.offers ?? []).filter((o) => o.packSizeId === packSizeId);
+}
+
+/**
+ * The brand a line files under once its pack changes (#55). The brand already
+ * settled on counts as what the line says, so it carries over wherever the new
+ * pack has it — and becomes a new brand where it doesn't.
+ */
+function withPack(item: ReviewItem, packSizeId: string | null): ReviewItem {
+  const match = item.match;
+  if (!match) return { ...item, packSizeId, pricelistItemId: null };
+  const pick = packSizeId
+    ? chooseOffer(
+        offersOnPack(match, packSizeId),
+        { description: item.description, scannedBrand: item.offerBrand || item.details?.brand || null },
+        match.itemName ?? ""
+      )
+    : { brand: item.offerBrand ?? null, confidence: match.brandConfidence };
+  return {
+    ...item,
+    packSizeId,
+    pricelistItemId: null,
+    offerBrand: pick.brand,
+    match: { ...match, packSizeId, brand: pick.brand, brandConfidence: pick.confidence },
   };
 }
 
@@ -1130,6 +1188,7 @@ function ReviewForm(props: {
         description: it.description,
         categoryName: it.categoryName,
         itemId: it.itemId ?? null,
+        packSizeId: it.itemId ? (it.packSizeId ?? null) : null,
         pricelistItemId: it.pricelistItemId ?? null,
         details: it.details ?? null,
       })),
@@ -1188,6 +1247,7 @@ function ReviewForm(props: {
           itemId: null,
           packSizeId: null,
           pricelistItemId: null,
+          offerBrand: it.details?.brand?.trim() ?? "",
           itemNumber: "",
           match: {
             ...m,
@@ -1198,6 +1258,9 @@ function ReviewForm(props: {
             categoryName: null,
             packSizeId: null,
             packs: [],
+            offers: [],
+            brand: it.details?.brand?.trim() ?? "",
+            brandConfidence: "sure",
             alternatives: [...passedOver, ...m.alternatives.filter((a) => a.itemId !== m.itemId)],
           },
         };
@@ -1206,10 +1269,19 @@ function ReviewForm(props: {
   }
 
   function choosePack(key: string, packSizeId: string | null) {
+    props.setItems((prev) => prev.map((it) => (it.key === key ? withPack(it, packSizeId) : it)));
+  }
+
+  /** Which of this store's brands the line is, or a new one (#55). */
+  function chooseBrand(key: string, brand: string) {
     props.setItems((prev) =>
       prev.map((it) =>
         it.key === key
-          ? { ...it, packSizeId, pricelistItemId: null, match: it.match ? { ...it.match, packSizeId } : it.match }
+          ? {
+              ...it,
+              offerBrand: brand,
+              match: it.match ? { ...it.match, brand, brandConfidence: "sure" } : it.match,
+            }
           : it
       )
     );
@@ -1219,7 +1291,9 @@ function ReviewForm(props: {
   function chooseItem(key: string, itemId: string) {
     props.setItems((prev) =>
       prev.map((it) =>
-        it.key === key ? { ...it, itemId, packSizeId: null, pricelistItemId: null, match: undefined } : it
+        it.key === key
+          ? { ...it, itemId, packSizeId: null, pricelistItemId: null, offerBrand: null, match: undefined }
+          : it
       )
     );
   }
@@ -1253,6 +1327,7 @@ function ReviewForm(props: {
           next.pricelistItemId = null;
           next.itemId = null;
           next.packSizeId = null;
+          next.offerBrand = null;
           next.match = null;
         }
         return next;
@@ -1263,22 +1338,16 @@ function ReviewForm(props: {
   function selectItemSuggestion(key: string, s: ItemLookupSuggestion) {
     // The suggestion is one pack of one item, whether or not any vendor has an
     // offer on it yet — so choosing it settles which pack the line is, and the
-    // submission adds this vendor's offer to that pack if it needs one.
+    // submission adds this vendor's offer to that pack if it needs one. It is
+    // looked up again with both fixed, for which brand of it this store sells
+    // (#55).
     updateItem(key, {
       categoryName: s.categoryName ?? undefined,
       itemId: s.itemId,
       packSizeId: s.packSizeId,
       pricelistItemId: null,
-      match: {
-        confidence: "sure",
-        itemId: s.itemId,
-        itemNumber: s.itemNumber,
-        itemName: s.description,
-        categoryName: s.categoryName,
-        packSizeId: s.packSizeId,
-        packs: s.packs,
-        alternatives: [],
-      },
+      offerBrand: null,
+      match: undefined,
     });
   }
 
@@ -1328,7 +1397,16 @@ function ReviewForm(props: {
       prev.map((it) => {
         if (it.key !== key) return it;
         if (!on) return { ...it, newPackFields: null };
-        return { ...it, packSizeId: null, newPackFields: packDefaultsForLine(it, props.units) };
+        // A pack nobody sells yet has no offers, so its brand is whatever the
+        // line says (#55).
+        const brand = it.offerBrand || it.details?.brand?.trim() || "";
+        return {
+          ...it,
+          packSizeId: null,
+          offerBrand: brand,
+          newPackFields: packDefaultsForLine(it, props.units),
+          match: it.match ? { ...it.match, packSizeId: null, brand, brandConfidence: "sure" } : it.match,
+        };
       })
     );
   }
@@ -1372,6 +1450,7 @@ function ReviewForm(props: {
                     pricelistItemId: null,
                     itemId: null,
                     packSizeId: null,
+                    offerBrand: null,
                     match: null,
                     quantity: null,
                     unitPrice: null,
@@ -1406,6 +1485,7 @@ function ReviewForm(props: {
 
   const moneyLines = asMoneyLines(props.items);
   const comparison = claimVsReceipt(moneyLines, props.total);
+  const priceClash = samePackAtAnotherPrice(props.items);
   // Only worth a warning when it is a real part of the receipt, not pennies.
   const unitemised = props.items.find(
     (i) => i.autoAdded && i.kind === "unallocated" && Math.abs(i.lineTotal) > Math.max(1, Math.abs(props.total) * 0.02)
@@ -1443,6 +1523,15 @@ function ReviewForm(props: {
     );
     if (packless) {
       setError(`Choose which pack of ${packless.match?.itemName ?? "the item"} "${packless.description}" is.`);
+      return;
+    }
+    // The brand decides which of this store's prices the receipt updates
+    // (#55), so where it sells several on the pack it is never guessed either.
+    const brandless = goods.find(
+      (it) => it.offerBrand == null && !it.newPackFields && offersOnPack(it.match, it.packSizeId).length > 1
+    );
+    if (brandless) {
+      setError(`Choose which brand of ${brandless.match?.itemName ?? "the item"} "${brandless.description}" is.`);
       return;
     }
     const halfDescribed = props.items.find((it) => it.newPackFields && !packFromFields(it.newPackFields));
@@ -1713,6 +1802,10 @@ function ReviewForm(props: {
                 newPack={item.newPackFields ?? null}
                 onNewPack={(on) => setNewPack(item.key, on)}
                 onNewPackChange={(values) => updateItem(item.key, { newPackFields: values })}
+                offerBrand={item.offerBrand ?? null}
+                scannedBrand={item.details?.brand ?? null}
+                onChooseBrand={(brand) => chooseBrand(item.key, brand)}
+                priceClash={priceClash.has(item.key)}
               />
             )}
 
@@ -2008,6 +2101,10 @@ function ReviewForm(props: {
                   newPack={item.newPackFields ?? null}
                   onNewPack={(on) => setNewPack(item.key, on)}
                   onNewPackChange={(values) => updateItem(item.key, { newPackFields: values })}
+                  offerBrand={item.offerBrand ?? null}
+                  scannedBrand={item.details?.brand ?? null}
+                  onChooseBrand={(brand) => chooseBrand(item.key, brand)}
+                  priceClash={priceClash.has(item.key)}
                 />
               )}
               </Fragment>

@@ -1,12 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import { PackFields, type PackFieldValues } from "../pricelist/pack-fields";
+import { brandKey, type MatchConfidence, type OfferOption } from "@/lib/line-matching";
 import type { LineMatchResult } from "./actions";
 
 export type PackUnit = { id: string; code: string; label: string };
 
 /** The pack dropdown's value for "one this item doesn't have yet" (#60). */
 const NEW_PACK = "__new__";
+
+/** The brand dropdown's value for "a brand this store has no offer for" (#55). */
+const NEW_BRAND = "__new_brand__";
+
+const formatMoney = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
 /**
  * What a goods line will be filed against, shown under the line itself.
@@ -28,6 +35,10 @@ export function LineMatchRow({
   newPack,
   onNewPack,
   onNewPackChange,
+  offerBrand,
+  scannedBrand,
+  onChooseBrand,
+  priceClash = false,
   layout = "row",
 }: {
   description: string;
@@ -41,6 +52,13 @@ export function LineMatchRow({
   newPack: PackFieldValues | null;
   onNewPack: (on: boolean) => void;
   onNewPackChange: (values: PackFieldValues) => void;
+  /** The brand the line files under (#55): "" for none, null while undecided. */
+  offerBrand: string | null;
+  /** The brand the receipt printed, if it printed one. */
+  scannedBrand: string | null;
+  onChooseBrand: (brand: string) => void;
+  /** Another line is this pack in this brand at a different price. */
+  priceClash?: boolean;
   /** "row" under a table row; "stack" inside the card a phone shows instead. */
   layout?: "row" | "stack";
 }) {
@@ -57,6 +75,10 @@ export function LineMatchRow({
       newPack={newPack}
       onNewPack={onNewPack}
       onNewPackChange={onNewPackChange}
+      offerBrand={offerBrand}
+      scannedBrand={scannedBrand}
+      onChooseBrand={onChooseBrand}
+      priceClash={priceClash}
     />
   );
 
@@ -82,6 +104,10 @@ function MatchSummary({
   newPack,
   onNewPack,
   onNewPackChange,
+  offerBrand,
+  scannedBrand,
+  onChooseBrand,
+  priceClash,
 }: {
   match: LineMatchResult | null | undefined;
   onConfirm: () => void;
@@ -92,6 +118,10 @@ function MatchSummary({
   newPack: PackFieldValues | null;
   onNewPack: (on: boolean) => void;
   onNewPackChange: (values: PackFieldValues) => void;
+  offerBrand: string | null;
+  scannedBrand: string | null;
+  onChooseBrand: (brand: string) => void;
+  priceClash: boolean;
 }) {
   if (match === undefined) {
     return <span className="text-ink/40">Looking for this on the Pricelist…</span>;
@@ -112,6 +142,7 @@ function MatchSummary({
           <span className="font-medium text-gold-deep">New item:</span> not on the Pricelist, so it will be added
           when you submit.
         </span>
+        <BrandChoice offers={[]} brand={offerBrand} scannedBrand={scannedBrand} confidence="sure" onChoose={onChooseBrand} />
         {match.alternatives.length > 0 && (
           <>
             <span className="text-ink/50">Or is it</span>
@@ -134,6 +165,10 @@ function MatchSummary({
 
   const sure = match.confidence === "sure";
   const needsPack = match.packs.length > 1 && !match.packSizeId && !newPack;
+  // Which of this store's brands of the pack the line is (#55): shown once
+  // the pack is settled, since each pack has its own.
+  const packOffers =
+    newPack || !match.packSizeId ? [] : (match.offers ?? []).filter((o) => o.packSizeId === match.packSizeId);
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -171,6 +206,17 @@ function MatchSummary({
 
       {needsPack && <span className="text-danger">Choose the pack before submitting</span>}
 
+      {!needsPack && (
+        <BrandChoice
+          key={newPack ? NEW_PACK : (match.packSizeId ?? "")}
+          offers={packOffers}
+          brand={offerBrand}
+          scannedBrand={scannedBrand}
+          confidence={match.brandConfidence ?? "sure"}
+          onChoose={onChooseBrand}
+        />
+      )}
+
       {newPack && (
         <div className="mt-1 w-full rounded-md border border-gold/40 bg-gold/5 p-2">
           <p className="mb-2 text-ink/70">
@@ -179,6 +225,13 @@ function MatchSummary({
           </p>
           <PackFields units={units} defaults={newPack} onChange={onNewPackChange} />
         </div>
+      )}
+
+      {priceClash && (
+        <span className="w-full text-gold-deep">
+          Another line is this pack in the same brand at a different price. If they&apos;re different brands, give
+          each its brand, so each keeps its own price.
+        </span>
       )}
 
       {sure ? (
@@ -200,5 +253,96 @@ function MatchSummary({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Which brand the line is (#55): one of this store's offers on the pack, each
+ * with its own price, or a brand it has no offer for yet. A receipt only
+ * updates the price of the brand it is filed under, so where the store sells
+ * several and the line doesn't say which, this asks.
+ */
+function BrandChoice({
+  offers,
+  brand,
+  scannedBrand,
+  confidence,
+  onChoose,
+}: {
+  offers: OfferOption[];
+  brand: string | null;
+  scannedBrand: string | null;
+  confidence: MatchConfidence;
+  onChoose: (brand: string) => void;
+}) {
+  const [typing, setTyping] = useState(false);
+
+  if (offers.length === 0) {
+    return (
+      <label className="flex items-center gap-1 text-ink/60">
+        Brand
+        <input
+          value={brand ?? ""}
+          onChange={(e) => onChoose(e.target.value)}
+          placeholder="if it has one"
+          aria-label="Brand"
+          className="w-32 rounded border border-ink/15 bg-white px-1.5 py-0.5 text-ink"
+        />
+      </label>
+    );
+  }
+
+  const existing = brand == null ? undefined : offers.find((o) => brandKey(o.brand) === brandKey(brand));
+  // The box stays open while it is being typed in, even when what is typed so
+  // far happens to be a brand the store already has.
+  const showBox = typing || (brand != null && !existing);
+  const newBrand = brand != null && !!brand.trim() && !existing;
+  const undecided = brand == null && !typing;
+  const sorted = [...offers].sort((a, b) => (a.brand ?? "").localeCompare(b.brand ?? ""));
+  return (
+    <>
+      <select
+        value={undecided ? "" : showBox ? NEW_BRAND : existing!.id}
+        onChange={(e) => {
+          const value = e.target.value;
+          if (value === NEW_BRAND) {
+            setTyping(true);
+            const read = scannedBrand?.trim() ?? "";
+            onChoose(read && !offers.some((o) => brandKey(o.brand) === brandKey(read)) ? read : "");
+            return;
+          }
+          const chosen = offers.find((o) => o.id === value);
+          if (chosen) {
+            setTyping(false);
+            onChoose(chosen.brand ?? "");
+          }
+        }}
+        aria-label="Which brand"
+        className={`rounded border bg-white px-1.5 py-0.5 ${undecided ? "border-danger/50" : "border-ink/15"}`}
+      >
+        {undecided && <option value="">— which brand? —</option>}
+        {sorted.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.brand || "No brand recorded"}
+            {o.price != null ? ` · ${formatMoney(o.price)}` : ""}
+          </option>
+        ))}
+        <option value={NEW_BRAND}>+ another brand</option>
+      </select>
+      {showBox && (
+        <input
+          value={brand ?? ""}
+          onChange={(e) => onChoose(e.target.value)}
+          placeholder="Brand"
+          aria-label="New brand"
+          autoFocus={typing}
+          className="w-32 rounded border border-ink/15 bg-white px-1.5 py-0.5"
+        />
+      )}
+      {undecided && confidence === "none" && (
+        <span className="text-danger">This store sells more than one brand of this. Choose which.</span>
+      )}
+      {newBrand && <span className="text-ink/55">New brand at this store: it gets its own price</span>}
+    </>
   );
 }
