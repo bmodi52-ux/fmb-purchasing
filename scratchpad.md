@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #60.** To see what's open, list the headings
+**Next number: #61.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -26,6 +26,21 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 ## Improvements
 
 <!-- Existing things that should work better. -->
+
+### 60. Units read differently in the Measured in picker and on Units
+
+Raised 2026-09-28, from Dinner Rolls BAK-0004. "ea" seemed missing from
+the item's Measured in list, which showed "item" twice. It is there: pickers
+show "ea" as "item" (`unitOptionLabel`, `src/lib/pack-description.ts`), while
+the Units page shows the codes (ea, Carton, unit…). The second "item" is the
+separate "unit" unit, which that translation also treats as "ea"
+(`canonicalUnitCode`).
+
+On live that day: 24 items use ea; none use unit, carton, Box or mL.
+
+To decide: one name everywhere ("item", or "ea", or "item (ea)"); and whether
+to retire the unused "unit" (a second name for ea), which is what makes the
+picker show "item" twice.
 
 ### 59. Typed text in fields looks like placeholder text
 
