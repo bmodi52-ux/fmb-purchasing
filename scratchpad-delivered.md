@@ -9,6 +9,20 @@ Delivered items from before the 2026-09-23 restart are in
 
 ## Delivered
 
+### 55. Two brands of one pack at one store keep their own prices
+
+Raised and delivered 2026-09-28 (PR #108, migration 0081, run on live the
+same day). Each goods line on the submit page shows its brand; a store's
+brands on the pack are listed with their prices, or a new one is typed. The
+brand is chosen by the product code, then this store's exact wording
+(remembered per offer now), then a loose match on brand, "Store's name for it"
+and past wordings, then asked; Submit waits for it. A line files against that
+store, pack and brand, so a receipt only updates its own brand's price. A
+wording that has meant two brands stops pointing at either and is asked each
+time. A hint shows when two lines are the same pack and brand at different
+prices. merge_items now keeps one offer per store, pack and brand; it had been
+deleting a second brand's offer, and failing when both items had the same one.
+
 ### 53. Mashk installs as a real app on Android
 
 Raised and delivered 2026-09-28 (PR #107). 192 and 512 icons (plus maskable)
