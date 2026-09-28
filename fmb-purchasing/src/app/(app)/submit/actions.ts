@@ -20,15 +20,21 @@ import {
   createChosenPackSize,
   findVendorByLooseName,
   preferredVendor,
+  rememberOfferWordings,
 } from "@/lib/expense-matching";
 import {
+  chooseOffer,
   choosePack,
   matchLine,
   normalizeWording,
+  pinnedStoreOffer,
+  type BrandPick,
   type CatalogueItem,
   type CatalogueUnit,
   type KnownWording,
   type MatchConfidence,
+  type OfferOption,
+  type StoreOffer,
 } from "@/lib/line-matching";
 import { fiscalYearForReceipt } from "@/lib/fiscal-year";
 import { notifyExpenseSubmitted } from "@/lib/expense-notifications";
@@ -589,6 +595,14 @@ export type LineMatchResult = {
   /** Null when the item has several packs and the line doesn't say which. */
   packSizeId: string | null;
   packs: LinePackOption[];
+  /**
+   * This store's live offers on the item's packs (#55), so the form can show
+   * which brand the line files under and choose again when the pack changes.
+   */
+  offers: OfferOption[];
+  /** The brand the line files under ("" for none), or null when the form must ask. */
+  brand: string | null;
+  brandConfidence: MatchConfidence;
   /** Other items worth offering, best first. */
   alternatives: { itemId: string; itemName: string; itemNumber: string | null }[];
 };
@@ -599,13 +613,24 @@ export type LineToResolve = {
   categoryName: string | null;
   /** An item the submitter chose, to find the pack for. */
   itemId: string | null;
+  /** A pack of that item the submitter chose, kept as chosen. */
+  packSizeId?: string | null;
   /** The offer an expense being edited already files this line against. */
   pricelistItemId: string | null;
   /** What the receipt printed about the pack (#79), for choosing among an item's packs. */
   details?: ReceiptLineDetails | null;
 };
 
-type WordingRow = { item_id: string; vendor_id: string | null; description: string };
+type WordingRow = { item_id: string; vendor_id: string | null; description: string; pricelist_item_id: string | null };
+
+type VendorOfferRow = {
+  id: string;
+  pack_size_id: string;
+  vendor_sku: string | null;
+  brand: string | null;
+  store_product_name: string | null;
+  pack_price: number | null;
+};
 
 /**
  * Which Pricelist item and pack each receipt line is, before anything is saved.
@@ -632,7 +657,7 @@ export async function matchReceiptLinesAction(input: {
 
   const wordings = [...new Set(input.lines.map((l) => normalizeWording(l.description)).filter(Boolean))];
   const pinnedOfferIds = input.lines.map((l) => l.pricelistItemId).filter((id): id is string => !!id);
-  const wordingColumns = "item_id, vendor_id, description";
+  const wordingColumns = "item_id, vendor_id, description, pricelist_item_id";
 
   const [itemRows, packRows, unitsResult, categoriesResult, exactWordings, vendorlessWordings, ownWordings, vendorOffers, pinnedOffersResult] =
     await Promise.all([
@@ -669,18 +694,18 @@ export async function matchReceiptLinesAction(input: {
           )
         : Promise.resolve([] as WordingRow[]),
       vendorId
-        ? allRows<{ pack_size_id: string; vendor_sku: string | null }>((from, to) =>
+        ? allRows<VendorOfferRow>((from, to) =>
             admin
               .from("pricelist_items")
-              .select("pack_size_id, vendor_sku")
+              .select("id, pack_size_id, vendor_sku, brand, store_product_name, pack_price")
               .eq("vendor_id", vendorId)
               .neq("status", "rejected")
               .order("id")
               .range(from, to)
           )
-        : Promise.resolve([] as { pack_size_id: string; vendor_sku: string | null }[]),
+        : Promise.resolve([] as VendorOfferRow[]),
       pinnedOfferIds.length
-        ? admin.from("pricelist_items").select("id, pack_size_id").in("id", pinnedOfferIds)
+        ? admin.from("pricelist_items").select("id, pack_size_id, brand").in("id", pinnedOfferIds)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -718,19 +743,44 @@ export async function matchReceiptLinesAction(input: {
     description: w.description,
   }));
   const vendorPackIds = new Set(vendorOffers.map((o) => o.pack_size_id));
-  // The vendor's own product codes (#79): a code printed on the line that this
-  // vendor's offers carry exactly once names the pack outright.
-  const packsByCode = new Map<string, string[]>();
-  for (const o of vendorOffers) {
-    const code = o.vendor_sku?.trim().toLowerCase();
-    if (code) packsByCode.set(code, [...(packsByCode.get(code) ?? []), o.pack_size_id]);
+
+  // This store's offers, each with what its receipts have called it (#55).
+  const wordingsOfOffer = new Map<string, string[]>();
+  for (const w of ownWordings) {
+    if (w.pricelist_item_id) {
+      wordingsOfOffer.set(w.pricelist_item_id, [...(wordingsOfOffer.get(w.pricelist_item_id) ?? []), w.description]);
+    }
   }
-  const packForCode = (code: string | null | undefined) => {
-    const packs = code ? packsByCode.get(code.trim().toLowerCase()) : undefined;
-    return packs?.length === 1 ? packById.get(packs[0]!) : undefined;
-  };
-  const packOfOffer = new Map(
-    ((pinnedOffersResult.data ?? []) as { id: string; pack_size_id: string }[]).map((o) => [o.id, o.pack_size_id])
+  const storeOffers: StoreOffer[] = vendorOffers.flatMap((o) => {
+    const pack = packById.get(o.pack_size_id);
+    if (!pack) return [];
+    return [
+      {
+        id: o.id,
+        packSizeId: o.pack_size_id,
+        itemId: pack.item_id,
+        brand: o.brand,
+        storeName: o.store_product_name,
+        wordings: wordingsOfOffer.get(o.id) ?? [],
+        price: o.pack_price == null ? null : Number(o.pack_price),
+        vendorSku: o.vendor_sku,
+      },
+    ];
+  });
+  const storeWordings = ownWordings.map((w) => ({ description: w.description, offerId: w.pricelist_item_id }));
+  const offerOptionsFor = (itemId: string): OfferOption[] =>
+    storeOffers
+      .filter((o) => o.itemId === itemId)
+      .map((o) => ({
+        id: o.id,
+        packSizeId: o.packSizeId,
+        brand: o.brand,
+        storeName: o.storeName,
+        wordings: o.wordings,
+        price: o.price,
+      }));
+  const editedOffers = new Map(
+    ((pinnedOffersResult.data ?? []) as { id: string; pack_size_id: string; brand: string | null }[]).map((o) => [o.id, o])
   );
 
   const alternativesFor = (ids: string[]) =>
@@ -743,26 +793,57 @@ export async function matchReceiptLinesAction(input: {
     item: CatalogueItem,
     confidence: MatchConfidence,
     packSizeId: string | null,
-    alternatives: string[]
-  ): LineMatchResult => ({
-    confidence,
-    itemId: item.id,
-    itemNumber: item.itemNumber,
-    itemName: item.name,
-    categoryName: item.categoryName,
-    packSizeId,
-    packs: packOptions(packsByItem.get(item.id) ?? [], unitById),
-    alternatives: alternativesFor(alternatives),
-  });
+    alternatives: string[],
+    line: LineToResolve,
+    settledBrand?: BrandPick
+  ): LineMatchResult => {
+    const offers = offerOptionsFor(item.id);
+    const brand =
+      settledBrand ??
+      chooseOffer(
+        packSizeId ? offers.filter((o) => o.packSizeId === packSizeId) : [],
+        { description: line.description, scannedBrand: line.details?.brand ?? null },
+        item.name
+      );
+    return {
+      confidence,
+      itemId: item.id,
+      itemNumber: item.itemNumber,
+      itemName: item.name,
+      categoryName: item.categoryName,
+      packSizeId,
+      packs: packOptions(packsByItem.get(item.id) ?? [], unitById),
+      offers,
+      brand: brand.brand,
+      brandConfidence: brand.confidence,
+      alternatives: alternativesFor(alternatives),
+    };
+  };
 
   const results: Record<string, LineMatchResult> = {};
   for (const line of input.lines) {
     // Something a person already settled — the offer an edited expense files
-    // against, or an item picked from the options — is not second-guessed.
-    const pinnedPackId = line.pricelistItemId ? packOfOffer.get(line.pricelistItemId) : undefined;
+    // against, or an item and pack picked from the options — is not
+    // second-guessed. Nor is a product code or an exact wording this store
+    // used for one of its offers (#55): that names the pack and the brand.
+    const edited = line.pricelistItemId ? editedOffers.get(line.pricelistItemId) : undefined;
+    const storeOffer = edited
+      ? null
+      : pinnedStoreOffer(
+          { description: line.description, productCode: line.details?.productCode ?? null },
+          line.itemId ? storeOffers.filter((o) => o.itemId === line.itemId) : storeOffers,
+          storeWordings
+        );
+    const picked = line.itemId && line.packSizeId ? packById.get(line.packSizeId) : undefined;
     const pinnedPack =
-      (pinnedPackId ? packById.get(pinnedPackId) : undefined) ??
-      (line.itemId ? undefined : packForCode(line.details?.productCode));
+      (edited ? packById.get(edited.pack_size_id) : undefined) ??
+      (picked?.item_id === line.itemId ? picked : undefined) ??
+      (storeOffer ? packById.get(storeOffer.packSizeId) : undefined);
+    const settledBrand: BrandPick | undefined = edited
+      ? { brand: edited.brand ?? "", confidence: "sure" }
+      : storeOffer && pinnedPack?.id === storeOffer.packSizeId
+        ? { brand: storeOffer.brand ?? "", confidence: "sure" }
+        : undefined;
     const pinnedItem = pinnedPack
       ? itemById.get(pinnedPack.item_id)
       : line.itemId
@@ -774,7 +855,9 @@ export async function matchReceiptLinesAction(input: {
         "sure",
         pinnedPack?.id ??
           choosePack(pinnedItem.packs, line.description, catalogueUnits, vendorPackIds, pinnedItem.name, line.details ?? null),
-        []
+        [],
+        line,
+        settledBrand
       );
       continue;
     }
@@ -786,7 +869,8 @@ export async function matchReceiptLinesAction(input: {
           item,
           pick.confidence,
           choosePack(item.packs, line.description, catalogueUnits, vendorPackIds, item.name, line.details ?? null),
-          pick.alternatives
+          pick.alternatives,
+          line
         )
       : {
           confidence: "none",
@@ -796,6 +880,9 @@ export async function matchReceiptLinesAction(input: {
           categoryName: null,
           packSizeId: null,
           packs: [],
+          offers: [],
+          brand: line.details?.brand?.trim() ?? "",
+          brandConfidence: "sure",
           alternatives: alternativesFor(pick.alternatives),
         };
   }
@@ -840,6 +927,12 @@ export type LineItemInput = {
    * offer when the expense is submitted.
    */
   newPack?: { soldAs: string; innerQuantity: number; innerUnitId: string; packCount: number } | null;
+  /**
+   * The brand this line is, as the form matched it or the submitter chose it
+   * (#55): which of this store's offers on the pack it files against, "" for
+   * the one with no brand, or a new one. Null when nothing settled it.
+   */
+  offerBrand?: string | null;
   /**
    * What this line is. Only "goods" is a purchase; the rest exist so the lines
    * add up to the total printed on the receipt — see migration 0026.
@@ -929,6 +1022,7 @@ async function buildLineRows(
   );
 
   const rows = [];
+  const filedAgainst: { description: string; originalDescription: string | null; offerId: string | null }[] = [];
   for (const [index, item] of input.lineItems.entries()) {
     const categoryId = item.categoryName
       ? (categoryIdByName.get(item.categoryName.toLowerCase()) ?? null)
@@ -958,6 +1052,7 @@ async function buildLineRows(
           normalizedQuantity: item.normalizedQuantity,
         },
         details: item.details ?? null,
+        brand: item.offerBrand ?? undefined,
       };
       // A pack size the submitter described because the item has no such pack
       // (#60) is created first, so the line files against it like any other.
@@ -989,6 +1084,7 @@ async function buildLineRows(
           normalizedQuantity: item.normalizedQuantity,
         },
         details: item.details ?? null,
+        brand: item.offerBrand ?? undefined,
       }));
       pricelistItemId = matched.id;
       // Prefer the category of the item this line resolved to. When the line
@@ -998,6 +1094,11 @@ async function buildLineRows(
       resolvedCategoryId = matched.categoryId ?? categoryId;
     }
 
+    filedAgainst.push({
+      description: item.description,
+      originalDescription: item.originalDescription ?? null,
+      offerId: pricelistItemId,
+    });
     const money = { kind: item.kind, lineTotal: item.lineTotal, gstApplicable: item.gstApplicable };
     rows.push({
       pricelist_item_id: pricelistItemId,
@@ -1021,6 +1122,18 @@ async function buildLineRows(
       not_on_receipt: item.notOnReceipt === true,
       not_on_receipt_note: item.notOnReceipt ? item.notOnReceiptNote?.trim() || null : null,
     });
+  }
+
+  // Each wording now means the offer it was filed against, pack and brand
+  // (#55), so the next receipt saying the same goes straight there.
+  try {
+    await rememberOfferWordings(admin, {
+      vendorId,
+      userId,
+      lines: filedAgainst,
+    });
+  } catch (err) {
+    await reportError({ source: "offer-wordings", error: err, userId });
   }
   return rows;
 }

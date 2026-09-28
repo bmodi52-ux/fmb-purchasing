@@ -5,6 +5,7 @@ import { canonicalUnitCode } from "@/lib/units";
 import { packShapeFromDescription, type PackShape } from "@/lib/pack-shape";
 import { isPackaging, packagingFromText } from "@/lib/pack-description";
 import { packShapeFromDetails, type ReceiptLineDetails } from "@/lib/receipt-line-details";
+import { offerForBrand } from "@/lib/line-matching";
 
 export function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -440,10 +441,12 @@ async function matchOrCreatePackSize(
  * what the vendor actually sells (a 5 kg tub), rederiving it would miss and
  * quietly add a second pack size beside the corrected one.
  *
- * Only when exactly one offer is in the frame. Several offers means several
- * pack sizes, and picking wrong would file the spend against the wrong
- * per-unit cost — falling through creates a pending offer somebody reviews
- * instead, which is the failure worth having.
+ * The offer the wording was last filed against comes first (#55): it names the
+ * pack and the brand. Otherwise only when exactly one offer is in the frame.
+ * Several offers means several packs or brands, and picking wrong would file
+ * the spend against the wrong price — falling through lets the brand the
+ * receipt printed decide, or creates a pending offer somebody reviews, which
+ * is the failure worth having.
  */
 async function findOfferByVendorDescription(
   admin: SupabaseClient,
@@ -452,12 +455,26 @@ async function findOfferByVendorDescription(
 ): Promise<string | null> {
   const { data: known } = await admin
     .from("vendor_item_descriptions")
-    .select("item_id")
+    .select("item_id, pricelist_item_id")
     .eq("vendor_id", vendorId)
     .eq("description_normalized", normalize(description));
 
   const itemIds = [...new Set((known ?? []).map((r) => r.item_id as string))];
   if (itemIds.length !== 1) return null;
+
+  const rememberedIds = [
+    ...new Set((known ?? []).map((r) => r.pricelist_item_id as string | null).filter((id): id is string => !!id)),
+  ];
+  if (rememberedIds.length === 1) {
+    const { data: remembered } = await admin
+      .from("pricelist_items")
+      .select("id")
+      .eq("id", rememberedIds[0])
+      .eq("vendor_id", vendorId)
+      .neq("status", "rejected")
+      .maybeSingle();
+    if (remembered) return remembered.id as string;
+  }
 
   const { data: packs } = await admin.from("item_pack_sizes").select("id").eq("item_id", itemIds[0]);
   const packIds = (packs ?? []).map((p) => p.id as string);
@@ -467,7 +484,8 @@ async function findOfferByVendorDescription(
     .from("pricelist_items")
     .select("id")
     .eq("vendor_id", vendorId)
-    .in("pack_size_id", packIds);
+    .in("pack_size_id", packIds)
+    .neq("status", "rejected");
 
   return offers?.length === 1 ? (offers[0].id as string) : null;
 }
@@ -541,6 +559,139 @@ export function isWorthRemembering(
   const original = (originalDescription ?? "").trim();
   if (!original) return false;
   return normalize(original) !== normalize(description);
+}
+
+/**
+ * Which offer each of a submission's wordings now means (#55), keyed by the
+ * normalized wording: the line's own, and what extraction read before a person
+ * corrected it. A wording the same submission filed against two offers — one
+ * receipt printing "BASMATI RICE 10KG" for two brands — means neither, so it
+ * maps to null and the next receipt asks.
+ *
+ * Pure, so the rule is testable without a database.
+ */
+export function offerWordings(
+  lines: { description: string; originalDescription?: string | null; offerId: string | null }[]
+): Map<string, { text: string; offerId: string | null }> {
+  const seen = new Map<string, { text: string; offerIds: Set<string> }>();
+  for (const line of lines) {
+    if (!line.offerId) continue;
+    const texts = [line.description, ...(isWorthRemembering(line.originalDescription, line.description) ? [line.originalDescription!] : [])];
+    for (const text of texts) {
+      const key = normalize(text);
+      if (!key) continue;
+      const entry = seen.get(key) ?? { text: text.trim(), offerIds: new Set<string>() };
+      entry.offerIds.add(line.offerId);
+      seen.set(key, entry);
+    }
+  }
+  return new Map(
+    [...seen].map(([key, { text, offerIds }]) => [key, { text, offerId: offerIds.size === 1 ? [...offerIds][0]! : null }])
+  );
+}
+
+/**
+ * What a store's remembered wording means once a receipt files it against an
+ * offer (#55): that offer, when it meant nothing yet or the same one before.
+ * A wording that has now meant two offers — a store printing "GINGER" for two
+ * brands — varies, and stays that way: it points at neither and the form asks.
+ * Letting the latest receipt win would put the other brand first as though
+ * sure, and a receipt filed there replaces that brand's price.
+ *
+ * `offerId` null is a wording this receipt itself filed against two offers.
+ */
+export function nextOfferMemory(
+  existing: { offerId: string | null; varies: boolean } | null,
+  offerId: string | null
+): { offerId: string | null; varies: boolean } {
+  if (existing?.varies || offerId === null) return { offerId: null, varies: true };
+  if (!existing?.offerId || existing.offerId === offerId) return { offerId, varies: false };
+  return { offerId: null, varies: true };
+}
+
+/**
+ * Remember the offer each wording on this receipt was filed against (#55), so
+ * the next receipt from this store saying the same thing goes straight to that
+ * pack and brand — see nextOfferMemory. The item-level wording stays as it
+ * was: it is what finds the item when the offer can't be told.
+ *
+ * Its caller never lets it fail a submission: this is a hint for next time.
+ */
+export async function rememberOfferWordings(
+  admin: SupabaseClient,
+  {
+    vendorId,
+    userId,
+    lines,
+  }: {
+    vendorId: string;
+    userId: string;
+    lines: { description: string; originalDescription?: string | null; offerId: string | null }[];
+  }
+): Promise<void> {
+  const wordings = offerWordings(lines);
+  if (wordings.size === 0) return;
+
+  const offerIds = [...new Set([...wordings.values()].map((w) => w.offerId).filter((id): id is string => !!id))];
+  const { data: offers, error } = offerIds.length
+    ? await admin.from("pricelist_items").select("id, vendor_id, item_pack_sizes ( item_id )").in("id", offerIds)
+    : { data: [], error: null };
+  if (error) throw error;
+  const itemOfOffer = new Map(
+    ((offers ?? []) as unknown as { id: string; vendor_id: string | null; item_pack_sizes: { item_id: string } | null }[])
+      // Only this store's own offers: a wording is this store's name for them.
+      .filter((o) => o.vendor_id === vendorId && o.item_pack_sizes)
+      .map((o) => [o.id, o.item_pack_sizes!.item_id])
+  );
+
+  for (const [key, { text, offerId }] of wordings) {
+    if (offerId === null) {
+      const { error: variesError } = await admin
+        .from("vendor_item_descriptions")
+        .update({ pricelist_item_id: null, offer_varies: true })
+        .eq("vendor_id", vendorId)
+        .eq("description_normalized", key);
+      if (variesError) throw variesError;
+      continue;
+    }
+    // Another store's offer, pinned on an old expense: not this store's name for it.
+    const itemId = itemOfOffer.get(offerId);
+    if (!itemId) continue;
+
+    const { data: found, error: findError } = await admin
+      .from("vendor_item_descriptions")
+      .select("id, pricelist_item_id, offer_varies")
+      .eq("vendor_id", vendorId)
+      .eq("item_id", itemId)
+      .eq("description_normalized", key)
+      .limit(1);
+    if (findError) throw findError;
+    const row = found?.[0] as { id: string; pricelist_item_id: string | null; offer_varies: boolean } | undefined;
+    const next = nextOfferMemory(
+      row ? { offerId: row.pricelist_item_id, varies: row.offer_varies } : null,
+      offerId
+    );
+
+    if (row) {
+      if (next.offerId === row.pricelist_item_id && next.varies === row.offer_varies) continue;
+      const { error: updateError } = await admin
+        .from("vendor_item_descriptions")
+        .update({ pricelist_item_id: next.offerId, offer_varies: next.varies })
+        .eq("id", row.id);
+      if (updateError) throw updateError;
+      continue;
+    }
+    const { error: insertError } = await admin.from("vendor_item_descriptions").insert({
+      item_id: itemId,
+      vendor_id: vendorId,
+      description: text,
+      description_normalized: key,
+      pricelist_item_id: next.offerId,
+      offer_varies: next.varies,
+      created_by: userId,
+    });
+    if (insertError && insertError.code !== "23505") throw insertError;
+  }
 }
 
 /**
@@ -645,12 +796,15 @@ async function findOfferByVendorCode(
 }
 
 /**
- * This vendor's offer on a pack, adding a pending one when there is none.
+ * This vendor's offer on a pack in the line's brand, adding a pending one when
+ * there is none (#55).
  *
- * A reviewed offer is preferred over a provisional one, then the oldest, so
- * the answer never depends on row order. A rejected offer is not reused: it
- * records a price somebody decided against, and a new purchase is fresh
- * evidence for a reviewer to look at.
+ * A store can sell one pack in several brands, each its own offer with its own
+ * price (0078), and since #46 a receipt sets the price of the offer it is filed
+ * against. So the brand decides which: the one the submit form settled on, else
+ * the one the receipt printed — see offerForBrand. A rejected offer is never
+ * reused: it records a price somebody decided against, and a new purchase is
+ * fresh evidence for a reviewer to look at.
  */
 async function offerForPack(
   admin: SupabaseClient,
@@ -660,32 +814,38 @@ async function offerForPack(
     packPrice,
     userId,
     details = null,
+    brand,
   }: {
     vendorId: string;
     packSizeId: string;
     packPrice: number | null;
     userId: string;
     details?: ReceiptLineDetails | null;
+    /** The brand the submit form settled on, "" for none; undefined when it didn't. */
+    brand?: string | null;
   }
 ): Promise<{ id: string; status: "matched" | "created" }> {
-  const { data: offers, error } = await admin
-    .from("pricelist_items")
-    .select("id, status, created_at")
-    .eq("vendor_id", vendorId)
-    .eq("pack_size_id", packSizeId);
-  if (error) throw error;
+  const liveOffers = async () => {
+    const { data, error } = await admin
+      .from("pricelist_items")
+      .select("id, status, created_at, brand")
+      .eq("vendor_id", vendorId)
+      .eq("pack_size_id", packSizeId)
+      .neq("status", "rejected");
+    if (error) throw error;
+    return (data ?? []).map((o) => ({
+      id: o.id as string,
+      status: o.status as string,
+      createdAt: String(o.created_at),
+      brand: (o.brand as string | null) ?? null,
+    }));
+  };
 
-  const live = (offers ?? [])
-    .filter((o) => o.status !== "rejected")
-    .sort(
-      (a, b) =>
-        Number(b.status === "approved") - Number(a.status === "approved") ||
-        String(a.created_at).localeCompare(String(b.created_at))
-    );
-  if (live[0]) {
-    await fillMissingPackPrice(admin, live[0].id as string, packPrice);
-    await fillMissingOfferDetails(admin, live[0].id as string, details);
-    return { id: live[0].id as string, status: "matched" };
+  const choice = offerForBrand(await liveOffers(), brand, details?.brand);
+  if ("offerId" in choice) {
+    await fillMissingPackPrice(admin, choice.offerId, packPrice);
+    await fillMissingOfferDetails(admin, choice.offerId, details);
+    return { id: choice.offerId, status: "matched" };
   }
 
   const { data: created, error: insertError } = await admin
@@ -695,13 +855,18 @@ async function offerForPack(
       pack_size_id: packSizeId,
       pack_price: packPrice,
       price_set_at: packPrice == null ? null : PROVISIONAL_PRICE_DATE,
-      brand: details?.brand ?? null,
+      brand: choice.newBrand,
       vendor_sku: details?.productCode ?? null,
       status: "pending",
       created_by: userId,
     })
     .select("id")
     .single();
+  if (insertError?.code === "23505") {
+    // Another submission added this brand's offer a moment ago: file against it.
+    const again = offerForBrand(await liveOffers(), choice.newBrand ?? "", null);
+    if ("offerId" in again) return { id: again.offerId, status: "matched" };
+  }
   if (insertError) throw insertError;
   return { id: created.id, status: "created" };
 }
@@ -854,6 +1019,8 @@ type PinnedLine = {
   line?: ReceiptLineFacts | null;
   normalizedUnit: string | null;
   details?: ReceiptLineDetails | null;
+  /** The brand the submit form settled on (#55); undefined when it didn't. */
+  brand?: string | null;
 };
 
 /**
@@ -871,7 +1038,17 @@ type PinnedLine = {
  */
 export async function chosenPack(
   admin: SupabaseClient,
-  { packSizeId, vendorId, description, originalDescription, userId, line, normalizedUnit, details }: PinnedLine & { packSizeId: string }
+  {
+    packSizeId,
+    vendorId,
+    description,
+    originalDescription,
+    userId,
+    line,
+    normalizedUnit,
+    details,
+    brand,
+  }: PinnedLine & { packSizeId: string }
 ): Promise<{ id: string; status: "matched" | "created"; categoryId: string | null } | null> {
   const { data: pack } = await admin
     .from("item_pack_sizes")
@@ -894,7 +1071,7 @@ export async function chosenPack(
     : null;
   const packPrice = line ? offerPackPrice({ ...line, normalizedUnit }, shape) : null;
 
-  const offer = await offerForPack(admin, { vendorId, packSizeId: pack.id, packPrice, userId, details });
+  const offer = await offerForPack(admin, { vendorId, packSizeId: pack.id, packPrice, userId, details, brand });
 
   const item = pack.items;
   if (item) {
@@ -947,6 +1124,7 @@ export async function matchOrCreateOffer(
     normalizedUnit = null,
     line = null,
     details = null,
+    brand,
   }: {
     vendorId: string;
     description: string;
@@ -973,6 +1151,8 @@ export async function matchOrCreateOffer(
     line?: ReceiptLineFacts | null;
     /** Brand, product code, packaging and pack, as extraction read them (#79). */
     details?: ReceiptLineDetails | null;
+    /** The brand the submit form settled on (#55); undefined when it didn't. */
+    brand?: string | null;
   }
 ): Promise<{ id: string; status: "matched" | "created"; categoryId: string | null }> {
   const shape = packShapeFromDetails(details) ?? packShapeFromDescription(description);
@@ -1029,7 +1209,7 @@ export async function matchOrCreateOffer(
     userId,
   });
 
-  const offer = await offerForPack(admin, { vendorId, packSizeId, packPrice, userId, details });
+  const offer = await offerForPack(admin, { vendorId, packSizeId, packPrice, userId, details, brand });
   return { ...offer, categoryId: item.categoryId };
 }
 
