@@ -25,6 +25,10 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 
 ### 57. A withdrawn receipt can leave its date on an offer's price
 
+**2026-09-28:** built in bmodi52-ux/fmb-purchasing#110, which also covers
+edited receipts (an edit replaces the lines, and withdrawing one left even its
+price behind). 0082 is on the sandbox, not yet on live.
+
 Raised 2026-09-28, seen on the sandbox while testing #55: test receipt E-0057
 confirmed Jumbo Ginger's existing $75, and after it was withdrawn the offer
 was still dated 28/09 and still named E-0057's line as its source.
