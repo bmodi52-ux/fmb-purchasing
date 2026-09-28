@@ -155,10 +155,13 @@ export default async function ItemDetailPage({
     packSizeIds.length
       ? admin.from("pricelist_items").select("*").in("pack_size_id", packSizeIds).order("created_at")
       : Promise.resolve({ data: [] }),
+    // This item's offers' history only, not the whole table, which outgrows
+    // the 1,000 rows one request returns.
     packSizeIds.length
       ? admin
           .from("pricelist_item_history")
-          .select("id, item_id, changed_at, changed_by, changes")
+          .select("id, item_id, changed_at, changed_by, changes, pricelist_items!inner ( pack_size_id )")
+          .in("pricelist_items.pack_size_id", packSizeIds)
           .order("changed_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     admin.from("offer_unit_costs").select("offer_id, cost_per_base_unit, base_unit_code").eq("item_id", id),
@@ -305,7 +308,11 @@ export default async function ItemDetailPage({
   const expensesWithReceipt = new Set((sourceAttachments ?? []).map((a) => a.expense_id as string));
 
   const offerIds = new Set((offers ?? []).map((o) => o.id));
-  const offerHistory = (offerHistoryRows ?? []).filter((h) => offerIds.has(h.item_id));
+  // A receipt that confirmed the price it found writes only its undo (#57),
+  // which is nothing to show.
+  const offerHistory = (offerHistoryRows ?? []).filter(
+    (h) => offerIds.has(h.item_id) && shownChanges(h.changes).length > 0
+  );
 
   const changedByIds = [
     ...new Set(
