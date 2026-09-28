@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #56.** To see what's open, list the headings
+**Next number: #57.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -93,6 +93,26 @@ Workaround until then: after submitting, check the offer's brand and price,
 and add the other brand's offer by hand from the item's Pricelist page. Later
 receipts from that store for that pack will still update one of the two, so
 check both prices after each.
+
+### 56. The Reports page fails, and expense line details come back empty, since #46
+
+Raised 2026-09-28, found while testing #55 on the sandbox. 0078 added
+`pricelist_items.price_source_line_id`, a second link between receipt lines
+and offers, so the database API now refuses a query that goes from a line to
+its offer without saying which link ("more than one relationship was found for
+'expense_line_items' and 'pricelist_items'"). Two queries do:
+
+- `src/app/(app)/reports/data.ts`: the Reports page shows "Something went
+  wrong" on the sandbox, and the budget check after every submission fails
+  (`checkBudgetThresholds`, logged, not shown to anyone).
+- `src/app/(app)/expenses/page.tsx`: the line details on the Expenses page. The
+  error is ignored there, so the lines just come back empty.
+
+Live has had 0078 since #46, so it should be the same there. Not checked on
+live, which needs signing in.
+
+Fix: name the link in both, `pricelist_items!expense_line_items_pricelist_item_id_fkey ( … )`.
+A small change, separate from #55.
 
 ## Improvements
 
