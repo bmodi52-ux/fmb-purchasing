@@ -8,7 +8,7 @@ import {
   type OfferOption,
   type StoreOffer,
 } from "./line-matching.ts";
-import { offerWordings } from "./expense-matching.ts";
+import { nextOfferMemory, offerWordings } from "./expense-matching.ts";
 
 /**
  * Which of a store's offers on a pack a receipt line is, when the store sells
@@ -209,6 +209,29 @@ describe("offerForBrand", () => {
 
   test("a rejected offer is never reused", () => {
     assert.deepEqual(offerForBrand([{ ...live[0]!, status: "rejected" }], "Tilda", null), { newBrand: "Tilda" });
+  });
+});
+
+describe("nextOfferMemory", () => {
+  test("a wording that meant nothing yet now means the offer it was filed against", () => {
+    assert.deepEqual(nextOfferMemory(null, "tilda"), { offerId: "tilda", varies: false });
+    assert.deepEqual(nextOfferMemory({ offerId: null, varies: false }, "tilda"), { offerId: "tilda", varies: false });
+  });
+
+  test("the same offer again changes nothing", () => {
+    assert.deepEqual(nextOfferMemory({ offerId: "tilda", varies: false }, "tilda"), { offerId: "tilda", varies: false });
+  });
+
+  test("a second offer for the same wording means it varies, rather than the latest winning", () => {
+    assert.deepEqual(nextOfferMemory({ offerId: "tilda", varies: false }, "sunrice"), { offerId: null, varies: true });
+  });
+
+  test("once it varies it stays that way", () => {
+    assert.deepEqual(nextOfferMemory({ offerId: null, varies: true }, "tilda"), { offerId: null, varies: true });
+  });
+
+  test("a wording one receipt filed against two offers varies", () => {
+    assert.deepEqual(nextOfferMemory({ offerId: "tilda", varies: false }, null), { offerId: null, varies: true });
   });
 });
 

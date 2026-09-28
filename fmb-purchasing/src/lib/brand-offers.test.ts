@@ -83,6 +83,10 @@ async function offerOfWording(db: TestDb, wordingId: string): Promise<string | n
   return scalar<string | null>(db, "select pricelist_item_id from vendor_item_descriptions where id = $1", [wordingId]);
 }
 
+async function wordingVaries(db: TestDb, wordingId: string): Promise<boolean> {
+  return scalar<boolean>(db, "select offer_varies from vendor_item_descriptions where id = $1", [wordingId]);
+}
+
 describe("0081 remembers which offer a store's past wording meant", () => {
   let db: TestDb;
   let ids: Ids;
@@ -96,7 +100,7 @@ describe("0081 remembers which offer a store's past wording meant", () => {
     await db?.close();
   });
 
-  test("a wording that only ever went to one offer means it; one that went to two means neither", async () => {
+  test("a wording that only ever went to one offer means it; one that went to two varies", async () => {
     const rice = await item(db, ids, "Basmati Rice");
     const pack = await tenKiloPack(db, ids, rice);
     const tilda = await offer(db, ids, pack, "Tilda", { price: 54 });
@@ -120,9 +124,13 @@ describe("0081 remembers which offer a store's past wording meant", () => {
 
     assert.equal(await offerOfWording(db, tildaWording), tilda);
     assert.equal(await offerOfWording(db, sunriceWording), sunrice);
+    assert.equal(await wordingVaries(db, tildaWording), false);
     assert.equal(await offerOfWording(db, sharedWording), null);
+    assert.equal(await wordingVaries(db, sharedWording), true, "one wording for two brands asks from now on");
     assert.equal(await offerOfWording(db, retiredWording), null, "a rejected offer is never what a wording means");
+    assert.equal(await wordingVaries(db, retiredWording), false);
     assert.equal(await offerOfWording(db, neverBought), null);
+    assert.equal(await wordingVaries(db, neverBought), false);
   });
 
   test("deleting an offer forgets it rather than blocking the delete", async () => {
@@ -205,7 +213,7 @@ describe("merge_items keeps one offer per store, pack and brand", () => {
     assert.equal(await scalar<string>(db, "select item_id from vendor_item_descriptions where id = $1", [w]), winner);
   });
 
-  test("a wording both items remember for different offers remembers neither", async () => {
+  test("a wording both items remember for different offers varies", async () => {
     const winner = await item(db, ids, "Ghee");
     const loser = await item(db, ids, "Ghee Pure");
     const winnerPack = await tenKiloPack(db, ids, winner);
@@ -225,6 +233,7 @@ describe("merge_items keeps one offer per store, pack and brand", () => {
     await db.query("select merge_items($1, $2, $3)", [loser, winner, ids.profile]);
 
     assert.equal(await offerOfWording(db, kept), null);
+    assert.equal(await wordingVaries(db, kept), true);
     assert.equal(
       await scalar<number>(db, "select count(*)::int from vendor_item_descriptions where id = $1", [dropped]),
       0

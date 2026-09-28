@@ -591,12 +591,30 @@ export function offerWordings(
 }
 
 /**
+ * What a store's remembered wording means once a receipt files it against an
+ * offer (#55): that offer, when it meant nothing yet or the same one before.
+ * A wording that has now meant two offers — a store printing "GINGER" for two
+ * brands — varies, and stays that way: it points at neither and the form asks.
+ * Letting the latest receipt win would put the other brand first as though
+ * sure, and a receipt filed there replaces that brand's price.
+ *
+ * `offerId` null is a wording this receipt itself filed against two offers.
+ */
+export function nextOfferMemory(
+  existing: { offerId: string | null; varies: boolean } | null,
+  offerId: string | null
+): { offerId: string | null; varies: boolean } {
+  if (existing?.varies || offerId === null) return { offerId: null, varies: true };
+  if (!existing?.offerId || existing.offerId === offerId) return { offerId, varies: false };
+  return { offerId: null, varies: true };
+}
+
+/**
  * Remember the offer each wording on this receipt was filed against (#55), so
  * the next receipt from this store saying the same thing goes straight to that
- * pack and brand. The item-level wording stays as it was: it is what finds the
- * item when the offer can't be told.
+ * pack and brand — see nextOfferMemory. The item-level wording stays as it
+ * was: it is what finds the item when the offer can't be told.
  *
- * The latest receipt wins, since it is what somebody most recently confirmed.
  * Its caller never lets it fail a submission: this is a hint for next time.
  */
 export async function rememberOfferWordings(
@@ -627,32 +645,49 @@ export async function rememberOfferWordings(
   );
 
   for (const [key, { text, offerId }] of wordings) {
-    const itemId = offerId ? itemOfOffer.get(offerId) : undefined;
-    if (!offerId || !itemId) {
-      if (!offerId) {
-        await admin
-          .from("vendor_item_descriptions")
-          .update({ pricelist_item_id: null })
-          .eq("vendor_id", vendorId)
-          .eq("description_normalized", key);
-      }
+    if (offerId === null) {
+      const { error: variesError } = await admin
+        .from("vendor_item_descriptions")
+        .update({ pricelist_item_id: null, offer_varies: true })
+        .eq("vendor_id", vendorId)
+        .eq("description_normalized", key);
+      if (variesError) throw variesError;
       continue;
     }
-    const { data: updated, error: updateError } = await admin
+    // Another store's offer, pinned on an old expense: not this store's name for it.
+    const itemId = itemOfOffer.get(offerId);
+    if (!itemId) continue;
+
+    const { data: found, error: findError } = await admin
       .from("vendor_item_descriptions")
-      .update({ pricelist_item_id: offerId })
+      .select("id, pricelist_item_id, offer_varies")
       .eq("vendor_id", vendorId)
       .eq("item_id", itemId)
       .eq("description_normalized", key)
-      .select("id");
-    if (updateError) throw updateError;
-    if (updated?.length) continue;
+      .limit(1);
+    if (findError) throw findError;
+    const row = found?.[0] as { id: string; pricelist_item_id: string | null; offer_varies: boolean } | undefined;
+    const next = nextOfferMemory(
+      row ? { offerId: row.pricelist_item_id, varies: row.offer_varies } : null,
+      offerId
+    );
+
+    if (row) {
+      if (next.offerId === row.pricelist_item_id && next.varies === row.offer_varies) continue;
+      const { error: updateError } = await admin
+        .from("vendor_item_descriptions")
+        .update({ pricelist_item_id: next.offerId, offer_varies: next.varies })
+        .eq("id", row.id);
+      if (updateError) throw updateError;
+      continue;
+    }
     const { error: insertError } = await admin.from("vendor_item_descriptions").insert({
       item_id: itemId,
       vendor_id: vendorId,
       description: text,
       description_normalized: key,
-      pricelist_item_id: offerId,
+      pricelist_item_id: next.offerId,
+      offer_varies: next.varies,
       created_by: userId,
     });
     if (insertError && insertError.code !== "23505") throw insertError;

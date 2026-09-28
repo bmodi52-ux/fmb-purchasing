@@ -9,11 +9,14 @@
 -- what that needs in the database.
 --
 -- vendor_item_descriptions.pricelist_item_id — the offer this store's wording
---   was last filed against. A wording used to say only which item a line was;
---   now it can say which offer, so the pack and the brand come with it. Null
---   where the same wording has meant more than one offer, which is left for a
---   person to choose. Filled here from past receipts where a wording only
---   ever went to one offer.
+--   was filed against. A wording used to say only which item a line was; now
+--   it can say which offer, so the pack and the brand come with it. Filled
+--   here from past receipts where a wording only ever went to one offer.
+-- vendor_item_descriptions.offer_varies — the wording has meant more than one
+--   offer: a store printing "GINGER" for two brands. It then points at
+--   neither, for good, and the submit form asks each time. Letting the latest
+--   receipt win instead would put the wrong brand first, as though sure, and
+--   a receipt filed there replaces that brand's price.
 --
 -- merge_items — keeps one offer per store, pack and brand, as 0078's index
 --   does, instead of one per store and pack, which deleted a second brand's
@@ -21,10 +24,13 @@
 --   same store already had that brand broke the index.
 
 alter table vendor_item_descriptions
-  add column pricelist_item_id uuid references pricelist_items (id) on delete set null;
+  add column pricelist_item_id uuid references pricelist_items (id) on delete set null,
+  add column offer_varies boolean not null default false;
 
 comment on column vendor_item_descriptions.pricelist_item_id is
-  'The offer this store''s wording was last filed against: its pack and brand. Null when unknown, or when the wording has meant more than one offer. #55.';
+  'The offer this store''s wording was filed against: its pack and brand. Null when unknown, or when offer_varies. #55.';
+comment on column vendor_item_descriptions.offer_varies is
+  'The wording has meant more than one offer, so it points at none and the submit form asks. #55.';
 
 create index vendor_item_descriptions_offer_idx
   on vendor_item_descriptions (pricelist_item_id)
@@ -32,14 +38,16 @@ create index vendor_item_descriptions_offer_idx
 
 -- ---------------------------------------------------------------------
 -- Past receipts: a store's wording that only ever went to one of its live
--- offers means that offer.
+-- offers means that offer; one that went to several varies.
 -- ---------------------------------------------------------------------
 update vendor_item_descriptions d
-set pricelist_item_id = one.offer_id
+set pricelist_item_id = case when past.offers = 1 then past.offer_id end,
+    offer_varies = past.offers > 1
 from (
   select e.vendor_id,
          ps.item_id,
          lower(regexp_replace(btrim(l.description_raw), '\s+', ' ', 'g')) as wording,
+         count(distinct o.id) as offers,
          (array_agg(distinct o.id))[1] as offer_id
   from expense_line_items l
   join expenses e on e.id = l.expense_id
@@ -49,11 +57,10 @@ from (
   join item_pack_sizes ps on ps.id = o.pack_size_id
   where coalesce(btrim(l.description_raw), '') <> ''
   group by 1, 2, 3
-  having count(distinct o.id) = 1
-) one
-where d.vendor_id = one.vendor_id
-  and d.item_id = one.item_id
-  and d.description_normalized = one.wording;
+) past
+where d.vendor_id = past.vendor_id
+  and d.item_id = past.item_id
+  and d.description_normalized = past.wording;
 
 -- ---------------------------------------------------------------------
 -- merge_items: unchanged from 0077 except for how offers are folded
@@ -169,14 +176,15 @@ begin
 
   -- 3. Carry the losing item's receipt wordings across, dropping any the
   --    winner already knows. Where both remember an offer for the wording and
-  --    they differ, it has meant two offers, so it remembers neither. The
-  --    loser's own name joins them: it is what the next receipt for this
-  --    product is most likely to say.
+  --    they differ, it has meant two offers, so it varies. The loser's own
+  --    name joins them: it is what the next receipt for this product is most
+  --    likely to say.
   update vendor_item_descriptions w
-  set pricelist_item_id = case
-        when w.pricelist_item_id is null then d.pricelist_item_id
-        when d.pricelist_item_id is null or d.pricelist_item_id = w.pricelist_item_id then w.pricelist_item_id
-        else null
+  set offer_varies = w.offer_varies or d.offer_varies
+        or coalesce(w.pricelist_item_id <> d.pricelist_item_id, false),
+      pricelist_item_id = case
+        when w.offer_varies or d.offer_varies or coalesce(w.pricelist_item_id <> d.pricelist_item_id, false) then null
+        else coalesce(w.pricelist_item_id, d.pricelist_item_id)
       end
   from vendor_item_descriptions d
   where w.item_id = p_winner
