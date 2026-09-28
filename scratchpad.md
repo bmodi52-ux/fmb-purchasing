@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #61.** To see what's open, list the headings
+**Next number: #62.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -26,6 +26,22 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 ## Improvements
 
 <!-- Existing things that should work better. -->
+
+### 61. Keep the invoice's wording on a line after picking a Pricelist item
+
+Raised 2026-09-28, from a Devondale Full Cream Milk line on the submit form.
+Picking a suggestion from the Item # or Description typeahead replaces the
+line's description with the Pricelist item's name (`select` in
+`src/app/(app)/submit/item-lookup-cells.tsx`), so the expense line's
+`description_raw` stores the Pricelist name, not what the invoice said. The
+scanned wording is still kept as another name for the item for that vendor
+(`originalDescription` → `rememberMisreading`), but the line itself no longer
+reads like the receipt, and a line typed by hand loses its first wording
+altogether.
+
+Wanted: the description stays as the invoice printed it, and the chosen
+Pricelist item shows next to it (the "✓ Pricelist:" row under the line
+already does this).
 
 ### 60. Units read differently in the Measured in picker and on Units
 
