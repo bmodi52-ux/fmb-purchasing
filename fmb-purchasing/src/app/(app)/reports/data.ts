@@ -3,6 +3,7 @@ import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { categoryLabelsById } from "@/lib/categories";
 import { allRows } from "@/lib/supabase/all-rows";
+import { LINE_OFFER } from "@/lib/supabase/relationships";
 import { expenseDateFilter } from "@/lib/periods-data";
 import { inPeriod } from "@/lib/periods";
 import { expenseDate, type ExpenseRecord, type LineRecord } from "./aggregate";
@@ -189,7 +190,8 @@ const loadCachedReportRows = unstable_cache(
         admin
           .from("expense_line_items")
           .select(
-            "id, expense_id, category_id, line_total, line_gst, gst_applicable, quantity, description_raw, pricelist_items ( item_pack_sizes ( items ( id, name ) ) )"
+            "id, expense_id, category_id, line_total, line_gst, gst_applicable, quantity, description_raw, " +
+              `pricelist_items!${LINE_OFFER} ( item_pack_sizes ( items ( id, name ) ) )`
           )
           .in("expense_id", ids)
           .order("id")
