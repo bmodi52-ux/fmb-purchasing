@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { LINE_OFFER } from "@/lib/supabase/relationships";
 import { getColumnPreference } from "@/lib/column-prefs";
 import { ALL_TIME, parsePeriod } from "@/lib/periods";
 import { earliestExpenseDate, expenseDateFilter, todayIso } from "@/lib/periods-data";
@@ -241,7 +242,7 @@ async function loadLines(
       .select(
         "id, expense_id, kind, description_raw, category_id, quantity, unit_price, " +
           "line_subtotal, line_gst, line_total, sort_order, " +
-          "pricelist_items ( item_pack_sizes ( items ( name ) ) )"
+          `pricelist_items!${LINE_OFFER} ( item_pack_sizes ( items ( name ) ) )`
       )
       .in("expense_id", expenseIds.slice(i, i + CHUNK))
       .order("expense_id")
