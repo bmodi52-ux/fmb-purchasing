@@ -25,6 +25,9 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 
 ### 55. Two brands in the same pack at one store share one offer
 
+**2026-09-28:** built in bmodi52-ux/fmb-purchasing#108. 0081 is on the
+sandbox, not yet on live.
+
 Raised 2026-09-28, while submitting a receipt with the same item in the same
 pack size in two brands, both lines adding the pack size as new. Rewritten the
 same day against `main`: the first write-up was read from a checkout 20
