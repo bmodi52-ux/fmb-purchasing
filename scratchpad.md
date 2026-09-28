@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #58.** To see what's open, list the headings
+**Next number: #59.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -26,6 +26,16 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 ## Improvements
 
 <!-- Existing things that should work better. -->
+
+### 58. Show the receipt behind an item or offer when approving it
+
+Raised 2026-09-28. When approving a pending item or offer ("Filled in from a
+receipt — check the pack, brand, product code and price, then approve"), it
+isn't clear which receipt the details came from, so they can't be checked
+against it. Wanted: beside the pending offer, a link to the expense (E-00xx)
+and its receipt image, ideally opening the receipt at hand. The offer already
+knows its source line when priced from a receipt (price_source_line_id, #46);
+otherwise its first expense line.
 
 ### 12. Check on live what has never been seen working
 
