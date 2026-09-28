@@ -1,6 +1,6 @@
 # Scratch pad
 
-**Next number: #55.** To see what's open, list the headings
+**Next number: #56.** To see what's open, list the headings
 (`grep '^### ' scratchpad.md`) and read only the item you need.
 
 A running list of ideas and bug reports, grouped by category. Recording an item
@@ -22,6 +22,49 @@ delivered list are in [scratchpad-archive/](scratchpad-archive/).
 ## Bugs
 
 <!-- What happened, where, and what you expected instead. -->
+
+### 55. Two brands in the same pack on one receipt become one offer
+
+Raised 2026-09-28, while submitting a receipt with the same item in the same
+pack size in two brands, both lines adding the pack size as new.
+
+What happens: the first line creates the pack size and a pending offer for the
+vendor, with its own price and whatever brand the scan read. The second line
+reuses the pack size (right), then finds the vendor's offer on it and files
+against that. Brand plays no part in `offerForPack`
+(`src/lib/expense-matching.ts`). So the second brand never gets an offer, and
+its price is not on the Pricelist.
+
+Knock-on effects:
+
+- A gap on the first offer is filled from the second line
+  (`fillMissingOfferDetails`, `fillMissingPackPrice`). If the scan read no
+  brand on the first line, the offer takes the second line's brand with the
+  first line's price.
+- Menu costing reads a paid price's brand from the offer its line is filed
+  under, so both lines count as one brand. It keeps the latest price per
+  store per brand, and both lines share a receipt date, so only one survives,
+  and which one is not predictable (`loadItemPrices` in
+  `src/app/(app)/menus/data.ts`).
+- With a preferred brand set to the second brand, costing and the buying list
+  find no offer of it and fall back to the cheapest of any brand.
+- The submit form never shows the brand, so nobody sees or corrects it before
+  submitting.
+
+The expense itself is right: each line keeps its own amount and GST.
+
+Expected: a different brand at the same store and pack is a separate offer,
+with its own price, and one brand's price never stands in for another's.
+
+To do: when the line has a brand and the vendor's offer on the pack has a
+different one, add a new pending offer for that brand instead of reusing it
+(a blank brand still matches). Show the brand on each line of the submit form
+so it can be checked and corrected. Consider a way to move one receipt line to
+another offer, since merge exists but split does not.
+
+Workaround until then: after submitting, set the right brand and price on the
+pending offer, and add a second offer for the other brand from the item's
+Pricelist page. The second receipt line stays filed under the first offer.
 
 ## Improvements
 
