@@ -64,6 +64,27 @@ To do:
   on that pack, needs a person to choose.
 - Submit page: show the brand on each line, and let the submitter choose the
   offer when the store has more than one on that pack.
+- Remember receipt wording per offer as well as per item. Today it is kept
+  only per store and item (`vendor_item_descriptions`), which finds the item
+  but not the pack or brand. Keep the item-level wording (it finds the item on
+  a store's first receipt), and also record which offer the line went to.
+- Choose the offer with a ladder, like the one `matchLine` in
+  `src/lib/line-matching.ts` already uses for items (this store's exact
+  wording, then anyone's, then a loose word match, then ask):
+  1. A product code on the line that exactly one of this store's offers carries.
+  2. The exact wording (ignoring case and spacing) this store has used before,
+     remembered against one offer.
+  3. A loose match against this store's offers on the item: the line's words,
+     and the brand the scan read, compared with each offer's brand, "Store's
+     name for it" (0079) and the wordings remembered for it. Plurals and small
+     misspellings count, as they do for items.
+  4. Nothing clear: the submitter chooses from the store's brands on that
+     pack, or adds a new one.
+
+  Whatever a person confirms is remembered against that offer, so the next
+  receipt with that wording is found at step 2. A website name rarely matches
+  a receipt exactly ("Tilda Pure Basmati Rice 10kg" vs "TILDA BAS RICE 10K"),
+  so it only helps at step 3.
 - `merge_items`: keep one offer per store, pack and brand, like the 0078 index.
 - Consider a way to move one receipt line to another offer (merge exists,
   split doesn't).
