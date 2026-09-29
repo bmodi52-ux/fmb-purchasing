@@ -125,9 +125,6 @@ export function AddWidgetDialog({
         allExpenses: preview.expenses,
         allLines: preview.lines,
         paidCosts: preview.paidCosts,
-        // Built here from a live preview fetch, so it is current by
-        // construction rather than read from the shared cache.
-        computedAt: new Date().toISOString(),
       }
     : null;
 
