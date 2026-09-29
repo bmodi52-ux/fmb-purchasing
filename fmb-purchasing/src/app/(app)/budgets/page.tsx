@@ -148,6 +148,53 @@ export default async function BudgetsPage({
 
       <BudgetsTable rows={rows} canEdit={canEdit} period={period} />
 
+      {view.months.length > 1 && (
+        <section className="flex flex-col gap-2">
+          <div>
+            <h2 className="section-title text-ink">By month</h2>
+            <p className="mt-0.5 max-w-2xl text-xs text-ink/60">
+              The budgeted categories a month at a time. Each month&rsquo;s budget follows its phasing where
+              one is set — Ramadan&rsquo;s share is not a twelfth of the year&rsquo;s — and is spread by day
+              where not.
+            </p>
+          </div>
+          <div className="overflow-x-auto card">
+            <table className="min-w-full text-sm">
+              <thead className="border-b border-ink/10 text-left text-xs text-ink/55">
+                <tr>
+                  <th scope="col" className="px-4 py-2.5 font-medium">Month</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Budget</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Spent</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Left over</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Budget to date</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Spent to date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.months.map((m) => {
+                  const over = m.spent > m.budget;
+                  const overToDate = m.cumulativeSpent > m.cumulativeBudget;
+                  return (
+                    <tr key={m.key} className="border-b border-ink/5 last:border-0">
+                      <th scope="row" className="px-4 py-2 text-left font-normal">{m.label}</th>
+                      <td className="px-4 py-2 text-right tabular-nums">{money(m.budget)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{money(m.spent)}</td>
+                      <td className={`px-4 py-2 text-right tabular-nums ${over ? "text-danger" : "text-ink/60"}`}>
+                        {money(m.budget - m.spent)}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-ink/60">{money(m.cumulativeBudget)}</td>
+                      <td className={`px-4 py-2 text-right tabular-nums ${overToDate ? "text-danger" : "text-ink/60"}`}>
+                        {money(m.cumulativeSpent)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {(changeRows ?? []).length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="section-title text-ink">Recent budget changes</h2>

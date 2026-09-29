@@ -1,6 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { budgetActuals, budgetTotals, type SpendLine } from "./budget-actuals.ts";
+import { budgetActuals, budgetByMonth, budgetTotals, type SpendLine } from "./budget-actuals.ts";
+import { budgetsForPeriod, monthsFor, type StoredBudget } from "./budgets.ts";
+import { monthSpans, parsePeriod } from "./periods.ts";
 
 const categories = [
   { id: "meat", parent_category_id: null },
@@ -84,5 +86,57 @@ describe("budgetTotals", () => {
 
   test("a budget of zero is still a budget", () => {
     assert.equal(budgetTotals([{ budget: 0, spent: 40, paid: 0 }]).remaining, -40);
+  });
+});
+
+describe("budgetByMonth", () => {
+  const T = "2026-09-11";
+  const year = parsePeriod("h1448", T);
+  const months = monthSpans(year, "hijri");
+
+  const budget = (percents?: Map<number, number>): StoredBudget => ({
+    id: "b1",
+    categoryId: "meat",
+    start: year.start,
+    end: year.end,
+    periodCode: "h1448",
+    label: "1448-49 H",
+    amount: 12000,
+    priority: 1,
+    months: monthsFor("h1448", percents),
+  });
+  const budgetFor = (budgets: StoredBudget[]) => (start: string, end: string) =>
+    budgetsForPeriod(budgets, start, end).get("meat")?.amount ?? 0;
+
+  test("a Hijri year runs Shawwal to Ramadan, twelve months", () => {
+    assert.equal(months.length, 12);
+    assert.match(months[0].label, /^Shawwal 1448$/);
+    assert.match(months[11].label, /^Ramadan 1449$/);
+  });
+
+  test("the months' budgets add up to the year's", () => {
+    const rows = budgetByMonth(months, budgetFor([budget()]), [], new Set(["meat"]));
+    // Each month is rounded to the cent, so the year can be a few cents off.
+    assert.ok(Math.abs(rows.at(-1)!.cumulativeBudget - 12000) < 0.05);
+  });
+
+  test("phasing puts Ramadan's share in Ramadan", () => {
+    // Month 12 of a Hijri budget year is Ramadan.
+    const percents = new Map(Array.from({ length: 12 }, (_, i) => [i + 1, i === 11 ? 30 : 70 / 11] as [number, number]));
+    const rows = budgetByMonth(months, budgetFor([budget(percents)]), [], new Set(["meat"]));
+    assert.equal(rows[11].budget, 3600);
+    assert.ok(Math.abs(rows.at(-1)!.cumulativeBudget - 12000) < 0.05, "and the year still adds up");
+  });
+
+  test("spend lands in its month, only for the budgeted categories, and accumulates", () => {
+    const spend = [
+      { date: months[0].start, categoryId: "meat", lineTotal: 100 },
+      { date: months[0].end, categoryId: "meat", lineTotal: 50 },
+      { date: months[1].start, categoryId: "meat", lineTotal: 25 },
+      { date: months[1].start, categoryId: "veg", lineTotal: 999 },
+      { date: months[1].start, categoryId: null, lineTotal: 7 },
+    ];
+    const rows = budgetByMonth(months, () => 0, spend, new Set(["meat"]));
+    assert.deepEqual(rows.slice(0, 2).map((r) => [r.spent, r.cumulativeSpent]), [[150, 150], [25, 175]]);
   });
 });
