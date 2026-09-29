@@ -13,6 +13,11 @@ const GROUPS: { kind: QueueItemKind; heading: string; why: string }[] = [
     why: "The receipt total is right, but part of it was never itemised. Someone needs to say what it was for.",
   },
   {
+    kind: "receipt_date",
+    heading: "Receipt dates to check",
+    why: "Dated after they were submitted, or more than a year before — most likely misread off the receipt. Until corrected they sit in the wrong month of every report.",
+  },
+  {
     kind: "uncategorised_line",
     heading: "Lines nobody has classified",
     why: "The reader could not tell what these were and said so rather than guessing. Until they are categorised they sit outside every report cut by category.",

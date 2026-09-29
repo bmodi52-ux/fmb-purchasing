@@ -23,6 +23,7 @@ import { todayIso } from "@/lib/periods-data";
 
 export type QueueItemKind =
   | "unallocated_line"
+  | "receipt_date"
   | "uncategorised_line"
   | "pending_vendor"
   | "pending_item"
@@ -65,6 +66,7 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
     { data: categoryRows },
     { data: units },
     { data: oldPrices },
+    { data: oddDates },
   ] = await Promise.all([
     // Money recorded against an expense that nobody has said what it was for.
     // Top of the list: it is the only entry here that represents spend with no
@@ -118,6 +120,16 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
       .gt("price_set_at", "1900-01-01")
       .order("price_set_at")
       .limit(20),
+
+    // A receipt date that can't be right (0084) puts the expense in the wrong
+    // month of every report, or stretches the year lists back decades.
+    admin
+      .from("expense_date_checks")
+      .select("expense_id, expense_number, vendor_name_raw, total, receipt_date, submitted_on, concern")
+      .not("concern", "is", null)
+      .not("status", "in", NOT_SPEND_FILTER)
+      .order("receipt_date")
+      .limit(100),
   ]);
   const unitLabelById = new Map((units ?? []).map((u) => [u.id as string, u.label as string]));
 
@@ -135,6 +147,21 @@ export async function loadReviewQueue(): Promise<ReviewQueue> {
       href: `/expenses/${row.expense_id}`,
       weight: 0,
       amount: Number(row.line_total),
+    });
+  }
+
+  const dmy = (iso: string) => iso.split("-").reverse().join("/");
+  for (const row of oddDates ?? []) {
+    const receipt = row.receipt_date as string;
+    const submitted = row.submitted_on as string;
+    items.push({
+      kind: "receipt_date",
+      id: row.expense_id as string,
+      title: `${row.expense_number ?? "An expense"} dated ${dmy(receipt)}`,
+      detail: `${row.concern === "after_submission" ? "After" : "More than a year before"} it was submitted on ${dmy(submitted)} · ${money(Number(row.total))} · ${row.vendor_name_raw ?? "Unrecorded vendor"}`,
+      href: `/expenses/${row.expense_id}`,
+      weight: 0.5,
+      amount: Number(row.total),
     });
   }
 
