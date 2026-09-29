@@ -130,3 +130,36 @@ describe("the migration dates the expenses already there", () => {
     }
   });
 });
+
+describe("expense_date_checks (0084)", () => {
+  const concernOf = (id: string) =>
+    db
+      .query<{ concern: string | null }>("select concern from expense_date_checks where expense_id = $1", [id])
+      .then((r) => r.rows[0]?.concern ?? null);
+
+  test("a receipt misread as decades old is a year before its submission", async () => {
+    const id = await expense({ receiptDate: "1994-09-11", createdAt: "2026-09-21T02:00:00Z" });
+    assert.equal(await concernOf(id), "year_before_submission");
+  });
+
+  test("a receipt dated after it was submitted is questioned", async () => {
+    // Submitted 27 September, dated 8 October: 10/08 read the wrong way round.
+    const id = await expense({ receiptDate: "2026-10-08", createdAt: "2026-09-27T02:00:00Z" });
+    assert.equal(await concernOf(id), "after_submission");
+  });
+
+  test("late receipts and a day's time-zone slack are believed", async () => {
+    // Live, receipts have arrived up to 135 days late.
+    assert.equal(await concernOf(await expense({ receiptDate: "2026-05-15", createdAt: "2026-09-27T02:00:00Z" })), null);
+    assert.equal(await concernOf(await expense({ receiptDate: "2026-09-28", createdAt: "2026-09-27T02:00:00Z" })), null);
+  });
+
+  test("submission is judged by the day in Sydney", async () => {
+    // 8:30am on 1 July in Sydney; a receipt dated 2 July is a day's slack, not after submission.
+    assert.equal(await concernOf(await expense({ receiptDate: "2026-07-02", createdAt: "2026-06-30T22:30:00Z" })), null);
+  });
+
+  test("an undated expense has nothing to question", async () => {
+    assert.equal(await concernOf(await expense({ createdAt: "2026-09-27T02:00:00Z" })), null);
+  });
+});

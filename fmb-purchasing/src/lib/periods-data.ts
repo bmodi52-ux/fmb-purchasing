@@ -18,9 +18,17 @@ export function todayIso(): string {
 
 /**
  * The earliest day any expense belongs to, for the year lists — the same day
- * reports count it on (expenses.report_date).
+ * reports count it on (expenses.report_date), leaving out receipt dates that
+ * can't be right (expense_date_checks, 0084). One receipt misread as 1994 had
+ * every period picker offering thirty years nobody bought anything in; it is
+ * listed on Needs attention instead.
  */
 export async function earliestExpenseDate(admin: SupabaseClient): Promise<string | null> {
-  const { data } = await admin.from("expenses").select("report_date").order("report_date").limit(1);
+  const { data } = await admin
+    .from("expense_date_checks")
+    .select("report_date")
+    .is("concern", null)
+    .order("report_date")
+    .limit(1);
   return (data?.[0]?.report_date as string | undefined) ?? null;
 }
