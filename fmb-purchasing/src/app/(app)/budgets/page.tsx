@@ -2,15 +2,14 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getUserPermissions, can, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
+import { categoryLabelsById } from "@/lib/categories";
 import { formatDateTime } from "@/lib/format";
 import { parsePeriod, previousPeriod } from "@/lib/periods";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
-import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
-import { budgetActuals, budgetTotals } from "@/lib/budget-actuals";
 import { PeriodPicker } from "@/components/period-picker";
+import { DownloadLinks } from "@/components/download-links";
 import { SubmitButton } from "@/components/submit-button";
-import { loadLedger } from "@/lib/reporting/ledger";
+import { loadBudgetView } from "@/lib/reporting/budget-view";
 import { copyBudgetsFromPrevious } from "./actions";
 import { BudgetsTable } from "./budgets-table";
 
@@ -55,11 +54,11 @@ export default async function BudgetsPage({
   const previous = previousPeriod(period, today);
 
   const admin = createAdminClient();
-  const [{ data: categoryRows }, budgets, report, earliest, { data: changeRows }] = await Promise.all([
-    admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
-    loadBudgets(admin),
-    loadLedger(period),
+  const [view, earliest, { data: categoryRows }, { data: changeRows }] = await Promise.all([
+    // Shared with this page's download (reports/export), so the file is the page.
+    loadBudgetView(admin, period),
     earliestExpenseDate(admin),
+    admin.from("categories").select("id, name, parent_category_id"),
     admin
       .from("category_budget_changes")
       .select("id, category_id, label, kind, from_amount, to_amount, caused_by_label, changed_by, changed_at")
@@ -67,61 +66,12 @@ export default async function BudgetsPage({
       .limit(30),
   ]);
 
-  const categories = leafCategories(sortCategories(categoryRows ?? []));
   const labels = categoryLabelsById(categoryRows ?? []);
-  const perCategory = budgetsForPeriod(budgets, period.start, period.end);
-
-  // Actual spend, from the same line-level ledger Reports aggregates. Declined
-  // and withdrawn expenses are already excluded upstream. Split into paid, and
-  // committed — approved or still waiting — because a budget is used up as
-  // soon as the money is promised, not when the transfer happens (#39).
-  const actuals = budgetActuals(
-    report.lines,
-    new Map(report.expenses.map((e) => [e.id, e.status])),
-    categoryRows ?? []
-  );
-
-  const rows = categories
-    .map((c) => {
-      const share = perCategory.get(c.id);
-      const budget = share && share.uncoveredDays < share.days ? share.amount : null;
-      const { spent, paid } = actuals.byLeaf.get(c.id) ?? { spent: 0, paid: 0 };
-      return {
-        id: c.id,
-        label: labels.get(c.id) ?? c.name,
-        budget,
-        share,
-        spent,
-        paid,
-        committed: spent - paid,
-        // Null when nothing is budgeted: a category with no budget is not
-        // "100% over", it is undecided, and reporting it as a breach would
-        // train people to ignore the column.
-        usedPct: budget && budget > 0 ? spent / budget : null,
-      };
-    })
-    .sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1) || b.spent - a.spent);
-
-  const totals = budgetTotals(rows);
+  const { rows, totals, budgets, onParentCategories } = view;
   const anyExactForPeriod = rows.some((r) => r.share?.exact);
   const canCopy = canEdit && !anyExactForPeriod && budgets.some((b) => b.start === previous.start && b.end === previous.end);
 
-  /**
-   * Spend no budget row holds, stated rather than left out, so this page never
-   * disagrees with Reports by an amount nobody can account for.
-   *
-   * Uncategorised: card surcharges, delivery and rounding carry no category by
-   * design — a surcharge is not a kind of food — and a line nobody has
-   * classified carries none either. On a parent category: filed against
-   * "Meat & Poultry" itself rather than one of its subcategories, which is
-   * where budgets are set. That is categorised spend, and used to be called
-   * "not in any category" here while Reports showed it under Meat.
-   */
-  const uncategorisedSpend = actuals.uncategorised;
-  const onParentCategories = actuals.onParentCategories.map((p) => ({
-    ...p,
-    label: labels.get(p.categoryId) ?? "A category",
-  }));
+  const uncategorisedSpend = view.uncategorised;
   const onParentSpend = onParentCategories.reduce((s, p) => s + p.amount, 0);
 
   const changers = [...new Set((changeRows ?? []).map((r) => r.changed_by).filter(Boolean) as string[])];
@@ -139,7 +89,10 @@ export default async function BudgetsPage({
             What was set aside for {period.label}, against what has been spent. Amounts include GST.
           </p>
         </div>
-        <PeriodPicker value={period.code} today={today} earliest={earliest} />
+        <div className="flex flex-wrap items-end gap-3">
+          <PeriodPicker value={period.code} today={today} earliest={earliest} />
+          <DownloadLinks href={`/reports/export?report=budgets&period=${encodeURIComponent(period.code)}`} />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-8 gap-y-2 card px-5 py-4">
