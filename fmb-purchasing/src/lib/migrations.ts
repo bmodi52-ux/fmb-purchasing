@@ -58,6 +58,7 @@ export const LEDGERED_MIGRATIONS = [
   "0083_expense_report_date.sql",
   "0084_expense_date_checks.sql",
   "0085_lodged_period_figures.sql",
+  "0086_price_report_date.sql",
 ] as const;
 
 export type MigrationStatus =

@@ -64,6 +64,11 @@ export async function createTestDb(
 ): Promise<TestDb> {
   const db = new PGlite({ extensions: { pg_trgm, pgcrypto } });
 
+  // Supabase runs every session in UTC. PGlite takes the machine's offset
+  // instead (Etc/GMT-10 in Sydney), so without this a test of a day worked
+  // out in UTC against one in Sydney passes on a Sydney machine for the wrong
+  // reason, and fails only in CI.
+  await db.exec("set timezone = 'UTC'");
   await db.exec(AUTH_STUB);
 
   for (const file of migrationFiles()) {

@@ -70,7 +70,7 @@ export type PricePoint = {
   expenseId: string;
   itemId: string;
   vendorId: string | null;
-  /** The receipt date, or the day it was submitted when there is none. */
+  /** The receipt date, or the day it was submitted in Sydney when there is none. */
   date: string;
   submittedAt: string;
   costPerUnit: number;
@@ -266,26 +266,25 @@ export type ExpenseForSpend = {
   id: string;
   vendor_id: string | null;
   total: number | string;
-  receipt_date: string | null;
-  created_at: string;
+  /** The day it counts on: the receipt's, or the day it was submitted in Sydney (0083). */
+  report_date: string;
 };
 
-export const expenseDay = (e: { receipt_date: string | null; created_at: string }) =>
-  e.receipt_date ?? e.created_at.slice(0, 10);
+/** A year before `day`, the first day spendHistoryFor looks at. */
+export function yearBefore(day: string): string {
+  const from = new Date(`${day}T00:00:00Z`);
+  from.setUTCDate(from.getUTCDate() - 365);
+  return from.toISOString().slice(0, 10);
+}
 
 /** The same vendor's other expenses dated in the 365 days up to this one. */
 export function spendHistoryFor(expense: ExpenseForSpend, others: ExpenseForSpend[]): number[] {
   if (!expense.vendor_id) return [];
-  const day = expenseDay(expense);
-  const from = new Date(`${day}T00:00:00Z`);
-  from.setUTCDate(from.getUTCDate() - 365);
-  const since = from.toISOString().slice(0, 10);
+  const day = expense.report_date;
+  const since = yearBefore(day);
   return others
     .filter((o) => o.id !== expense.id && o.vendor_id === expense.vendor_id)
-    .filter((o) => {
-      const d = expenseDay(o);
-      return d >= since && d <= day;
-    })
+    .filter((o) => o.report_date >= since && o.report_date <= day)
     .map((o) => Number(o.total));
 }
 
