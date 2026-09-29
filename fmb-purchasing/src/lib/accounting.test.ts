@@ -40,6 +40,8 @@ describe("summariseGst — #38", () => {
       []
     );
     assert.deepEqual(s.concerns.map((c) => c.expense.id), ["a", "b", "d"]);
+    // Their GST is still in 1B, and the summary says how much of it is in doubt.
+    assert.equal(s.oneBInDoubt, 30);
     assert.equal(mayLackTaxInvoice({ gst: 0, total: 500, hasAttachment: false, vendorAbn: null }), false);
   });
 

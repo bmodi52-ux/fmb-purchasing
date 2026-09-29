@@ -64,6 +64,7 @@ export function gstTables(summary: GstSummary, expenses: GstExpense[], lines: Xe
         { label: "G11 · Other purchases (GST included)", amount: summary.g11 },
         { label: "G10 · Capital purchases (GST included)", amount: summary.g10 },
         { label: "1B · GST on purchases", amount: summary.oneB },
+        { label: "  of which may not be claimable (see GST to check)", amount: summary.oneBInDoubt },
         { label: "GST-free purchases, within G10 and G11", amount: summary.gstFreePurchases },
       ],
     },

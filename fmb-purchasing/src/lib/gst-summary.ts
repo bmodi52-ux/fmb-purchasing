@@ -52,6 +52,12 @@ export type GstSummary = {
   expenseCount: number;
   /** Expenses whose GST credit may not be claimable, and why. */
   concerns: { expense: GstExpense; reasons: string[] }[];
+  /**
+   * How much of 1B is claimed on those expenses. It stays in 1B: whether each
+   * claim stands is for FMB's accountant, not this page. But 1B no longer
+   * hides that part of it is in doubt.
+   */
+  oneBInDoubt: number;
   /** Lines whose GST was shared out across the receipt, before per-line GST. */
   apportionedLines: number;
   /** Receipts dated in a lodged period, approved since — adjustments. */
@@ -91,6 +97,7 @@ export function summariseGst(expenses: GstExpense[], lines: GstLine[]): GstSumma
     gstFreePurchases: round2(gstFree),
     expenseCount: expenses.length,
     concerns,
+    oneBInDoubt: round2(concerns.reduce((sum, c) => sum + c.expense.gst, 0)),
     apportionedLines: inScope.filter((l) => l.gstApportioned && l.gst !== 0).length,
     adjustments: expenses.filter((e) => e.lateForLockedPeriod),
   };
