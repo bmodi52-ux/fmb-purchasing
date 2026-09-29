@@ -70,6 +70,46 @@ export function budgetActuals(
   };
 }
 
+export type BudgetMonth = {
+  key: string;
+  label: string;
+  start: string;
+  end: string;
+  /** What the budgets put in this month — their monthly phasing, where they have one. */
+  budget: number;
+  /** What the budgeted categories spent in it. */
+  spent: number;
+  cumulativeBudget: number;
+  cumulativeSpent: number;
+};
+
+/**
+ * Budget against actual a month at a time, for the budgeted categories only
+ * — the same like-for-like as Remaining. Ramadan's budget is not a twelfth of
+ * the year's (#39), so each month's share comes from `budgetFor`, which reads
+ * the phasing; this only lines months, budgets and spend up. Pure.
+ */
+export function budgetByMonth(
+  months: { key: string; label: string; start: string; end: string }[],
+  budgetFor: (start: string, end: string) => number,
+  spend: { date: string; categoryId: string | null; lineTotal: number }[],
+  budgeted: Set<string>
+): BudgetMonth[] {
+  let cumulativeBudget = 0;
+  let cumulativeSpent = 0;
+  return months.map((m) => {
+    const budget = cents(budgetFor(m.start, m.end));
+    const spent = cents(
+      spend
+        .filter((s) => s.categoryId && budgeted.has(s.categoryId) && s.date >= m.start && s.date <= m.end)
+        .reduce((sum, s) => sum + s.lineTotal, 0)
+    );
+    cumulativeBudget = cents(cumulativeBudget + budget);
+    cumulativeSpent = cents(cumulativeSpent + spent);
+    return { ...m, budget, spent, cumulativeBudget, cumulativeSpent };
+  });
+}
+
 export type BudgetTotals = {
   /** Every budget set for the period. Zero when none is. */
   budgeted: number;

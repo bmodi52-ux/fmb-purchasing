@@ -216,6 +216,29 @@ export function monthCalendarFor(period: Pick<Period, "calendar" | "code">): "hi
   return period.calendar === "hijri" || period.code.startsWith("h-") ? "hijri" : "gregorian";
 }
 
+/**
+ * The months a range touches, in the given calendar, each cut to the range:
+ * a Hijri year is its twelve Hijri months, a financial year its twelve
+ * Gregorian ones, and a range starting mid-month starts with the part of that
+ * month it holds.
+ */
+export function monthSpans(
+  range: { start: string; end: string },
+  calendar: "hijri" | "gregorian"
+): { key: string; label: string; start: string; end: string }[] {
+  const out: { key: string; label: string; start: string; end: string }[] = [];
+  for (let day = range.start; day <= range.end; day = addDays(day, 1)) {
+    const month =
+      calendar === "hijri"
+        ? hijriMonthOf(day)
+        : { key: day.slice(0, 7), label: `${GREGORIAN_MONTH_SHORT[Number(day.slice(5, 7)) - 1]} ${day.slice(0, 4)}` };
+    const last = out.at(-1);
+    if (last?.key === month.key) last.end = day;
+    else out.push({ ...month, start: day, end: day });
+  }
+  return out;
+}
+
 /** The same range in Hijri dates, e.g. "16 Muharram 1448 – 25 Muharram 1449 H". */
 export function formatRangeHijri(start: string, end: string): string {
   const fmt = (iso: string) => {

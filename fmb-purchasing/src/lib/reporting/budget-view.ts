@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { categoryLabelsById, leafCategories, sortCategories } from "@/lib/categories";
 import { budgetsForPeriod, loadBudgets, type CategoryPeriodBudget, type StoredBudget } from "@/lib/budgets";
-import { budgetActuals, budgetTotals, type BudgetTotals } from "@/lib/budget-actuals";
+import { budgetActuals, budgetByMonth, budgetTotals, type BudgetMonth, type BudgetTotals } from "@/lib/budget-actuals";
+import { monthCalendarFor, monthSpans, type Period } from "@/lib/periods";
 import { loadLedger } from "./ledger.ts";
 import type { DateRange } from "./ledger-rows.ts";
 import type { ReportTable } from "./tables.ts";
@@ -45,9 +46,18 @@ export type BudgetView = {
   onParentCategories: { categoryId: string; label: string; amount: number }[];
   /** Surcharges, delivery and rounding carry no category by design; so does a line nobody has classified. */
   uncategorised: number;
+  /**
+   * The budgeted categories a month at a time, in the period's own calendar
+   * — Shawwal to Ramadan for a Hijri year — with each month's budget from
+   * its phasing. Empty when nothing is budgeted.
+   */
+  months: BudgetMonth[];
 };
 
-export async function loadBudgetView(admin: SupabaseClient, period: DateRange): Promise<BudgetView> {
+export async function loadBudgetView(
+  admin: SupabaseClient,
+  period: DateRange & Pick<Period, "calendar" | "code">
+): Promise<BudgetView> {
   const [{ data: categoryRows }, budgets, ledger] = await Promise.all([
     admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
     loadBudgets(admin),
@@ -76,12 +86,27 @@ export async function loadBudgetView(admin: SupabaseClient, period: DateRange): 
     })
     .sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1) || b.spent - a.spent);
 
+  const budgeted = new Set(rows.filter((r) => r.budget !== null).map((r) => r.id));
+  const dateOf = new Map(ledger.expenses.map((e) => [e.id, e.reportDate]));
+  const months = budgeted.size
+    ? budgetByMonth(
+        monthSpans(period, monthCalendarFor(period)),
+        (start, end) => {
+          const inMonth = budgetsForPeriod(budgets, start, end);
+          return [...budgeted].reduce((sum, id) => sum + (inMonth.get(id)?.amount ?? 0), 0);
+        },
+        ledger.lines.map((l) => ({ date: dateOf.get(l.expenseId) ?? "", categoryId: l.categoryId, lineTotal: l.lineTotal })),
+        budgeted
+      )
+    : [];
+
   return {
     rows,
     totals: budgetTotals(rows),
     budgets,
     onParentCategories: actuals.onParentCategories.map((p) => ({ ...p, label: labels.get(p.categoryId) ?? "A category" })),
     uncategorised: actuals.uncategorised,
+    months,
   };
 }
 
@@ -133,5 +158,28 @@ export function budgetTables(view: BudgetView): ReportTable[] {
         used: null,
       },
     },
+    ...(view.months.length
+      ? [
+          {
+            title: "By month",
+            columns: [
+              { key: "label", label: "Month", kind: "text" as const },
+              { key: "budget", label: "Budget", kind: "money" as const },
+              { key: "spent", label: "Spent", kind: "money" as const },
+              { key: "difference", label: "Left over", kind: "money" as const },
+              { key: "cumulativeBudget", label: "Budget to date", kind: "money" as const },
+              { key: "cumulativeSpent", label: "Spent to date", kind: "money" as const },
+            ],
+            rows: view.months.map((m) => ({
+              label: m.label,
+              budget: m.budget,
+              spent: m.spent,
+              difference: Math.round((m.budget - m.spent) * 100) / 100,
+              cumulativeBudget: m.cumulativeBudget,
+              cumulativeSpent: m.cumulativeSpent,
+            })),
+          },
+        ]
+      : []),
   ];
 }

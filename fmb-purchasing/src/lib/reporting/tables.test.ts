@@ -153,6 +153,7 @@ describe("Budgets download", () => {
       budgets: [],
       onParentCategories: [{ categoryId: "m", label: "Meat", amount: 5760 }],
       uncategorised: 20,
+      months: [],
     };
     const [table] = budgetTables(view);
     assert.equal(table.totals!.spent, 6480);
