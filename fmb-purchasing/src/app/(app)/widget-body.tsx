@@ -1,6 +1,6 @@
 "use client";
 
-import type { WidgetData } from "./reports/dashboard-widgets";
+import type { WidgetData } from "@/lib/reporting/widget-data";
 import { perUnitVendorSeries, type PerUnitRow } from "@/lib/reporting/unit-costs";
 import {
   HeroFigure,
@@ -20,13 +20,6 @@ const STATUS_SLOT: Record<string, number> = {
   submitted: 0,
   approved: 1,
   paid: 2,
-};
-
-const STAT_LABEL: Record<string, string> = {
-  spend: "Total spend",
-  expenseCount: "Expenses",
-  averageExpense: "Average expense",
-  gst: "GST",
 };
 
 /** Renders whatever a saved (or previewed) widget's computed data calls for. */
@@ -92,24 +85,59 @@ export function WidgetBody({ data }: { data: WidgetData }) {
     case "unit-cost-table":
       return <UnitCostTable rows={data.rows} />;
 
-    case "stat-tile": {
-      const value =
-        data.metric === "expenseCount"
-          ? String(data.totals.expenseCount)
-          : data.metric === "averageExpense"
-            ? formatMoney(data.totals.averageExpense)
-            : data.metric === "gst"
-              ? formatMoney(data.totals.gst)
-              : formatMoney(data.totals.spend);
+    case "figure":
       return (
         <HeroFigure
-          label={STAT_LABEL[data.metric]}
-          value={value}
-          caption={`${data.totals.expenseCount} ${data.totals.expenseCount === 1 ? "expense" : "expenses"}`}
+          label={data.label}
+          value={data.format === "money" ? formatMoney(data.value) : String(data.value)}
+          caption={data.caption}
         />
       );
-    }
+
+    case "table":
+      return <SmallTable data={data} />;
   }
+}
+
+/** A report's small table, its cells already in words. */
+function SmallTable({ data }: { data: Extract<WidgetData, { kind: "table" }> }) {
+  if (data.rows.length === 0) return <p className="text-sm text-ink/50">{data.empty}</p>;
+  const align = (i: number) => (data.columns[i]?.numeric ? "text-right tabular-nums" : "");
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-xs">
+        <thead>
+          <tr className="border-b border-ink/10 text-left text-ink/55">
+            {data.columns.map((c, i) => (
+              <th scope="col" key={c.label} className={`py-1.5 pr-3 font-medium ${align(i)}`}>
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map((r, ri) => (
+            <tr key={ri} className="border-b border-ink/5 last:border-0">
+              {r.map((cell, i) => (
+                <td key={i} className={`py-1 pr-3 ${align(i)}`}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+          {data.total && (
+            <tr className="border-t border-ink/15 font-medium">
+              {data.total.map((cell, i) => (
+                <td key={i} className={`py-1 pr-3 ${align(i)}`}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function RankedTable({

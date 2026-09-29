@@ -16,30 +16,25 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { formatMonthLabel } from "@/lib/reporting/aggregate";
-import type { WidgetConfig, WidgetData, WidgetKind } from "./reports/dashboard-widgets";
+import Link from "next/link";
+import type { WidgetData } from "@/lib/reporting/widget-data";
+import type { WidgetSpec } from "@/lib/reporting/widgets";
 import { removeDashboardWidget, reorderDashboardWidgets } from "./reports/dashboard-widgets-actions";
 import { WidgetBody } from "./widget-body";
 import { AddWidgetDialog } from "./add-widget-dialog";
 
 export type SavedWidget = {
   id: string;
-  kind: WidgetKind;
   title: string;
-  config: WidgetConfig;
-  data: WidgetData;
-  /** The widget's period in words, resolved on the server against today. */
-  periodLabel: string;
+  /** Which report, which part of it, and its settings (lib/reporting/widgets). */
+  spec: WidgetSpec;
+  /** Null when the report no longer has that part to show. */
+  data: WidgetData | null;
+  /** The period and filters in words, resolved on the server against today. */
+  summary: string;
+  /** The report page it is part of, open on the same settings. */
+  href: string;
 };
-
-function filterSummary(widget: SavedWidget): string {
-  const { config } = widget;
-  const parts = [widget.periodLabel];
-  if (config.month) parts.push(formatMonthLabel(config.month));
-  const filterCount = config.vendorIds.length + config.categoryIds.length + config.itemIds.length;
-  if (filterCount > 0) parts.push(`${filterCount} filter${filterCount === 1 ? "" : "s"}`);
-  return parts.join(" · ");
-}
 
 export function HomeDashboard({
   widgets,
@@ -191,10 +186,17 @@ function SortableWidgetCard({
           </button>
           <div className="min-w-0">
             <h3 className="truncate text-sm font-medium text-ink">{widget.title}</h3>
-            <p className="text-xs text-ink/45">{filterSummary(widget)}</p>
+            <p className="text-xs text-ink/45">{widget.summary}</p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3 text-xs">
+          <Link
+            href={widget.href}
+            aria-label={`Open ${widget.title} in its report`}
+            className="text-ink/50 underline hover:text-ink"
+          >
+            Open
+          </Link>
           <button
             type="button"
             onClick={onEdit}
@@ -216,7 +218,11 @@ function SortableWidgetCard({
           </button>
         </div>
       </div>
-      <WidgetBody data={widget.data} />
+      {widget.data ? (
+        <WidgetBody data={widget.data} />
+      ) : (
+        <p className="text-sm text-ink/50">This widget&rsquo;s report no longer shows that. Edit it to choose again.</p>
+      )}
     </div>
   );
 }

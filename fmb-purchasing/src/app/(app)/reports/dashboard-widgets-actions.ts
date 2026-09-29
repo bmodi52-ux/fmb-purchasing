@@ -4,17 +4,31 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
-import type { WidgetKind, WidgetConfig } from "./dashboard-widgets";
+import { canSeeReport } from "@/lib/reporting/registry";
+import { specFrom, storedWidget } from "@/lib/reporting/widgets";
 
 /**
  * All of these scope by user_id as well as row id — a widget belongs to one
  * person's dashboard, and the id alone must not be enough to edit or reorder
  * someone else's.
+ *
+ * A widget is saved as a spec (lib/reporting/widgets): checked here, since it
+ * arrives from the browser, and only for a report its owner can see.
  */
 
-export async function addDashboardWidget(kind: WidgetKind, title: string, config: WidgetConfig) {
+async function checkedSpec(raw: unknown) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const spec = specFrom(raw);
+  if (!spec) throw new Error("That isn't a widget this dashboard can show.");
+  if (!(await canSeeReport(user, spec.report))) throw new Error("You can't see that report.");
+  return { user, spec };
+}
+
+const cleanTitle = (title: string) => title.trim().slice(0, 120) || "Widget";
+
+export async function addDashboardWidget(raw: unknown, title: string) {
+  const { user, spec } = await checkedSpec(raw);
 
   const admin = createAdminClient();
   const { data: last } = await admin
@@ -27,26 +41,22 @@ export async function addDashboardWidget(kind: WidgetKind, title: string, config
 
   await admin.from("user_dashboard_widgets").insert({
     user_id: user.id,
-    kind,
-    title,
-    config,
+    ...storedWidget(spec),
+    title: cleanTitle(title),
     sort_order: (last?.sort_order ?? -1) + 1,
   });
 
   revalidatePath("/");
 }
 
-export async function updateDashboardWidget(
-  id: string,
-  updates: { title?: string; config?: WidgetConfig }
-) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+/** Saving an edited widget writes it in the current shape, whatever it was saved in before. */
+export async function updateDashboardWidget(id: string, raw: unknown, title: string) {
+  const { user, spec } = await checkedSpec(raw);
 
   const admin = createAdminClient();
   await admin
     .from("user_dashboard_widgets")
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update({ ...storedWidget(spec), title: cleanTitle(title), updated_at: new Date().toISOString() })
     .eq("id", id)
     .eq("user_id", user.id);
 
