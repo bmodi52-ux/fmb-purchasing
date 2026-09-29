@@ -26,7 +26,7 @@ import {
   type Slice,
 } from "./aggregate.ts";
 import type { ReportRawData } from "./data.ts";
-import type { PerUnitRow } from "./reports-view";
+import { perUnitRows, type PerUnitRow } from "./unit-costs.ts";
 
 export type WidgetKind =
   | "spend-over-time"
@@ -153,20 +153,8 @@ export function computeWidgetData(
 
     case "unit-cost-chart":
     case "unit-cost-table": {
-      const visibleExpenseIds = new Set(slice.expenses.map((e) => e.id));
-      const vendorNameByExpense = new Map(slice.expenses.map((e) => [e.id, e.vendorName]));
-      const rows: PerUnitRow[] = raw.paidCosts
-        .filter((c) => c.item_id === config.itemId && visibleExpenseIds.has(c.expense_id))
-        .map((c) => ({
-          groupName: c.item_name ?? config.itemLabel ?? "Item",
-          vendorName: vendorNameByExpense.get(c.expense_id) ?? "—",
-          receiptDate: c.receipt_date,
-          normalizedQuantity: Number(c.base_quantity),
-          normalizedUnit: c.base_unit_code,
-          perUnit: Number(c.cost_per_base_unit),
-          perPack: c.sold_loose ? null : Number(c.line_total) / Number(c.normalized_quantity),
-        }))
-        .sort((a, b) => (a.receiptDate ?? "").localeCompare(b.receiptDate ?? ""));
+      // The same rows the Unit costs section shows, for the one item.
+      const rows = perUnitRows(raw.paidCosts, slice, (itemId) => itemId === config.itemId, config.itemLabel ?? "Item");
       return { kind, rows, itemLabel: config.itemLabel ?? rows[0]?.groupName ?? "Item" };
     }
 

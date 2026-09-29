@@ -20,6 +20,12 @@ export type PaidCostRow = {
   /** Packs bought on the line. */
   normalized_quantity: number;
   sold_loose: boolean;
+  /**
+   * The pack's contents and the receipt disagree by five times or more
+   * (0066), so the per-unit figure isn't to be believed. Optional because
+   * figures cached before it was read don't carry it.
+   */
+  pack_disagrees?: boolean;
 };
 
 export type ReportRawData = {
@@ -183,7 +189,7 @@ const loadCachedReportRows = unstable_cache(
         admin
           .from("item_paid_unit_costs")
           .select(
-            "item_id, item_name, expense_id, receipt_date, base_quantity, base_unit_code, cost_per_base_unit, line_total, normalized_quantity, sold_loose"
+            "item_id, item_name, expense_id, receipt_date, base_quantity, base_unit_code, cost_per_base_unit, line_total, normalized_quantity, sold_loose, pack_disagrees"
           )
           .in("expense_id", ids)
           .order("line_item_id")
