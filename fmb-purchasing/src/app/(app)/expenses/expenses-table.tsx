@@ -10,7 +10,8 @@ import { formatFiscalYear } from "@/lib/fiscal-year";
 export type ExpenseRow = {
   id: string;
   expenseNumber: string | null;
-  vendor_name_raw: string | null;
+  /** Named by vendorLabel: the vendor record first, then what the receipt said. */
+  vendorName: string;
   vendorNumber: string | null;
   submittedByName: string;
   status: string;
@@ -40,7 +41,7 @@ const ALL_COLUMNS: ColumnDef<ExpenseRow>[] = [
     ),
     exportValue: (r) => r.expenseNumber ?? "",
   },
-  { key: "vendor", label: "Vendor", render: (r) => r.vendor_name_raw ?? "—", exportValue: (r) => r.vendor_name_raw ?? "", onPhone: true },
+  { key: "vendor", label: "Vendor", render: (r) => r.vendorName, exportValue: (r) => r.vendorName, onPhone: true },
   {
     key: "vendor_number",
     label: "Vendor #",

@@ -10,6 +10,7 @@ import { earliestExpenseDate, expenseDateFilter, todayIso } from "@/lib/periods-
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { PeriodPicker } from "@/components/period-picker";
 import { categoryLabelsById } from "@/lib/categories";
+import { vendorLabel } from "@/lib/vendor-names";
 import { ExpensesTable, type ExpenseRow } from "./expenses-table";
 import { LinesTable, type LineRow } from "./lines-table";
 import { ViewToggle } from "./view-toggle";
@@ -135,12 +136,13 @@ export default async function AllExpensesPage({
 
   const [{ data: profiles }, { data: vendors }, visibleColumns] = await Promise.all([
     userIds.length ? admin.from("profiles").select("id, full_name, email").in("id", userIds) : { data: [] },
-    vendorIds.length ? admin.from("vendors").select("id, vendor_number").in("id", vendorIds) : { data: [] },
+    vendorIds.length ? admin.from("vendors").select("id, name, vendor_number").in("id", vendorIds) : { data: [] },
     getColumnPreference(user.id, PAGE_KEY, DEFAULT_VISIBLE),
   ]);
 
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
   const vendorNumberById = new Map((vendors ?? []).map((v) => [v.id, v.vendor_number]));
+  const vendorNameById = new Map((vendors ?? []).map((v) => [v.id as string, v.name as string]));
 
   // One query for the whole page rather than one per row: the list only
   // needs to know whether to offer a link.
@@ -148,7 +150,7 @@ export default async function AllExpensesPage({
   const rows: ExpenseRow[] = (expenses ?? []).map((e) => ({
     id: e.id,
     expenseNumber: e.expense_number,
-    vendor_name_raw: e.vendor_name_raw,
+    vendorName: vendorLabel(e.vendor_id ? vendorNameById.get(e.vendor_id) : null, e.vendor_name_raw),
     vendorNumber: e.vendor_id ? (vendorNumberById.get(e.vendor_id) ?? null) : null,
     submittedByName: nameById.get(e.submitted_by) ?? "—",
     status: e.status,
@@ -271,7 +273,7 @@ async function loadLines(
       id: row.id as string,
       expenseId: row.expense_id as string,
       expenseNumber: expense?.expenseNumber ?? null,
-      vendorName: expense?.vendor_name_raw ?? "—",
+      vendorName: expense?.vendorName ?? "—",
       receiptDate: expense?.receipt_date ?? null,
       status: expense?.status ?? "",
       submittedByName: expense?.submittedByName ?? "—",

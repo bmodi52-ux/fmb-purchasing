@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { abnsCompatible, isValidAbn, vendorNameKeys, vendorNamesMatch } from "./vendor-names.ts";
+import { abnsCompatible, isValidAbn, vendorLabel, vendorNameKeys, vendorNamesMatch } from "./vendor-names.ts";
 
 describe("isValidAbn (#45)", () => {
   test("Nimco Foods' real ABN passes; the misread one fails", () => {
@@ -50,5 +50,14 @@ describe("abnsCompatible", () => {
   test("a missing ABN on either side leaves it to the name", () => {
     assert.equal(abnsCompatible(null, "37003900427"), true);
     assert.equal(abnsCompatible("37 003 900 427", "37003900427"), true);
+  });
+});
+
+describe("vendorLabel", () => {
+  test("the vendor record's name first, then what the receipt said", () => {
+    assert.equal(vendorLabel("Fresh Poultry", "FRESH POULTRY PTY LTD"), "Fresh Poultry");
+    assert.equal(vendorLabel(null, "Corner Shop"), "Corner Shop");
+    assert.equal(vendorLabel(undefined, null), "Unrecorded vendor");
+    assert.equal(vendorLabel("  ", " "), "Unrecorded vendor");
   });
 });
