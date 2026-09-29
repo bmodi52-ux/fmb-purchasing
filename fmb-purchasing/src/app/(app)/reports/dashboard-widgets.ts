@@ -26,7 +26,7 @@ import {
   type Slice,
 } from "@/lib/reporting/aggregate.ts";
 import type { Ledger } from "@/lib/reporting/ledger-rows.ts";
-import { perUnitRows, type PerUnitRow } from "./unit-costs.ts";
+import { perUnitRows, type PerUnitRow } from "@/lib/reporting/unit-costs.ts";
 
 export type WidgetKind =
   | "spend-over-time"

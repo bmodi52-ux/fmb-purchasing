@@ -11,7 +11,7 @@ import { spanOf, withinRange } from "@/lib/reporting/ledger-rows";
 import { queryFromSearchParams, type ReportQuery } from "@/lib/reporting/query";
 import { loadSavedViews } from "@/lib/saved-report-views";
 import { ReportsView } from "./reports-view";
-import { averageUnitCosts, perUnitRows as perUnitRowsFor } from "./unit-costs";
+import { computeSpendReport } from "@/lib/reporting/spend-report";
 
 export const metadata = { title: "Reports" };
 
@@ -75,34 +75,28 @@ export default async function ReportsPage({
     ? applyFilters(previousLedger.expenses, previousLedger.lines, filters)
     : null;
 
-  /* ---------------- per-unit trends, scoped to the same slice ------------ */
-
-  // Only items still in the slice: a category or item filter has to narrow
-  // this section too, or it would contradict everything above it.
-  const visibleItemIds = new Set(current.lines.map((l) => l.itemId).filter(Boolean) as string[]);
-  const keepItem = (itemId: string) => visibleItemIds.has(itemId);
-
-  const perUnitRows = perUnitRowsFor(currentLedger.unitCosts, current, keepItem);
-
-  // The Compare cards' average, from the same rows the Unit costs section
-  // reads, so a figure here and a figure there can never disagree.
-  const unitCostByItem = averageUnitCosts(currentLedger.unitCosts, current, keepItem);
+  // Worked out here, so the browser is sent the figures rather than the rows.
+  const report = computeSpendReport({
+    current,
+    previous,
+    unitCosts: currentLedger.unitCosts,
+    query,
+    periodLabel: period.label,
+    previousLabel: previousRange.label,
+  });
 
   return (
     <ReportsView
       query={query}
+      report={report}
       basisLabel={describeBasis(query.status)}
       today={today}
       earliest={earliest}
       vendors={options.vendors}
       categories={options.categories}
       items={options.items}
-      current={current}
-      previous={previous}
       periodLabel={period.label}
       previousLabel={previousRange.label}
-      perUnitRows={perUnitRows}
-      unitCostByItem={Object.fromEntries(unitCostByItem)}
       hasCategoryOrItemFilter={query.categories.length > 0 || query.items.length > 0}
       savedViews={savedViews}
       userId={user.id}
