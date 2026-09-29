@@ -56,7 +56,7 @@ export function alertOnExpense(
     if (!rules && !budgetRules && !builtInOn) return;
 
     const [{ data: row }, { data: lines }] = await Promise.all([
-      admin.from("expenses").select("vendor_id, receipt_date, created_at").eq("id", expense.id).maybeSingle(),
+      admin.from("expenses").select("vendor_id, report_date").eq("id", expense.id).maybeSingle(),
       admin.from("expense_line_items").select("category_id, line_total").eq("expense_id", expense.id),
     ]);
     const categoryIds = [...new Set((lines ?? []).map((l) => l.category_id as string | null).filter(Boolean) as string[])];
@@ -76,8 +76,7 @@ export function alertOnExpense(
     }
 
     if ((budgetRules || builtInOn) && row) {
-      const date = (row.receipt_date as string | null) ?? (row.created_at as string).slice(0, 10);
-      await checkBudgetThresholds(admin, date, categoryIds, lines ?? [], budgetRules, builtInOn ? builtIn!.percents : []);
+      await checkBudgetThresholds(admin, row.report_date as string, categoryIds, lines ?? [], budgetRules, builtInOn ? builtIn!.percents : []);
     }
   });
 }
@@ -179,7 +178,7 @@ function alertOnPrices(
 
     const { data: row } = await admin
       .from("expenses")
-      .select("id, vendor_id, total, receipt_date, created_at")
+      .select("id, vendor_id, total, report_date")
       .eq("id", expense.id)
       .maybeSingle();
     if (!row) return;
@@ -250,7 +249,7 @@ function alertOnPrices(
   });
 }
 
-type ExpenseForSpendRow = { id: string; vendor_id: string | null; total: number; receipt_date: string | null; created_at: string };
+type ExpenseForSpendRow = { id: string; vendor_id: string | null; total: number; report_date: string };
 
 export function alertOnVendorAdded(admin: SupabaseClient, vendor: { id: string; name: string }): void {
   later(async () => {

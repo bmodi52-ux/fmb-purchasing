@@ -89,7 +89,7 @@ export default async function ExpenseDetailPage({
   const { data: expense } = await admin
     .from("expenses")
     .select(
-      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, payee_id, created_at, bank_confirmed_on, bank_statement_text, receipt_total, receipt_total_scanned, receipt_total_note"
+      "id, expense_number, submitted_by, vendor_id, vendor_name_raw, invoice_number, receipt_date, report_date, subtotal, gst_amount, gst_printed, total, status, fiscal_year_hijri, submitter_comment, decision_comment, decided_by, decided_at, payment_reference, payment_date, paid_by, payee_id, created_at, bank_confirmed_on, bank_statement_text, receipt_total, receipt_total_scanned, receipt_total_note"
     )
     .eq("id", id)
     .maybeSingle();

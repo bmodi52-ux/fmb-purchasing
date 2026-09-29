@@ -10,6 +10,7 @@ import {
   priceFlagsFor,
   spendHistoryFor,
   unusualSpend,
+  yearBefore,
   type PricePoint,
 } from "./price-alerts.ts";
 
@@ -190,16 +191,29 @@ describe("unusual spend", () => {
   });
 
   test("history is the same vendor's other expenses in the year up to this one", () => {
-    const e = { id: "e", vendor_id: "v", total: 500, receipt_date: "2026-09-10", created_at: "2026-09-10T00:00:00Z" };
+    const e = { id: "e", vendor_id: "v", total: 500, report_date: "2026-09-10" };
     const others = [
-      { id: "a", vendor_id: "v", total: 100, receipt_date: "2026-01-01", created_at: "2026-01-01T00:00:00Z" },
-      { id: "old", vendor_id: "v", total: 100, receipt_date: "2025-09-01", created_at: "2025-09-01T00:00:00Z" },
-      { id: "later", vendor_id: "v", total: 100, receipt_date: "2026-09-11", created_at: "2026-09-11T00:00:00Z" },
-      { id: "other", vendor_id: "w", total: 100, receipt_date: "2026-05-01", created_at: "2026-05-01T00:00:00Z" },
-      { id: "undated", vendor_id: "v", total: "90", receipt_date: null, created_at: "2026-06-01T03:00:00Z" },
+      { id: "a", vendor_id: "v", total: 100, report_date: "2026-01-01" },
+      { id: "old", vendor_id: "v", total: 100, report_date: "2025-09-01" },
+      { id: "later", vendor_id: "v", total: 100, report_date: "2026-09-11" },
+      { id: "other", vendor_id: "w", total: 100, report_date: "2026-05-01" },
+      { id: "undated", vendor_id: "v", total: "90", report_date: "2026-06-01" },
       e,
     ];
     assert.deepEqual(spendHistoryFor(e, others), [100, 90]);
+  });
+
+  test("the year runs by the day each expense counts on, so the edges hold", () => {
+    // An undated receipt submitted at 8:30 on 1 September in Sydney counts on
+    // the 1st (0083), though it was still 31 August in UTC.
+    const e = { id: "e", vendor_id: "v", total: 500, report_date: "2026-09-01" };
+    const others = [
+      { id: "first", vendor_id: "v", total: 100, report_date: yearBefore("2026-09-01") },
+      { id: "too-old", vendor_id: "v", total: 100, report_date: "2025-08-31" },
+      { id: "same-day", vendor_id: "v", total: 80, report_date: "2026-09-01" },
+    ];
+    assert.equal(yearBefore("2026-09-01"), "2025-09-01");
+    assert.deepEqual(spendHistoryFor(e, others), [100, 80]);
   });
 });
 

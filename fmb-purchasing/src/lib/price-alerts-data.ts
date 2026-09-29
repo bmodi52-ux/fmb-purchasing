@@ -9,6 +9,7 @@ import {
   priceFlagsFor,
   spendHistoryFor,
   unusualSpend,
+  yearBefore,
   type CheapestSource,
   type ExpenseForSpend,
   type ItemPriceSettings,
@@ -38,7 +39,7 @@ type PaidCostRow = {
   expense_id: string;
   item_id: string;
   vendor_id: string | null;
-  receipt_date: string | null;
+  report_date: string;
   submitted_at: string;
   cost_per_base_unit: number | string;
   base_unit_code: string;
@@ -49,7 +50,7 @@ type PaidCostRow = {
 };
 
 const PAID_COST_COLUMNS =
-  "line_item_id, expense_id, item_id, vendor_id, receipt_date, submitted_at, cost_per_base_unit, base_unit_code, contents_confirmed, base_quantity, receipt_quantity, pack_disagrees";
+  "line_item_id, expense_id, item_id, vendor_id, report_date, submitted_at, cost_per_base_unit, base_unit_code, contents_confirmed, base_quantity, receipt_quantity, pack_disagrees";
 
 function toPoint(r: PaidCostRow): PricePoint {
   return {
@@ -57,7 +58,7 @@ function toPoint(r: PaidCostRow): PricePoint {
     expenseId: r.expense_id,
     itemId: r.item_id,
     vendorId: r.vendor_id,
-    date: r.receipt_date ?? r.submitted_at.slice(0, 10),
+    date: r.report_date,
     submittedAt: r.submitted_at,
     costPerUnit: Number(r.cost_per_base_unit),
     unit: r.base_unit_code,
@@ -141,11 +142,8 @@ export async function loadSpendFlags(
   const vendorIds = [...new Set(expenses.map((e) => e.vendor_id).filter(Boolean) as string[])];
   if (!config.enabled || vendorIds.length === 0) return result;
 
-  // A year before the earliest of them, with a few days' slack for receipts
-  // dated before they were submitted.
-  const earliest = expenses.map((e) => e.receipt_date ?? e.created_at.slice(0, 10)).sort()[0];
-  const since = new Date(`${earliest}T00:00:00Z`);
-  since.setUTCDate(since.getUTCDate() - 400);
+  // The year before the earliest of them, by the day each counts on.
+  const since = yearBefore(expenses.map((e) => e.report_date).sort()[0]);
 
   const others: ExpenseForSpend[] = [];
   for (const part of chunks(vendorIds)) {
@@ -153,10 +151,10 @@ export async function loadSpendFlags(
       ...(await allRows<ExpenseForSpend>((from, to) =>
         admin
           .from("expenses")
-          .select("id, vendor_id, total, receipt_date, created_at")
+          .select("id, vendor_id, total, report_date")
           .in("vendor_id", part)
           .not("status", "in", NOT_SPEND_FILTER)
-          .gte("created_at", since.toISOString())
+          .gte("report_date", since)
           .order("id")
           .range(from, to)
       ))
@@ -180,15 +178,9 @@ export async function loadCheapestRecent(
   const since = new Date(`${today}T00:00:00Z`);
   since.setUTCDate(since.getUTCDate() - Math.max(1, days));
   const sinceDay = since.toISOString().slice(0, 10);
-  // Submitted a little earlier than the window, to catch receipts dated inside it.
-  const submittedSince = new Date(since);
-  submittedSince.setUTCDate(submittedSince.getUTCDate() - 30);
 
   const rows = await allRows<PaidCostRow>((from, to) => {
-    const query = admin
-      .from("item_paid_unit_costs")
-      .select(PAID_COST_COLUMNS)
-      .gte("submitted_at", submittedSince.toISOString());
+    const query = admin.from("item_paid_unit_costs").select(PAID_COST_COLUMNS).gte("report_date", sinceDay);
     return (itemId ? query.eq("item_id", itemId) : query).order("line_item_id").range(from, to);
   });
   return cheapestRecent(rows.map(toPoint), sinceDay);
