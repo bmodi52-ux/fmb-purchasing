@@ -26,17 +26,6 @@ export type ReportRawData = {
   allExpenses: ExpenseRecord[];
   allLines: LineRecord[];
   paidCosts: PaidCostRow[];
-  /**
-   * When these figures were actually read out of the database.
-   *
-   * Reported so the page can say how fresh it is. Every write through the
-   * app revalidates this cache, so in normal use it is seconds old — but a
-   * change made outside the app (a maintenance script, an edit in the
-   * Supabase dashboard) does not, and the figures then stay wrong for up to
-   * an hour with nothing on screen to suggest it. Money that is confidently
-   * wrong is worse than money that is visibly old.
-   */
-  computedAt: string;
 };
 
 /** A range of calendar days, inclusive. */
@@ -248,7 +237,7 @@ const loadCachedReportRows = unstable_cache(
       };
     });
 
-    return { allExpenses, allLines, paidCosts, computedAt: new Date().toISOString() };
+    return { allExpenses, allLines, paidCosts };
   },
   ["report-raw-data"],
   { tags: [REPORT_DATA_TAG], revalidate: 3600 }
@@ -265,6 +254,5 @@ export function withinRange(raw: ReportRawData, range: DateRange): ReportRawData
     allExpenses: expenses,
     allLines: raw.allLines.filter((l) => ids.has(l.expenseId)),
     paidCosts: raw.paidCosts.filter((c) => ids.has(c.expense_id)),
-    computedAt: raw.computedAt,
   };
 }

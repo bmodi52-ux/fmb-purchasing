@@ -21,7 +21,6 @@ const STATUS_SLOT: Record<string, number> = {
   submitted: 0,
   approved: 1,
   paid: 2,
-  declined: 3,
 };
 
 const STAT_LABEL: Record<string, string> = {

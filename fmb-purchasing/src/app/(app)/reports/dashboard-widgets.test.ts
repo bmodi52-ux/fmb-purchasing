@@ -121,7 +121,6 @@ const raw: ReportRawData = {
   allExpenses: expenses,
   allLines: lines,
   paidCosts,
-  computedAt: "2026-09-06T00:00:00.000Z",
 };
 
 const TODAY = "2026-09-11";

@@ -493,13 +493,14 @@ export function byStatus(slice: Slice): Bucket[] {
   }
 
   // Fixed order — a pipeline, so it should read in pipeline order rather
-  // than jumping about as the numbers change.
-  const ORDER = ["submitted", "approved", "paid", "declined"];
+  // than jumping about as the numbers change. Declined and withdrawn
+  // expenses are not spend and never reach a report (expense-status.ts), so
+  // they have no stage here.
+  const ORDER = ["submitted", "approved", "paid"];
   const LABEL: Record<string, string> = {
     submitted: "Awaiting review",
     approved: "Approved",
     paid: "Paid",
-    declined: "Declined",
   };
 
   const out = new Map<string, Bucket>();

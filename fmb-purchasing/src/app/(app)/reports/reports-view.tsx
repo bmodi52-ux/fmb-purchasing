@@ -63,7 +63,6 @@ const STATUS_SLOT: Record<string, number> = {
   submitted: 0,
   approved: 1,
   paid: 2,
-  declined: 3,
 };
 
 function downloadCsv(filename: string, rows: Record<string, string | number>[]) {
@@ -356,7 +355,7 @@ function OverviewSection({
       )}
 
       <Printable id="overview-status" label="Where it sits">
-        <Panel title="Where it sits" subtitle="Expenses by stage, excluding declined">
+        <Panel title="Where it sits" subtitle="Expenses by stage. Declined and withdrawn ones are not spend and are not counted.">
           <StackedBar
             data={statusMix.map((s) => ({
               label: s.label,
@@ -933,21 +932,3 @@ function Panel({
     </section>
   );
 }
-
-/**
- * Says how old these figures are, but only once that starts to matter.
- *
- * Reports reads a cached copy of the ledger, and every write through the app
- * refreshes it — so in normal use this never appears. What it exists for is
- * the case that does not refresh it: a change made outside the app, which
- * leaves the page showing the ledger as it was for up to an hour.
- *
- * That is not hypothetical. Clearing the operational data straight through
- * the database left this page reporting a six-figure-cents total against an
- * empty ledger, and nothing on screen suggested the number was old rather
- * than wrong. Money that is confidently wrong is worse than money that is
- * visibly stale.
- *
- * Ten minutes, because anything shorter would fire during ordinary use — a
- * page left open over a cup of tea is not stale, it is just open.
- */

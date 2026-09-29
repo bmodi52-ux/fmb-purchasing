@@ -517,7 +517,8 @@ describe("byStatus", () => {
   });
 
   test("omits statuses with nothing in them", () => {
-    assert.equal(byStatus(all).find((s) => s.key === "declined"), undefined);
+    const paidOnly = applyFilters(expenses.filter((e) => e.status === "paid"), lines, NO_FILTERS);
+    assert.deepEqual(byStatus(paidOnly).map((s) => s.key), ["paid"]);
   });
 
   test("status totals sum to overall spend", () => {
