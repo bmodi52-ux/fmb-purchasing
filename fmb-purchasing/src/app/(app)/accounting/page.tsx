@@ -117,7 +117,15 @@ export default async function AccountingPage({
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Tile label="G11 · Other purchases" value={money(gst.g11)} hint="GST included" />
           <Tile label="G10 · Capital purchases" value={money(gst.g10)} hint="GST included" />
-          <Tile label="1B · GST on purchases" value={money(gst.oneB)} hint={`${gst.expenseCount} expenses`} />
+          <Tile
+            label="1B · GST on purchases"
+            value={money(gst.oneB)}
+            hint={
+              gst.oneBInDoubt > 0
+                ? `${gst.expenseCount} expenses · ${money(gst.oneBInDoubt)} of it in doubt, below`
+                : `${gst.expenseCount} expenses`
+            }
+          />
           <Tile label="GST-free purchases" value={money(gst.gstFreePurchases)} hint="Within G10 and G11" />
         </dl>
         {gst.apportionedLines > 0 && (
