@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { revalidateReports } from "../../reports/data";
+import { revalidateReports } from "@/lib/reporting/ledger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { can, getUserPermissions, requirePermission } from "@/lib/permissions";

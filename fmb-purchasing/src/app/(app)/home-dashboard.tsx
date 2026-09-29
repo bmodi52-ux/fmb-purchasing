@@ -16,7 +16,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { formatMonthLabel } from "./reports/aggregate";
+import { formatMonthLabel } from "@/lib/reporting/aggregate";
 import type { WidgetConfig, WidgetData, WidgetKind } from "./reports/dashboard-widgets";
 import { removeDashboardWidget, reorderDashboardWidgets } from "./reports/dashboard-widgets-actions";
 import { WidgetBody } from "./widget-body";

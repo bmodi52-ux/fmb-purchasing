@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import { Dialog } from "@/components/dialog";
 import { SubmitButton } from "@/components/submit-button";
-import { buildHref, type ReportQuery } from "./report-filters";
+import { buildHref, type ReportQuery } from "@/lib/reporting/query";
 import { SHARING_LABELS, type SavedReportView, type ViewSharing } from "@/lib/saved-report-views";
 import { copyReportView, deleteReportView, saveReportView, type SavedViewState } from "./saved-views-actions";
 

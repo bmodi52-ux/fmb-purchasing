@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { parsePeriod, periodCode, yearContaining } from "@/lib/periods";
 import { PeriodPicker } from "@/components/period-picker";
-import { formatMonthLabel, type Dimension } from "./reports/aggregate";
+import { formatMonthLabel, type Dimension } from "@/lib/reporting/aggregate";
 import { MultiSelectMenu } from "./reports/multi-select-menu";
 import {
   computeWidgetData,
@@ -13,7 +13,7 @@ import {
   type WidgetKind,
   type StatMetric,
 } from "./reports/dashboard-widgets";
-import type { ReportRawData } from "./reports/data";
+import type { Ledger } from "@/lib/reporting/ledger-rows";
 import { fetchWidgetPreviewData, type WidgetPreviewData } from "./reports/preview-data-actions";
 import { addDashboardWidget, updateDashboardWidget } from "./reports/dashboard-widgets-actions";
 import { WidgetBody } from "./widget-body";
@@ -120,12 +120,8 @@ export function AddWidgetDialog({
     statMetric: needsStatMetric ? statMetric : undefined,
   };
 
-  const raw: ReportRawData | null = preview
-    ? {
-        allExpenses: preview.expenses,
-        allLines: preview.lines,
-        paidCosts: preview.paidCosts,
-      }
+  const raw: Ledger | null = preview
+    ? { expenses: preview.expenses, lines: preview.lines, unitCosts: preview.unitCosts }
     : null;
 
   const previewReady = raw != null && (!needsItem || !!itemId);

@@ -10,7 +10,7 @@ import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
 import { budgetActuals, budgetTotals } from "@/lib/budget-actuals";
 import { PeriodPicker } from "@/components/period-picker";
 import { SubmitButton } from "@/components/submit-button";
-import { loadReportRawData, withinRange } from "../reports/data";
+import { loadLedger } from "@/lib/reporting/ledger";
 import { copyBudgetsFromPrevious } from "./actions";
 import { BudgetsTable } from "./budgets-table";
 
@@ -58,7 +58,7 @@ export default async function BudgetsPage({
   const [{ data: categoryRows }, budgets, report, earliest, { data: changeRows }] = await Promise.all([
     admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
     loadBudgets(admin),
-    loadReportRawData(period).then((raw) => withinRange(raw, period)),
+    loadLedger(period),
     earliestExpenseDate(admin),
     admin
       .from("category_budget_changes")
@@ -76,8 +76,8 @@ export default async function BudgetsPage({
   // committed — approved or still waiting — because a budget is used up as
   // soon as the money is promised, not when the transfer happens (#39).
   const actuals = budgetActuals(
-    report.allLines,
-    new Map(report.allExpenses.map((e) => [e.id, e.status])),
+    report.lines,
+    new Map(report.expenses.map((e) => [e.id, e.status])),
     categoryRows ?? []
   );
 

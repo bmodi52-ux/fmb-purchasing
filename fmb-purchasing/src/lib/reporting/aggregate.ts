@@ -138,6 +138,27 @@ export function vendorKeyOf(e: ExpenseRecord): { key: string; label: string } {
   return { key: e.vendorId ?? `raw:${e.vendorName}`, label: e.vendorName };
 }
 
+export type FilterOption = { value: string; label: string };
+
+/**
+ * What the filter menus offer for a period: every vendor, category and item
+ * with spend in it, keyed exactly as the filters and breakdowns key them.
+ */
+export function filterOptionsFor(
+  expenses: ExpenseRecord[],
+  lines: LineRecord[]
+): { vendors: FilterOption[]; categories: FilterOption[]; items: FilterOption[] } {
+  const sorted = (pairs: { key: string; label: string }[]) =>
+    [...new Map(pairs.map((p) => [p.key, p.label])).entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  return {
+    vendors: sorted(expenses.map(vendorKeyOf)),
+    categories: sorted(lines.filter((l) => l.categoryId).map(categoryKeyOf)),
+    items: sorted(lines.filter((l) => l.itemId).map(itemKeyOf)),
+  };
+}
+
 /**
  * Applies the filter bar to a period's rows.
  *

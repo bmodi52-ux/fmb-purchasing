@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
-import { revalidateReports } from "../../reports/data";
+import { revalidateReports } from "@/lib/reporting/ledger";
 
 async function requireErrorsAdmin() {
   const user = await getCurrentUser();

@@ -8,11 +8,9 @@ import { exportRecordsCsv } from "@/lib/export";
 import {
   ReportFilters,
   SectionTabs,
-  SECTIONS,
-  buildHref,
   type FilterOption,
-  type ReportQuery,
 } from "./report-filters";
+import { SECTIONS, buildHref, type ReportQuery } from "@/lib/reporting/query";
 import { PrintRegistryProvider, Printable } from "./printable";
 import { PrintButton } from "./print-button";
 import { SavedViews } from "./saved-views";
@@ -32,7 +30,7 @@ import {
   type Slice,
   type Dimension,
   type Bucket,
-} from "./aggregate";
+} from "@/lib/reporting/aggregate";
 import {
   HeroFigure,
   StatTile,
@@ -84,6 +82,7 @@ function buildFilterSummary(
 
 export function ReportsView({
   query,
+  basisLabel,
   today,
   earliest,
   vendors,
@@ -101,6 +100,8 @@ export function ReportsView({
   teams,
 }: {
   query: ReportQuery;
+  /** Which expenses count, and by which date (lib/reporting/basis). */
+  basisLabel: string;
   today: string;
   earliest: string | null;
   vendors: FilterOption[];
@@ -144,6 +145,7 @@ export function ReportsView({
           <p className="page-description mt-1">
             Spending over any period — Hijri year, financial year, quarter, month or your own dates.
           </p>
+          <p className="mt-1 text-xs text-ink/55">{basisLabel}</p>
         </div>
 
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-ink/10">
@@ -153,7 +155,7 @@ export function ReportsView({
             {!empty && (
               <PrintButton
                 title={`Reports — ${sectionLabel}`}
-                subtitle={filterSummary}
+                subtitle={`${filterSummary} · ${basisLabel}`}
                 filenameBase={`reports-${query.section}-${query.period}`}
               />
             )}
