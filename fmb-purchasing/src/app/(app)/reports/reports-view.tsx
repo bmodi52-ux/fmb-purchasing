@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { gregorianToHijri, formatHijri } from "@/lib/hijri/hijri";
 import { formatDate } from "@/lib/format";
+import { exportRecordsCsv } from "@/lib/export";
 import {
   ReportFilters,
   SectionTabs,
@@ -65,22 +66,6 @@ const STATUS_SLOT: Record<string, number> = {
   paid: 2,
   declined: 3,
 };
-
-function downloadCsv(filename: string, rows: Record<string, string | number>[]) {
-  if (rows.length === 0) return;
-  const headers = Object.keys(rows[0]);
-  const csv = [
-    headers.join(","),
-    ...rows.map((r) => headers.map((h) => JSON.stringify(r[h] ?? "")).join(",")),
-  ].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function DateCell({ date, calendar }: { date: string | null; calendar: "gregorian" | "hijri" }) {
   if (!date) return <>—</>;
@@ -478,7 +463,7 @@ function DimensionSection({
         <Panel
           title={`Spend by ${dimension}`}
           onExport={() =>
-            downloadCsv(
+            exportRecordsCsv(
               `spend-by-${dimension}.csv`,
               ranked.map((b) => ({ [dimension]: b.label, [unit]: b.count, total: b.spend, gst: b.gst }))
             )
@@ -767,7 +752,7 @@ function UnitCostsSection({
       onExport={
         perUnitRows.length > 0
           ? () =>
-              downloadCsv(
+              exportRecordsCsv(
                 "per-unit-cost-trends.csv",
                 perUnitRows.map((r) => ({
                   item: r.groupName,

@@ -1,5 +1,7 @@
 "use client";
 
+import { toCsv } from "@/lib/csv";
+
 export type ExportColumn = { key: string; label: string };
 
 function cellText(value: unknown): string {
@@ -17,11 +19,16 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 export function exportCsv(filename: string, columns: ExportColumn[], rows: Record<string, unknown>[]) {
-  const lines = [
-    columns.map((c) => JSON.stringify(c.label)).join(","),
-    ...rows.map((r) => columns.map((c) => JSON.stringify(cellText(r[c.key]))).join(",")),
-  ];
-  triggerDownload(new Blob([lines.join("\n")], { type: "text/csv" }), filename);
+  const csv = toCsv([columns.map((c) => c.label), ...rows.map((r) => columns.map((c) => r[c.key]))]);
+  triggerDownload(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
+}
+
+/** A CSV of plain records, headed by the first one's keys. Nothing to save when there are none. */
+export function exportRecordsCsv(filename: string, rows: Record<string, string | number>[]) {
+  if (rows.length === 0) return;
+  const headers = Object.keys(rows[0]);
+  const csv = toCsv([headers, ...rows.map((r) => headers.map((h) => r[h] ?? ""))]);
+  triggerDownload(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
 }
 
 export function exportJson(filename: string, columns: ExportColumn[], rows: Record<string, unknown>[]) {
