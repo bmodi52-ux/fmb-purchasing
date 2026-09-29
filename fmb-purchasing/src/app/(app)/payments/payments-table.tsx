@@ -15,7 +15,8 @@ import { describeSelection, sumAmounts } from "@/lib/selection-summary";
 export type PaymentRow = {
   id: string;
   expense_number: string | null;
-  vendor_name_raw: string | null;
+  /** Named by vendorLabel: the vendor record first, then what the receipt said. */
+  vendorName: string;
   invoice_number: string | null;
   total: number;
   decided_at: string | null;
@@ -32,7 +33,7 @@ export type PaymentRow = {
 
 const EXPORT_COLUMNS: ExportColumn[] = [
   { key: "expense_number", label: "Entry #" },
-  { key: "vendor_name_raw", label: "Vendor" },
+  { key: "vendorName", label: "Vendor" },
   { key: "payeeName", label: "Pay to" },
   { key: "payeeAccount", label: "Account" },
   { key: "payeeConfirmed", label: "Account status" },
@@ -45,7 +46,7 @@ const EXPORT_COLUMNS: ExportColumn[] = [
 const SORT_OPTIONS: SortOption<PaymentRow>[] = [
   { key: "decided_at", label: "Approved", value: (e) => e.decided_at ?? "" },
   { key: "total", label: "Total", value: (e) => e.total },
-  { key: "vendor", label: "Vendor", value: (e) => e.vendor_name_raw ?? "" },
+  { key: "vendor", label: "Vendor", value: (e) => e.vendorName },
   { key: "submitter", label: "Submitted by", value: (e) => e.submittedByName },
   // Unconfirmed accounts first: they are the rows that need a decision before
   // any transfer is made, and a run of thirty buries them otherwise.
@@ -180,7 +181,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
     <FilterableSection
       rows={expenses}
       searchText={(e) =>
-        `${e.vendor_name_raw ?? ""} ${e.payeeName} ${e.submittedByName} ${e.invoice_number ?? ""}`
+        `${e.vendorName} ${e.payeeName} ${e.submittedByName} ${e.invoice_number ?? ""}`
       }
       columns={EXPORT_COLUMNS}
       filenameBase="payments"
@@ -217,7 +218,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                         className="mt-1"
                       />
                       <div className="min-w-0">
-                        <p className="font-medium text-ink">{e.vendor_name_raw}</p>
+                        <p className="font-medium text-ink">{e.vendorName}</p>
                         {e.duplicateWarning && <DuplicateFlag label={e.duplicateWarning} />}
                         <p className="text-xs text-ink/55">
                           <Link href={`/expenses/${e.id}`} className="tabular-nums font-medium underline-offset-2 hover:underline">
@@ -309,7 +310,7 @@ export function PaymentsTable({ expenses }: { expenses: PaymentRow[] }) {
                         </Link>
                       </td>
                       <td className="p-2">
-                        {e.vendor_name_raw}
+                        {e.vendorName}
                         {e.duplicateWarning && <DuplicateFlag label={e.duplicateWarning} />}
                       </td>
                       <td className="p-2"><PayeeAccount instruction={e.payment} compact /></td>

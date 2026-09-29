@@ -90,3 +90,13 @@ export function abnsCompatible(a: string | null | undefined, b: string | null | 
   const y = b?.replace(/\D/g, "") || null;
   return !x || !y || x === y;
 }
+
+/**
+ * How an expense's vendor is named wherever it is shown or exported: the
+ * vendor's record first, then what the receipt said. Reports and Accounting
+ * named it one way and All expenses and Payments the other, so the same
+ * vendor could be spelled two ways in two files about the same money.
+ */
+export function vendorLabel(recordName: string | null | undefined, raw: string | null | undefined): string {
+  return recordName?.trim() || raw?.trim() || "Unrecorded vendor";
+}

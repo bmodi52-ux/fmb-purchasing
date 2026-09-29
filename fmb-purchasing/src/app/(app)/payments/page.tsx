@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { allRows } from "@/lib/supabase/all-rows";
+import { vendorLabel } from "@/lib/vendor-names";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { formatAccount, paymentInstructions } from "@/lib/payment-instruction";
 import { PaymentsTable, type PaymentRow } from "./payments-table";
@@ -47,10 +48,15 @@ export default async function PaymentsPage() {
   );
 
   const submitterIds = [...new Set(expenses.map((e) => e.submitted_by))];
-  const { data: profiles } = submitterIds.length
-    ? await admin.from("profiles").select("id, full_name, email").in("id", submitterIds)
-    : { data: [] };
+  const vendorIds = [...new Set(expenses.map((e) => e.vendor_id).filter(Boolean) as string[])];
+  const [{ data: profiles }, { data: vendors }] = await Promise.all([
+    submitterIds.length
+      ? admin.from("profiles").select("id, full_name, email").in("id", submitterIds)
+      : Promise.resolve({ data: [] }),
+    vendorIds.length ? admin.from("vendors").select("id, name").in("id", vendorIds) : Promise.resolve({ data: [] }),
+  ]);
   const submitterNameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email]));
+  const vendorNameById = new Map((vendors ?? []).map((v) => [v.id as string, v.name as string]));
 
   // One query for the whole page rather than one per row: the list only
   // needs to know whether to offer a link.
@@ -70,7 +76,7 @@ export default async function PaymentsPage() {
   const rows: PaymentRow[] = expenses.map((e) => ({
     id: e.id,
     expense_number: e.expense_number,
-    vendor_name_raw: e.vendor_name_raw,
+    vendorName: vendorLabel(e.vendor_id ? vendorNameById.get(e.vendor_id) : null, e.vendor_name_raw),
     invoice_number: e.invoice_number,
     total: e.total,
     decided_at: e.decided_at,
