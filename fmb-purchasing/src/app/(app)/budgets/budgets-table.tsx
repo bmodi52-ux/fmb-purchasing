@@ -1,6 +1,7 @@
 "use client";
 
-import { canPhase, type CategoryPeriodBudget } from "@/lib/budgets";
+import { canPhase } from "@/lib/budgets";
+import type { BudgetRow } from "@/lib/reporting/budget-view";
 import { monthOf, type CalendarKind } from "@/lib/periods";
 import { ColumnFilterBar, useColumnFilters, type FilterColumn } from "@/components/column-filter-bar";
 import { BudgetInput } from "./budget-input";
@@ -20,16 +21,7 @@ import { BudgetPhasing } from "./budget-phasing";
  * exists to answer, and both are a tick away once the columns can be filtered.
  */
 
-export type BudgetRow = {
-  id: string;
-  label: string;
-  budget: number | null;
-  share: CategoryPeriodBudget | undefined;
-  spent: number;
-  paid: number;
-  committed: number;
-  usedPct: number | null;
-};
+export type { BudgetRow };
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 

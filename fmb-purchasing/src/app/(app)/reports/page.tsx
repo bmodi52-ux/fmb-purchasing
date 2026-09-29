@@ -2,16 +2,10 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { comparisonPeriod, parsePeriod } from "@/lib/periods";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
-import { applyFilters, filterOptionsFor, type Filters, type Slice } from "@/lib/reporting/aggregate";
-import { describeBasis, withStatusBasis } from "@/lib/reporting/basis";
-import { loadLedger } from "@/lib/reporting/ledger";
-import { spanOf, withinRange } from "@/lib/reporting/ledger-rows";
-import { queryFromSearchParams, type ReportQuery } from "@/lib/reporting/query";
+import { loadSpendView } from "@/lib/reporting/spend-view";
 import { loadSavedViews } from "@/lib/saved-report-views";
 import { ReportsView } from "./reports-view";
-import { computeSpendReport } from "@/lib/reporting/spend-report";
 
 export const metadata = { title: "Reports" };
 
@@ -26,78 +20,30 @@ export default async function ReportsPage({
   if (!user) redirect("/login");
   await requirePermission(user, "reports", "view");
 
-  const params = await searchParams;
-  const today = todayIso();
-  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
-  // `fy` is the fiscal-year parameter from before #22, still honoured for old links.
-  const period = parsePeriod(one(params.period) ?? one(params.fy), today);
-  const asked = queryFromSearchParams(params, period.code);
-  // Like with like: a period still under way compares with the same stretch
-  // of the one before, not all of it.
-  const previousRange = comparisonPeriod(period, today);
-
-  // The period before comes back in the same load so the page can show
-  // change without a second one.
   const admin = createAdminClient();
-  const [ledger, earliest, savedViews, { data: teams }] = await Promise.all([
-    loadLedger(spanOf(period, previousRange)).then((l) => withStatusBasis(l, asked.status)),
+  const [view, earliest, savedViews, { data: teams }] = await Promise.all([
+    // Worked out on the server, so the browser is sent the figures rather
+    // than the rows — and shared with the download of this page.
+    loadSpendView(await searchParams, todayIso()),
     earliestExpenseDate(admin),
     loadSavedViews(admin, user),
     admin.from("teams").select("id, name").order("name"),
   ]);
 
-  const currentLedger = withinRange(ledger, period);
-  const previousLedger = withinRange(ledger, previousRange);
-
-  /* ---------------- filter options, drawn from the period on screen ------ */
-
-  const options = filterOptionsFor(currentLedger.expenses, currentLedger.lines);
-
-  // Anything not on offer for this period is dropped rather than carried
-  // silently — otherwise switching period leaves stale ids selecting nothing.
-  const offered = (list: string[], from: { value: string }[]) => list.filter((v) => from.some((o) => o.value === v));
-  const query: ReportQuery = {
-    ...asked,
-    vendors: offered(asked.vendors, options.vendors),
-    categories: offered(asked.categories, options.categories),
-    items: offered(asked.items, options.items),
-  };
-
-  const filters: Filters = {
-    month: null,
-    vendorIds: query.vendors,
-    categoryIds: query.categories,
-    itemIds: query.items,
-  };
-
-  const current = applyFilters(currentLedger.expenses, currentLedger.lines, filters);
-  const previous: Slice | null = previousLedger.expenses.length
-    ? applyFilters(previousLedger.expenses, previousLedger.lines, filters)
-    : null;
-
-  // Worked out here, so the browser is sent the figures rather than the rows.
-  const report = computeSpendReport({
-    current,
-    previous,
-    unitCosts: currentLedger.unitCosts,
-    query,
-    periodLabel: period.label,
-    previousLabel: previousRange.label,
-  });
-
   return (
     <ReportsView
-      query={query}
-      report={report}
-      basisLabel={describeBasis(query.status)}
-      today={today}
+      query={view.query}
+      report={view.report}
+      basisLabel={view.basisLabel}
+      summary={view.summary}
+      today={todayIso()}
       earliest={earliest}
-      vendors={options.vendors}
-      categories={options.categories}
-      items={options.items}
-      periodLabel={period.label}
-      previousLabel={previousRange.label}
-      hasCategoryOrItemFilter={query.categories.length > 0 || query.items.length > 0}
+      vendors={view.options.vendors}
+      categories={view.options.categories}
+      items={view.options.items}
+      periodLabel={view.period.label}
+      previousLabel={view.previousRange.label}
+      hasCategoryOrItemFilter={view.query.categories.length > 0 || view.query.items.length > 0}
       savedViews={savedViews}
       userId={user.id}
       teams={(teams ?? []).map((t) => ({ id: t.id as string, name: t.name as string }))}

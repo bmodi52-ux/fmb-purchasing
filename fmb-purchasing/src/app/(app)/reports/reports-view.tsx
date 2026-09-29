@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { gregorianToHijri, formatHijri } from "@/lib/hijri/hijri";
 import { formatDate } from "@/lib/format";
-import { exportRecordsCsv } from "@/lib/export";
 import {
   ReportFilters,
   SectionTabs,
@@ -13,6 +12,7 @@ import {
 import { SECTIONS, buildHref, type ReportQuery } from "@/lib/reporting/query";
 import { PrintRegistryProvider, Printable } from "./printable";
 import { PrintButton } from "./print-button";
+import { DownloadLinks } from "@/components/download-links";
 import { SavedViews } from "./saved-views";
 import type { SavedReportView } from "@/lib/saved-report-views";
 import {
@@ -53,25 +53,12 @@ function DateCell({ date, calendar }: { date: string | null; calendar: "gregoria
   return <>{formatHijri(gregorianToHijri(new Date(date)))}</>;
 }
 
-/** Turns the active filters into a plain-language line for the print header. */
-function buildFilterSummary(
-  query: ReportQuery,
-  periodLabel: string,
-  vendors: FilterOption[],
-  categories: FilterOption[],
-  items: FilterOption[]
-): string {
-  const labelsOf = (options: FilterOption[], ids: string[]) =>
-    ids.map((id) => options.find((o) => o.value === id)?.label ?? id);
-
-  const parts = [periodLabel];
-  const v = labelsOf(vendors, query.vendors);
-  const c = labelsOf(categories, query.categories);
-  const i = labelsOf(items, query.items);
-  if (v.length > 0) parts.push(`Vendors: ${v.join(", ")}`);
-  if (c.length > 0) parts.push(`Categories: ${c.join(", ")}`);
-  if (i.length > 0) parts.push(`Items: ${i.join(", ")}`);
-  return parts.join(" · ");
+/**
+ * The download of what is on screen: the same URL, sent to reports/export,
+ * which builds the file on the server from the same figures.
+ */
+function exportHref(query: ReportQuery): string {
+  return buildHref(query, {}).replace("/reports?", "/reports/export?report=spend&");
 }
 
 /**
@@ -82,6 +69,7 @@ export function ReportsView({
   query,
   report,
   basisLabel,
+  summary,
   today,
   earliest,
   vendors,
@@ -98,6 +86,8 @@ export function ReportsView({
   report: SpendReport;
   /** Which expenses count, and by which date (lib/reporting/basis). */
   basisLabel: string;
+  /** Period, filters and basis in one line — the heading of anything printed or downloaded. */
+  summary: string;
   today: string;
   earliest: string | null;
   vendors: FilterOption[];
@@ -121,7 +111,6 @@ export function ReportsView({
   const isFiltered = query.vendors.length > 0 || query.categories.length > 0 || query.items.length > 0;
 
   const sectionLabel = SECTIONS.find((s) => s.key === query.section)?.label ?? query.section;
-  const filterSummary = buildFilterSummary(query, periodLabel, vendors, categories, items);
 
   return (
     <PrintRegistryProvider>
@@ -139,11 +128,14 @@ export function ReportsView({
           <div className="flex flex-wrap items-center gap-2 pb-2">
             <SavedViews views={savedViews} query={query} userId={userId} teams={teams} />
             {!empty && (
-              <PrintButton
-                title={`Reports — ${sectionLabel}`}
-                subtitle={`${filterSummary} · ${basisLabel}`}
-                filenameBase={`reports-${query.section}-${query.period}`}
-              />
+              <>
+                <DownloadLinks href={exportHref(query)} />
+                <PrintButton
+                  title={`Reports — ${sectionLabel}`}
+                  subtitle={summary}
+                  filenameBase={`reports-${query.section}-${query.period}`}
+                />
+              </>
             )}
           </div>
         </div>
@@ -434,15 +426,7 @@ function DimensionSection({
       )}
 
       <Printable id="breakdown-chart" label={`Spend by ${dimension}`}>
-        <Panel
-          title={`Spend by ${dimension}`}
-          onExport={() =>
-            exportRecordsCsv(
-              `spend-by-${dimension}.csv`,
-              ranked.map((b) => ({ [dimension]: b.label, [unit]: b.count, total: b.spend, gst: b.gst }))
-            )
-          }
-        >
+        <Panel title={`Spend by ${dimension}`}>
           <BarChart
             data={ranked.map((b) => ({ label: b.label, value: b.spend, count: b.count }))}
             maxBars={12}
@@ -709,24 +693,6 @@ function UnitCostsSection({
     <Panel
       title="Per-unit cost trends"
       subtitle="What we actually pay per box or pack, and per kilo, litre or item — compare vendors within an item"
-      onExport={
-        perUnitRows.length > 0
-          ? () =>
-              exportRecordsCsv(
-                "per-unit-cost-trends.csv",
-                perUnitRows.map((r) => ({
-                  item: r.groupName,
-                  vendor: r.vendorName,
-                  date: r.receiptDate ?? "",
-                  quantity: r.normalizedQuantity,
-                  unit: r.normalizedUnit,
-                  per_pack_cost: r.perPack ?? "",
-                  per_unit_cost: r.disputed ? "" : r.perUnit,
-                  pack_in_doubt: r.disputed ? "yes" : "",
-                }))
-              )
-          : undefined
-      }
       action={
         <div className="flex items-center gap-1 text-xs">
           <span className="text-ink/45">Dates:</span>
@@ -858,13 +824,11 @@ function MonthTable({ monthly }: { monthly: Bucket[] }) {
 function Panel({
   title,
   subtitle,
-  onExport,
   action,
   children,
 }: {
   title: string;
   subtitle?: string;
-  onExport?: () => void;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -875,18 +839,7 @@ function Panel({
           <h2 className="section-title text-ink capitalize">{title}</h2>
           {subtitle && <p className="mt-0.5 text-xs text-ink/50">{subtitle}</p>}
         </div>
-        <div className="flex shrink-0 items-center gap-3">
-          {action}
-          {onExport && (
-            <button
-              type="button"
-              onClick={onExport}
-              className="text-xs text-ink/50 underline hover:text-ink"
-            >
-              CSV
-            </button>
-          )}
-        </div>
+        {action && <div className="flex shrink-0 items-center gap-3">{action}</div>}
       </div>
       {children}
     </section>

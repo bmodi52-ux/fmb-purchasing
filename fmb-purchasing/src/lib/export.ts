@@ -23,14 +23,6 @@ export function exportCsv(filename: string, columns: ExportColumn[], rows: Recor
   triggerDownload(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
 }
 
-/** A CSV of plain records, headed by the first one's keys. Nothing to save when there are none. */
-export function exportRecordsCsv(filename: string, rows: Record<string, string | number>[]) {
-  if (rows.length === 0) return;
-  const headers = Object.keys(rows[0]);
-  const csv = toCsv([headers, ...rows.map((r) => headers.map((h) => r[h] ?? ""))]);
-  triggerDownload(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
-}
-
 export function exportJson(filename: string, columns: ExportColumn[], rows: Record<string, unknown>[]) {
   const data = rows.map((r) => {
     const out: Record<string, unknown> = {};

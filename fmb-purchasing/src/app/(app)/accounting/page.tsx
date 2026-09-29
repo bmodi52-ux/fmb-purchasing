@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, userCan } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/categories";
 import { formatDateTime } from "@/lib/format";
@@ -10,6 +10,7 @@ import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import { loadAccountingPeriod, type Basis } from "@/lib/accounting-data";
 import { summariseGst } from "@/lib/gst-summary";
 import { PeriodPicker } from "@/components/period-picker";
+import { DownloadLinks } from "@/components/download-links";
 import { SubmitButton } from "@/components/submit-button";
 import { lockPeriod, setCategoryAccountCode, unlockPeriod } from "./actions";
 import { XeroExportButton } from "./xero-export-button";
@@ -35,6 +36,7 @@ export default async function AccountingPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   await requirePermission(user, "accounting", "view");
+  const canExport = await userCan(user, "accounting", "export");
 
   const params = await searchParams;
   const today = todayIso();
@@ -90,7 +92,16 @@ export default async function AccountingPage({
       </div>
 
       <section className="flex flex-col gap-3">
-        <h2 className="section-title text-ink">GST for {period.label}</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="section-title text-ink">GST for {period.label}</h2>
+          {/* Every line behind 1B, with its tax type and any doubt about the claim. */}
+          {canExport && (
+            <DownloadLinks
+              href={`/reports/export?report=gst&period=${encodeURIComponent(period.code)}&basis=${basis}`}
+              label="GST detail"
+            />
+          )}
+        </div>
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Tile label="G11 · Other purchases" value={money(gst.g11)} hint="GST included" />
           <Tile label="G10 · Capital purchases" value={money(gst.g10)} hint="GST included" />
