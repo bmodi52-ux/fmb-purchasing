@@ -9,9 +9,9 @@
  */
 const PAGE_SIZE = 1000;
 
-export async function allRows<T>(
-  page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>
-): Promise<T[]> {
+type PageQuery = (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+
+export async function allRows<T>(page: PageQuery): Promise<T[]> {
   const rows: T[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await page(from, from + PAGE_SIZE - 1);
@@ -20,4 +20,31 @@ export async function allRows<T>(
     rows.push(...batch);
     if (batch.length < PAGE_SIZE) return rows;
   }
+}
+
+/**
+ * Ids per request. They travel in the URL, which will not carry a year of
+ * expense ids in one go.
+ */
+export const ID_CHUNK = 150;
+
+/**
+ * Every row belonging to a list of ids — the lines of a period's expenses, say.
+ *
+ * Two limits meet here, and each has cost a report rows before: the id list is
+ * sent a slice at a time because it rides in the URL, and each slice is paged
+ * because one slice of expenses can hold far more than a thousand lines. The
+ * All expenses ledger once did the first and not the second, and dropped lines
+ * without a word. Slices are requested together; rows come back in id-slice
+ * order.
+ */
+export async function allRowsForIds<T>(
+  ids: string[],
+  query: (ids: string[], from: number, to: number) => ReturnType<PageQuery>,
+  chunkSize = ID_CHUNK
+): Promise<T[]> {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize));
+  const results = await Promise.all(chunks.map((slice) => allRows<T>((from, to) => query(slice, from, to))));
+  return results.flat();
 }

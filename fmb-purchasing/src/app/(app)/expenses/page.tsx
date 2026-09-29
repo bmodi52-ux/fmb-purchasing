@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LINE_OFFER } from "@/lib/supabase/relationships";
+import { allRowsForIds } from "@/lib/supabase/all-rows";
 import { getColumnPreference } from "@/lib/column-prefs";
 import { ALL_TIME, parsePeriod } from "@/lib/periods";
 import { earliestExpenseDate, expenseDateFilter, todayIso } from "@/lib/periods-data";
@@ -208,8 +209,15 @@ export default async function AllExpensesPage({
         </p>
       )}
 
+      {lines && lines.total > lines.rows.length && (
+        <p className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-ink/80">
+          Showing {lines.rows.length.toLocaleString()} of {lines.total.toLocaleString()} lines.
+          Pick a shorter period to see every one.
+        </p>
+      )}
+
       {lines ? (
-        <LinesTable rows={lines} initialVisible={linesVisible} />
+        <LinesTable rows={lines.rows} initialVisible={linesVisible} />
       ) : (
         <ExpensesTable rows={rows} initialVisible={visibleColumns} />
       )}
@@ -220,43 +228,41 @@ export default async function AllExpensesPage({
 /**
  * The line items behind a set of expenses, flattened for the ledger.
  *
- * Requested in chunks because PostgREST puts the id list in the URL, and a
- * fiscal year of expenses is more ids than a URL will carry. Chunking here
- * rather than paginating keeps the ledger a complete picture of whatever
- * period the page is showing, which is the property that makes it
- * reconcilable.
+ * Every line, not the first thousand of each request: the ids go a slice at a
+ * time because they ride in the URL, and each slice is paged because a slice
+ * of receipts easily holds more than the thousand rows a response stops at.
+ * This used to take one response per slice and lost lines without a word,
+ * which a ledger someone reconciles against must never do. `total` is how many
+ * there were, so the page can say when the cap cut in.
  */
 async function loadLines(
   admin: ReturnType<typeof createAdminClient>,
   expenseIds: string[],
   expensesById: Map<string, ExpenseRow>
-): Promise<LineRow[]> {
-  if (expenseIds.length === 0) return [];
+): Promise<{ rows: LineRow[]; total: number }> {
+  if (expenseIds.length === 0) return { rows: [], total: 0 };
 
-  const CHUNK = 200;
-  const collected: Record<string, unknown>[] = [];
-
-  for (let i = 0; i < expenseIds.length && collected.length < LINES_CAP; i += CHUNK) {
-    const { data } = await admin
-      .from("expense_line_items")
-      .select(
-        "id, expense_id, kind, description_raw, category_id, quantity, unit_price, " +
-          "line_subtotal, line_gst, line_total, sort_order, " +
-          `pricelist_items!${LINE_OFFER} ( item_pack_sizes ( items ( name ) ) )`
-      )
-      .in("expense_id", expenseIds.slice(i, i + CHUNK))
-      .order("expense_id")
-      .order("sort_order")
-      .limit(LINES_CAP);
-    collected.push(...((data ?? []) as unknown as Record<string, unknown>[]));
-  }
-
-  const { data: categories } = await admin
-    .from("categories")
-    .select("id, name, parent_category_id");
+  const [collected, { data: categories }] = await Promise.all([
+    allRowsForIds<Record<string, unknown>>(expenseIds, (ids, from, to) =>
+      admin
+        .from("expense_line_items")
+        .select(
+          "id, expense_id, kind, description_raw, category_id, quantity, unit_price, " +
+            "line_subtotal, line_gst, line_total, sort_order, " +
+            `pricelist_items!${LINE_OFFER} ( item_pack_sizes ( items ( name ) ) )`
+        )
+        .in("expense_id", ids)
+        .order("expense_id")
+        .order("sort_order")
+        // Unique, so a line can't land on two pages or none.
+        .order("id")
+        .range(from, to)
+    ),
+    admin.from("categories").select("id, name, parent_category_id"),
+  ]);
   const categoryName = categoryLabelsById(categories ?? []);
 
-  return collected.slice(0, LINES_CAP).map((row) => {
+  const rows = collected.slice(0, LINES_CAP).map((row) => {
     const expense = expensesById.get(row.expense_id as string);
     const offer = row.pricelist_items as
       | { item_pack_sizes: { items: { name: string } | null } | null }
@@ -282,4 +288,5 @@ async function loadLines(
       lineTotal: Number(row.line_total ?? 0),
     };
   });
+  return { rows, total: collected.length };
 }

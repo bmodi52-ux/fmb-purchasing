@@ -2,7 +2,7 @@ import { unstable_cache, updateTag } from "next/cache";
 import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { categoryLabelsById } from "@/lib/categories";
-import { allRows } from "@/lib/supabase/all-rows";
+import { allRows, allRowsForIds } from "@/lib/supabase/all-rows";
 import { LINE_OFFER } from "@/lib/supabase/relationships";
 import { expenseDateFilter } from "@/lib/periods-data";
 import { inPeriod } from "@/lib/periods";
@@ -114,24 +114,6 @@ export function spanOf(...ranges: DateRange[]): DateRange {
   };
 }
 
-/**
- * Ids travel in the URL, so they go a slice at a time; and a response stops at
- * 1,000 rows without saying so, so each slice is paged. A year of line items
- * passes both limits easily — before this, a year with more than a thousand
- * lines was quietly reported short.
- */
-const ID_CHUNK = 150;
-
-async function rowsForExpenses<T>(
-  expenseIds: string[],
-  query: (ids: string[], from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>
-): Promise<T[]> {
-  const chunks: string[][] = [];
-  for (let i = 0; i < expenseIds.length; i += ID_CHUNK) chunks.push(expenseIds.slice(i, i + ID_CHUNK));
-  const results = await Promise.all(chunks.map((ids) => allRows<T>((from, to) => query(ids, from, to))));
-  return results.flat();
-}
-
 type RawExpense = {
   id: string;
   expense_number: string | null;
@@ -186,7 +168,7 @@ const loadCachedReportRows = unstable_cache(
       // The item name is three tables up from a line — line → offer → pack
       // size → item — so it rides along as a nested embed rather than
       // costing another wave of queries.
-      rowsForExpenses<RawLine>(expenseIds, (ids, from, to) =>
+      allRowsForIds<RawLine>(expenseIds, (ids, from, to) =>
         admin
           .from("expense_line_items")
           .select(
@@ -197,7 +179,7 @@ const loadCachedReportRows = unstable_cache(
           .order("id")
           .range(from, to)
       ),
-      rowsForExpenses<PaidCostRow>(expenseIds, (ids, from, to) =>
+      allRowsForIds<PaidCostRow>(expenseIds, (ids, from, to) =>
         admin
           .from("item_paid_unit_costs")
           .select(

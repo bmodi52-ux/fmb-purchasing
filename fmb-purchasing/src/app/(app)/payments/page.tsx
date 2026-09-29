@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { allRows } from "@/lib/supabase/all-rows";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { formatAccount, paymentInstructions } from "@/lib/payment-instruction";
 import { PaymentsTable, type PaymentRow } from "./payments-table";
@@ -9,6 +10,18 @@ import { getSetting } from "@/lib/app-settings";
 import { duplicateLabel, possibleDuplicates, type DuplicateMatch } from "@/lib/duplicates";
 
 export const metadata = { title: "Payments" };
+
+type ApprovedExpense = {
+  id: string;
+  expense_number: string | null;
+  vendor_id: string | null;
+  vendor_name_raw: string | null;
+  invoice_number: string | null;
+  total: number;
+  decided_at: string | null;
+  submitted_by: string;
+  payee_id: string | null;
+};
 
 /** Whole days since an instant — how long the oldest approval has waited. */
 function daysSince(instant: string): number {
@@ -21,13 +34,19 @@ export default async function PaymentsPage() {
   await requirePermission(user, "payments", "mark_paid");
 
   const admin = createAdminClient();
-  const { data: expenses } = await admin
-    .from("expenses")
-    .select("id, expense_number, vendor_id, vendor_name_raw, invoice_number, total, decided_at, submitted_by, payee_id")
-    .eq("status", "approved")
-    .order("decided_at");
+  // Paged: a response stops at 1,000 rows without saying so, and an approved
+  // expense missing from this list is one nobody gets reminded to pay.
+  const expenses = await allRows<ApprovedExpense>((from, to) =>
+    admin
+      .from("expenses")
+      .select("id, expense_number, vendor_id, vendor_name_raw, invoice_number, total, decided_at, submitted_by, payee_id")
+      .eq("status", "approved")
+      .order("decided_at")
+      .order("id")
+      .range(from, to)
+  );
 
-  const submitterIds = [...new Set((expenses ?? []).map((e) => e.submitted_by))];
+  const submitterIds = [...new Set(expenses.map((e) => e.submitted_by))];
   const { data: profiles } = submitterIds.length
     ? await admin.from("profiles").select("id, full_name, email").in("id", submitterIds)
     : { data: [] };
@@ -35,20 +54,20 @@ export default async function PaymentsPage() {
 
   // One query for the whole page rather than one per row: the list only
   // needs to know whether to offer a link.
-  const withFiles = await expenseIdsWithAttachments(admin, (expenses ?? []).map((e) => e.id));
+  const withFiles = await expenseIdsWithAttachments(admin, expenses.map((e) => e.id));
 
   // Everyone on this page holds payments:mark_paid — the page requires it
   // above — so the account numbers are theirs to see. This is the point at
   // which the transfer is made, and the only place an unconfirmed account
   // could still be caught.
-  const instructions = await paymentInstructions(admin, expenses ?? [], { canSeeBankDetails: true });
+  const instructions = await paymentInstructions(admin, expenses, { canSeeBankDetails: true });
 
   // The last point a double payment can be stopped (#21).
   const duplicates = (await getSetting(admin, "duplicate_flags_for_reviewers"))
-    ? await possibleDuplicates(admin, expenses ?? [])
+    ? await possibleDuplicates(admin, expenses)
     : new Map<string, DuplicateMatch[]>();
 
-  const rows: PaymentRow[] = (expenses ?? []).map((e) => ({
+  const rows: PaymentRow[] = expenses.map((e) => ({
     id: e.id,
     expense_number: e.expense_number,
     vendor_name_raw: e.vendor_name_raw,
@@ -71,8 +90,8 @@ export default async function PaymentsPage() {
     payeeConfirmed: instructions.get(e.id)?.status === "pending" ? "Unconfirmed" : "",
   }));
 
-  const unpaidTotal = (expenses ?? []).reduce((s, e) => s + Number(e.total), 0);
-  const oldestApproved = (expenses ?? [])[0]?.decided_at as string | undefined;
+  const unpaidTotal = expenses.reduce((s, e) => s + Number(e.total), 0);
+  const oldestApproved = expenses[0]?.decided_at as string | undefined;
   const oldestDays = oldestApproved ? daysSince(oldestApproved) : 0;
 
   return (
@@ -82,8 +101,8 @@ export default async function PaymentsPage() {
           <h1 className="page-title text-ink">Payments</h1>
           <p className="page-description mt-1 max-w-2xl">
             Approved expenses waiting to be paid, oldest approval first.
-            {(expenses ?? []).length > 0 &&
-              ` ${(expenses ?? []).length} · ${unpaidTotal.toLocaleString("en-AU", { style: "currency", currency: "AUD" })} · oldest approved ${oldestDays < 1 ? "today" : `${oldestDays} ${oldestDays === 1 ? "day" : "days"} ago`}.`}{" "}
+            {expenses.length > 0 &&
+              ` ${expenses.length} · ${unpaidTotal.toLocaleString("en-AU", { style: "currency", currency: "AUD" })} · oldest approved ${oldestDays < 1 ? "today" : `${oldestDays} ${oldestDays === 1 ? "day" : "days"} ago`}.`}{" "}
             Download a bank file, then mark them paid — no money moves from here.
           </p>
         </div>
