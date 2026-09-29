@@ -7,6 +7,7 @@ import { formatDateTime } from "@/lib/format";
 import { parsePeriod, previousPeriod } from "@/lib/periods";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
+import { budgetActuals, budgetTotals } from "@/lib/budget-actuals";
 import { PeriodPicker } from "@/components/period-picker";
 import { SubmitButton } from "@/components/submit-button";
 import { loadReportRawData, withinRange } from "../reports/data";
@@ -74,23 +75,17 @@ export default async function BudgetsPage({
   // and withdrawn expenses are already excluded upstream. Split into paid, and
   // committed — approved or still waiting — because a budget is used up as
   // soon as the money is promised, not when the transfer happens (#39).
-  const statusOf = new Map(report.allExpenses.map((e) => [e.id, e.status]));
-  const spentByCategory = new Map<string, number>();
-  const paidByCategory = new Map<string, number>();
-  for (const line of report.allLines) {
-    if (!line.categoryId) continue;
-    spentByCategory.set(line.categoryId, (spentByCategory.get(line.categoryId) ?? 0) + line.lineTotal);
-    if (statusOf.get(line.expenseId) === "paid") {
-      paidByCategory.set(line.categoryId, (paidByCategory.get(line.categoryId) ?? 0) + line.lineTotal);
-    }
-  }
+  const actuals = budgetActuals(
+    report.allLines,
+    new Map(report.allExpenses.map((e) => [e.id, e.status])),
+    categoryRows ?? []
+  );
 
   const rows = categories
     .map((c) => {
       const share = perCategory.get(c.id);
       const budget = share && share.uncoveredDays < share.days ? share.amount : null;
-      const spent = spentByCategory.get(c.id) ?? 0;
-      const paid = paidByCategory.get(c.id) ?? 0;
+      const { spent, paid } = actuals.byLeaf.get(c.id) ?? { spent: 0, paid: 0 };
       return {
         id: c.id,
         label: labels.get(c.id) ?? c.name,
@@ -107,27 +102,27 @@ export default async function BudgetsPage({
     })
     .sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1) || b.spent - a.spent);
 
-  const totalBudget = rows.reduce((s, r) => s + (r.budget ?? 0), 0);
-  const totalSpent = rows.reduce((s, r) => s + r.spent, 0);
+  const totals = budgetTotals(rows);
   const anyExactForPeriod = rows.some((r) => r.share?.exact);
   const canCopy = canEdit && !anyExactForPeriod && budgets.some((b) => b.start === previous.start && b.end === previous.end);
 
   /**
-   * Spend that belongs to no category, and so appears in no budget.
+   * Spend no budget row holds, stated rather than left out, so this page never
+   * disagrees with Reports by an amount nobody can account for.
    *
-   * Card surcharges, delivery and rounding carry no category by design — a
-   * surcharge is not a kind of food — and a line the reader could not classify
-   * carries none either. Both are real money, so leaving them out silently
-   * would make this page disagree with Reports by an amount nobody could
-   * account for. Stated instead.
+   * Uncategorised: card surcharges, delivery and rounding carry no category by
+   * design — a surcharge is not a kind of food — and a line nobody has
+   * classified carries none either. On a parent category: filed against
+   * "Meat & Poultry" itself rather than one of its subcategories, which is
+   * where budgets are set. That is categorised spend, and used to be called
+   * "not in any category" here while Reports showed it under Meat.
    */
-  const categorisedIds = new Set(categories.map((c) => c.id));
-  const uncategorisedSpend =
-    Math.round(
-      report.allLines
-        .filter((l) => !l.categoryId || !categorisedIds.has(l.categoryId))
-        .reduce((s, l) => s + l.lineTotal, 0) * 100
-    ) / 100;
+  const uncategorisedSpend = actuals.uncategorised;
+  const onParentCategories = actuals.onParentCategories.map((p) => ({
+    ...p,
+    label: labels.get(p.categoryId) ?? "A category",
+  }));
+  const onParentSpend = onParentCategories.reduce((s, p) => s + p.amount, 0);
 
   const changers = [...new Set((changeRows ?? []).map((r) => r.changed_by).filter(Boolean) as string[])];
   const { data: people } = changers.length
@@ -148,32 +143,45 @@ export default async function BudgetsPage({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-8 gap-y-2 card px-5 py-4">
-        <Figure label="Budgeted" value={totalBudget > 0 ? money(totalBudget) : "Not set"} />
-        <Figure label="Paid" value={money(rows.reduce((s, r) => s + r.paid, 0))} />
-        <Figure label="Committed" value={money(rows.reduce((s, r) => s + r.committed, 0))} />
+        <Figure label="Budgeted" value={totals.remaining !== null ? money(totals.budgeted) : "Not set"} />
+        <Figure label="Paid" value={money(totals.paid)} />
+        <Figure label="Committed" value={money(totals.committed)} />
         <Figure
           label="Remaining"
-          value={totalBudget > 0 ? money(totalBudget - totalSpent) : "—"}
-          tone={totalBudget > 0 && totalSpent > totalBudget ? "over" : "normal"}
+          value={totals.remaining !== null ? money(totals.remaining) : "—"}
+          tone={totals.remaining !== null && totals.remaining < 0 ? "over" : "normal"}
+          hint={totals.remaining !== null && rows.some((r) => r.budget === null && r.spent !== 0) ? "Of the categories with a budget" : undefined}
         />
-        {uncategorisedSpend !== 0 && (
-          <div>
-            <p className="text-xs text-ink/55">Not in any category</p>
-            <p className="mt-0.5 text-xl font-semibold tabular-figures text-ink/60">
-              {money(uncategorisedSpend)}
-            </p>
-          </div>
-        )}
+        {onParentSpend !== 0 && <Figure label="On a parent category" value={money(onParentSpend)} tone="muted" />}
+        {uncategorisedSpend !== 0 && <Figure label="Not in any category" value={money(uncategorisedSpend)} tone="muted" />}
       </div>
 
-      {uncategorisedSpend !== 0 && (
-        <p className="-mt-3 max-w-2xl text-xs leading-relaxed text-ink/55">
-          {money(uncategorisedSpend)} of this period&rsquo;s spend sits in no category — surcharges,
-          delivery and rounding carry none by design, and neither does a line nobody has
-          classified yet. It is real money and counts in Reports; it simply cannot be budgeted
-          against. Anything classifiable is listed on{" "}
-          <a href="/review-queue" className="underline">Needs attention</a>.
-        </p>
+      {(onParentSpend !== 0 || uncategorisedSpend !== 0) && (
+        <div className="-mt-3 flex max-w-2xl flex-col gap-1.5 text-xs leading-relaxed text-ink/55">
+          {onParentSpend !== 0 && (
+            <p>
+              {money(onParentSpend)} was filed against{" "}
+              {onParentCategories.map((p, i) => (
+                <span key={p.categoryId}>
+                  {i > 0 && (i === onParentCategories.length - 1 ? " and " : ", ")}
+                  {p.label} ({money(p.amount)})
+                </span>
+              ))}{" "}
+              itself rather than one of its subcategories, which is where budgets are set. It shows
+              under that category in Reports; giving those lines a subcategory counts them against
+              its budget.
+            </p>
+          )}
+          {uncategorisedSpend !== 0 && (
+            <p>
+              {money(uncategorisedSpend)} of this period&rsquo;s spend sits in no category — surcharges,
+              delivery and rounding carry none by design, and neither does a line nobody has
+              classified yet. It is real money and counts in Reports; it simply cannot be budgeted
+              against. Anything classifiable is listed on{" "}
+              <a href="/review-queue" className="underline">Needs attention</a>.
+            </p>
+          )}
+        </div>
       )}
 
       {canCopy && (
@@ -217,22 +225,24 @@ export default async function BudgetsPage({
   );
 }
 
-/** Where a period's budget comes from, when it is not simply the budget set for it. */
+/** One figure in the totals strip. Muted for spend no budget row holds. */
 function Figure({
   label,
   value,
   tone = "normal",
+  hint,
 }: {
   label: string;
   value: string;
-  tone?: "normal" | "over";
+  tone?: "normal" | "over" | "muted";
+  hint?: string;
 }) {
+  const colour = tone === "over" ? "text-danger" : tone === "muted" ? "text-ink/60" : "text-ink";
   return (
     <div>
       <p className="text-xs text-ink/55">{label}</p>
-      <p className={`mt-0.5 text-xl font-semibold tabular-figures ${tone === "over" ? "text-danger" : "text-ink"}`}>
-        {value}
-      </p>
+      <p className={`mt-0.5 text-xl font-semibold tabular-figures ${colour}`}>{value}</p>
+      {hint && <p className="text-xs text-ink/45">{hint}</p>}
     </div>
   );
 }
