@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { gregorianToHijri, hijriToGregorian } from "./hijri/hijri.ts";
 import {
   addDays,
+  comparisonPeriod,
   dayCount,
+  formatRange,
   inPeriod,
   isoFromLocal,
   monthOf,
@@ -102,6 +104,49 @@ describe("previousPeriod", () => {
   test("so far this year compares with the same stretch of last year", () => {
     const prev = previousPeriod(parsePeriod("au-ytd", TODAY), TODAY);
     assert.deepEqual([prev.start, prev.end], ["2025-07-01", "2025-09-11"]);
+  });
+});
+
+describe("comparisonPeriod", () => {
+  test("a year under way compares with the same stretch of the last one, not all of it", () => {
+    const c = comparisonPeriod(parsePeriod("au2026", TODAY), TODAY);
+    assert.deepEqual([c.start, c.end], ["2025-07-01", "2025-09-11"]);
+    assert.equal(c.label, "FY 2025–26, same stretch");
+  });
+
+  test("so does a month or quarter under way", () => {
+    const month = comparisonPeriod(parsePeriod("au2026-m3", TODAY), TODAY);
+    assert.deepEqual([month.start, month.end], ["2026-08-01", "2026-08-11"]);
+    const quarter = comparisonPeriod(parsePeriod("cy2026-q3", TODAY), TODAY);
+    assert.deepEqual([quarter.start, quarter.end], ["2026-04-01", "2026-06-12"]);
+  });
+
+  test("the current Hijri year counts the same number of days into the last", () => {
+    const now = parsePeriod("h-current", TODAY);
+    const c = comparisonPeriod(now, TODAY);
+    assert.equal(c.start, previousPeriod(now, TODAY).start);
+    assert.equal(dayCount(c.start, c.end), dayCount(now.start, TODAY));
+  });
+
+  test("a finished period compares with the whole one before", () => {
+    assert.equal(comparisonPeriod(parsePeriod("au2025", TODAY), TODAY).code, "au2024");
+  });
+
+  test("so far this year is unchanged", () => {
+    const ytd = parsePeriod("au-ytd", TODAY);
+    assert.deepEqual(comparisonPeriod(ytd, TODAY), previousPeriod(ytd, TODAY));
+  });
+
+  test("a range cut short is labelled by the days it now covers", () => {
+    const c = comparisonPeriod(parsePeriod("r2026-09-01_2026-12-31", TODAY), TODAY);
+    assert.deepEqual([c.start, c.end], ["2026-05-02", "2026-05-12"]);
+    assert.equal(c.label, formatRange("2026-05-02", "2026-05-12"));
+  });
+
+  test("never runs past the end of the period before", () => {
+    // Thirty days into March is further than February goes.
+    const c = comparisonPeriod(parsePeriod("cy2026-m3", "2026-03-30"), "2026-03-30");
+    assert.deepEqual([c.start, c.end], ["2026-02-01", "2026-02-28"]);
   });
 });
 
