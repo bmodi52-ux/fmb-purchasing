@@ -5,6 +5,7 @@ import type { XeroBillLine } from "@/lib/xero-export";
 import { withStatusBasis, type DateBasis } from "@/lib/reporting/basis";
 import { loadLedger, loadLedgerByPaymentDate } from "@/lib/reporting/ledger";
 import { accountingFromLedger } from "@/lib/reporting/accounting";
+import type { Lodgement } from "@/lib/gst-lodgement";
 
 /**
  * The expenses and lines behind the Accounting page for a period (#38).
@@ -50,4 +51,24 @@ export async function loadAccountingPeriod(
       (categories ?? []).map((c) => [c.id as string, (c.account_code as string | null) ?? null])
     ),
   });
+}
+
+/**
+ * Each earlier lodged period's expenses as they stand now, read on the basis
+ * it was lodged on — what outstandingAdjustments compares with what was
+ * lodged. Only lodgements that kept figures (0085), and only those ending
+ * before `before`: a return takes adjustments from periods before it.
+ */
+export async function loadLodgedPeriods(
+  admin: SupabaseClient,
+  lodgements: Lodgement[],
+  before: string
+): Promise<{ lodgement: Lodgement; expenses: GstExpense[]; lines: GstLine[] }[]> {
+  const earlier = lodgements.filter((l) => l.basis && l.end < before);
+  return Promise.all(
+    earlier.map(async (lodgement) => {
+      const { gstExpenses, gstLines } = await loadAccountingPeriod(admin, lodgement, lodgement.basis!);
+      return { lodgement, expenses: gstExpenses, lines: gstLines };
+    })
+  );
 }
