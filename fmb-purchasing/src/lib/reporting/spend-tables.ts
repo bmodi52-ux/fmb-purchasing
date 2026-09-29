@@ -115,6 +115,27 @@ export function spendReportTables(report: SpendReport, periodLabel: string, prev
         ...Object.fromEntries(s.comparison.subjects.map((subject) => [subject.key, subject.total])),
       },
     });
+  } else if (s.key === "transactions") {
+    main.push({
+      title: "Transactions",
+      columns: [
+        { key: "date", label: "Date", kind: "date" },
+        { key: "entry", label: "Entry", kind: "text" },
+        { key: "vendor", label: "Vendor", kind: "text" },
+        { key: "item", label: "Item", kind: "text" },
+        { key: "category", label: "Category", kind: "text" },
+        { key: "status", label: "Status", kind: "text" },
+        { key: "amount", label: "Amount", kind: "money" },
+        { key: "gst", label: "GST", kind: "money" },
+      ],
+      rows: s.rows.map((r) => ({ ...r, entry: r.entry ?? "" })),
+      totals: {
+        date: null,
+        entry: "Total",
+        amount: cents(s.rows.reduce((sum, r) => sum + r.amount, 0)),
+        gst: cents(s.rows.reduce((sum, r) => sum + r.gst, 0)),
+      },
+    });
   } else {
     main.push({
       title: "Unit costs",

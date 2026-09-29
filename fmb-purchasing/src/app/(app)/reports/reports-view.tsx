@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { gregorianToHijri, formatHijri } from "@/lib/hijri/hijri";
+import { formatHijri } from "@/lib/hijri/hijri";
+import { hijriOfIso } from "@/lib/periods";
 import { formatDate } from "@/lib/format";
 import {
   ReportFilters,
@@ -24,7 +25,7 @@ import {
   type Insight,
   type MonthBreakdown,
 } from "@/lib/reporting/aggregate";
-import type { SpendReport } from "@/lib/reporting/spend-report";
+import type { SpendReport, TransactionRow } from "@/lib/reporting/spend-report";
 import {
   HeroFigure,
   StatTile,
@@ -50,7 +51,7 @@ const STATUS_SLOT: Record<string, number> = {
 function DateCell({ date, calendar }: { date: string | null; calendar: "gregorian" | "hijri" }) {
   if (!date) return <>—</>;
   if (calendar === "gregorian") return <>{formatDate(date)}</>;
-  return <>{formatHijri(gregorianToHijri(new Date(date)))}</>;
+  return <>{formatHijri(hijriOfIso(date))}</>;
 }
 
 /**
@@ -217,7 +218,7 @@ export function ReportsView({
             </Printable>
 
             {section.key === "overview" && (
-              <OverviewSection monthly={monthly} found={found} statusMix={section.statusMix} />
+              <OverviewSection monthly={monthly} found={found} statusMix={section.statusMix} hijri={report.calendar === "hijri"} />
             )}
             {section.key === "breakdown" && (
               <BreakdownSection
@@ -246,6 +247,9 @@ export function ReportsView({
             {section.key === "unit-costs" && (
               <UnitCostsSection perUnitRows={section.rows} calendar={calendar} onCalendarChange={setCalendar} />
             )}
+            {section.key === "transactions" && (
+              <TransactionsSection rows={section.rows} total={section.total} spend={now.spend} gst={now.gst} />
+            )}
           </>
         )}
       </div>
@@ -259,10 +263,13 @@ function OverviewSection({
   monthly,
   found,
   statusMix,
+  hijri,
 }: {
   monthly: Bucket[];
   found: Insight[];
   statusMix: Bucket[];
+  /** Months are Hijri months — a Hijri period's are. */
+  hijri: boolean;
 }) {
   return (
     <>
@@ -286,7 +293,10 @@ function OverviewSection({
 
       {monthly.length > 1 && (
         <Printable id="overview-spend-over-time" label="Spend over time">
-          <Panel title="Spend over time" subtitle="By month, using the receipt date where there is one">
+          <Panel
+            title="Spend over time"
+            subtitle={`By ${hijri ? "Hijri " : ""}month, using the receipt date where there is one`}
+          >
             <ColumnChart
               data={monthly.map((m) => ({
                 key: m.key,
@@ -670,6 +680,79 @@ function occurrenceNoun(dimension: Dimension, n: number): string {
 }
 
 /* ------------------------------------------------------------------ */
+
+/**
+ * Every line behind the figures above, for whatever the filters select —
+ * the way any total on this page is traced to the receipts it came from.
+ * The totals row is the headline's, which is these lines added up.
+ */
+function TransactionsSection({
+  rows,
+  total,
+  spend,
+  gst,
+}: {
+  rows: TransactionRow[];
+  /** How many lines there are, of which `rows` may be only the first. */
+  total: number;
+  spend: number;
+  gst: number;
+}) {
+  return (
+    <Printable id="transactions" label="Transactions">
+      <Panel
+        title="Transactions"
+        subtitle={
+          total > rows.length
+            ? `The newest ${rows.length.toLocaleString()} of ${total.toLocaleString()} lines — the Excel and CSV downloads have every one`
+            : `${total.toLocaleString()} ${total === 1 ? "line" : "lines"}, newest first`
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
+                <th scope="col" className="py-2 pr-4 font-medium">Date</th>
+                <th scope="col" className="py-2 pr-4 font-medium">Entry</th>
+                <th scope="col" className="py-2 pr-4 font-medium">Vendor</th>
+                <th scope="col" className="py-2 pr-4 font-medium">Item</th>
+                <th scope="col" className="py-2 pr-4 font-medium">Category</th>
+                <th scope="col" className="py-2 pr-4 font-medium">Status</th>
+                <th scope="col" className="py-2 pr-4 text-right font-medium">Amount</th>
+                <th scope="col" className="py-2 text-right font-medium">GST</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={`${r.expenseId}-${i}`} className="border-b border-ink/5 last:border-0">
+                  <td className="py-1.5 pr-4 whitespace-nowrap tabular-nums text-ink/60">{formatDate(r.date)}</td>
+                  <td className="py-1.5 pr-4 whitespace-nowrap">
+                    <Link href={`/expenses/${r.expenseId}`} className="tabular-nums font-medium underline-offset-2 hover:underline">
+                      {r.entry ?? "View"}
+                    </Link>
+                  </td>
+                  <td className="py-1.5 pr-4">{r.vendor}</td>
+                  <td className="py-1.5 pr-4">{r.item}</td>
+                  <td className="py-1.5 pr-4 text-ink/60">{r.category}</td>
+                  <td className="py-1.5 pr-4 whitespace-nowrap text-ink/60">{r.status}</td>
+                  <td className="py-1.5 pr-4 text-right tabular-nums">{formatMoney(r.amount)}</td>
+                  <td className="py-1.5 text-right tabular-nums text-ink/60">{formatMoney(r.gst)}</td>
+                </tr>
+              ))}
+              <tr className="border-t border-ink/15 font-medium">
+                <td className="py-2 pr-4" colSpan={6}>
+                  Total{total > rows.length ? `, all ${total.toLocaleString()} lines` : ""}
+                </td>
+                <td className="py-2 pr-4 text-right tabular-nums">{formatMoney(spend)}</td>
+                <td className="py-2 text-right tabular-nums">{formatMoney(gst)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+    </Printable>
+  );
+}
 
 function UnitCostsSection({
   perUnitRows,

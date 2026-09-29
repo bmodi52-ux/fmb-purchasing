@@ -12,6 +12,8 @@
  * dashboard has to cut by.
  */
 
+import { hijriMonthOf } from "@/lib/periods";
+
 export type ExpenseRecord = {
   id: string;
   expenseNumber: string | null;
@@ -91,9 +93,24 @@ export function expenseDate(e: ExpenseRecord): string {
   return e.reportDate;
 }
 
-/** "2026-05" — the bucket key for month grouping. */
+/** "2026-05" — the Gregorian month a day falls in. */
 export function monthKey(isoDate: string): string {
   return isoDate.slice(0, 7);
+}
+
+/** Which months spend is grouped by — see monthCalendarFor in lib/periods. */
+export type MonthCalendar = "gregorian" | "hijri";
+
+/**
+ * The month bucket a day falls in, in the given calendar: its key, which
+ * sorts in date order, and its label. A Hijri year grouped by Gregorian month
+ * cuts Ramadan across two bars, and the month a kitchen spends most in is the
+ * one that most needs to be read whole.
+ */
+export function monthBucket(isoDate: string, calendar: MonthCalendar = "gregorian"): { key: string; label: string } {
+  if (calendar === "hijri") return hijriMonthOf(isoDate);
+  const key = monthKey(isoDate);
+  return { key, label: formatMonthLabel(key) };
 }
 
 export function formatMonthLabel(ym: string): string {
@@ -260,22 +277,20 @@ function rank(buckets: Map<string, Bucket>): Bucket[] {
   return [...buckets.values()].sort((a, b) => b.spend - a.spend || a.label.localeCompare(b.label));
 }
 
-export function byMonth(slice: Slice): Bucket[] {
-  const dateByExpense = new Map(slice.expenses.map((e) => [e.id, expenseDate(e)]));
+export function byMonth(slice: Slice, calendar: MonthCalendar = "gregorian"): Bucket[] {
+  const monthOf = new Map(slice.expenses.map((e) => [e.id, monthBucket(expenseDate(e), calendar)]));
   const out = new Map<string, Bucket>();
 
   for (const line of slice.lines) {
-    const date = dateByExpense.get(line.expenseId);
-    if (!date) continue;
-    const key = monthKey(date);
-    const bucket = out.get(key) ?? { key, label: formatMonthLabel(key), spend: 0, gst: 0, count: 0 };
+    const month = monthOf.get(line.expenseId);
+    if (!month) continue;
+    const bucket = out.get(month.key) ?? { key: month.key, label: month.label, spend: 0, gst: 0, count: 0 };
     bucket.spend += line.lineTotal;
     bucket.gst += line.gst;
-    out.set(key, bucket);
+    out.set(month.key, bucket);
   }
   for (const e of slice.expenses) {
-    const key = monthKey(expenseDate(e));
-    const bucket = out.get(key);
+    const bucket = out.get(monthOf.get(e.id)!.key);
     if (bucket) bucket.count += 1;
   }
 
@@ -362,9 +377,10 @@ export type MonthBreakdown = {
 export function byMonthBreakdown(
   slice: Slice,
   dimension: Dimension,
-  maxSeries = 6
+  maxSeries = 6,
+  calendar: MonthCalendar = "gregorian"
 ): MonthBreakdown {
-  const dateByExpense = new Map(slice.expenses.map((e) => [e.id, expenseDate(e)]));
+  const monthOf = new Map(slice.expenses.map((e) => [e.id, monthBucket(expenseDate(e), calendar)]));
   const vendorByExpense = new Map(slice.expenses.map((e) => [e.id, vendorKeyOf(e)]));
 
   const keyOf = (line: LineRecord): { key: string; label: string } => {
@@ -373,19 +389,18 @@ export function byMonthBreakdown(
     return vendorByExpense.get(line.expenseId) ?? { key: "unknown", label: "Unrecorded vendor" };
   };
 
-  const monthKeys = [
-    ...new Set(
-      slice.expenses.map((e) => monthKey(expenseDate(e)))
-    ),
-  ].sort();
-  const monthIndex = new Map(monthKeys.map((m, i) => [m, i]));
+  const months = [...new Map([...monthOf.values()].map((m) => [m.key, m])).values()].sort((a, b) =>
+    a.key.localeCompare(b.key)
+  );
+  const monthIndex = new Map(months.map((m, i) => [m.key, i]));
+  const monthKeys = months.map((m) => m.key);
 
   const bySeries = new Map<string, { label: string; values: number[]; total: number }>();
 
   for (const line of slice.lines) {
-    const date = dateByExpense.get(line.expenseId);
-    if (!date) continue;
-    const mi = monthIndex.get(monthKey(date));
+    const month = monthOf.get(line.expenseId);
+    if (!month) continue;
+    const mi = monthIndex.get(month.key);
     if (mi == null) continue;
 
     const { key, label } = keyOf(line);
@@ -421,7 +436,7 @@ export function byMonthBreakdown(
   }
 
   return {
-    months: monthKeys.map((m) => ({ key: m, label: formatMonthLabel(m) })),
+    months: months.map((m) => ({ key: m.key, label: m.label })),
     series: series.map((s) => ({ ...s, values: s.values.map(round) })),
     foldedCount,
   };
@@ -466,12 +481,13 @@ export function compare(
   slice: Slice,
   dimension: Dimension,
   subjectKeys: string[],
-  max = MAX_COMPARE_SUBJECTS
+  max = MAX_COMPARE_SUBJECTS,
+  calendar: MonthCalendar = "gregorian"
 ): Comparison {
   // Reuses the breakdown, asking for every series rather than a folded tail:
   // here the subjects are chosen deliberately, so nothing should be grouped
   // away behind "Other".
-  const full = byMonthBreakdown(slice, dimension, Number.MAX_SAFE_INTEGER);
+  const full = byMonthBreakdown(slice, dimension, Number.MAX_SAFE_INTEGER, calendar);
 
   const chosen =
     subjectKeys.length > 0

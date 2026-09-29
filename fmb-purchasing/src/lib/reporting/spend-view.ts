@@ -1,4 +1,4 @@
-import { comparisonPeriod, parsePeriod, type Period } from "@/lib/periods";
+import { comparisonPeriod, monthCalendarFor, parsePeriod, type Period } from "@/lib/periods";
 import { applyFilters, filterOptionsFor, type FilterOption, type Filters, type Slice } from "./aggregate.ts";
 import { describeBasis, withStatusBasis } from "./basis.ts";
 import { loadLedger } from "./ledger.ts";
@@ -66,6 +66,7 @@ export async function loadSpendView(
     query,
     periodLabel: period.label,
     previousLabel: previousRange.label,
+    calendar: monthCalendarFor(period),
   });
 
   const basisLabel = describeBasis(query.status);

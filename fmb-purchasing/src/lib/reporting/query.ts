@@ -12,13 +12,14 @@
 
 import { parseStatusBasis, type StatusBasis } from "./basis.ts";
 
-export type ReportSection = "overview" | "breakdown" | "compare" | "unit-costs";
+export type ReportSection = "overview" | "breakdown" | "compare" | "unit-costs" | "transactions";
 
 export const SECTIONS: { key: ReportSection; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "breakdown", label: "Breakdown" },
   { key: "compare", label: "Compare" },
   { key: "unit-costs", label: "Unit costs" },
+  { key: "transactions", label: "Transactions" },
 ];
 
 export type CompareDimension = "item" | "category" | "vendor";

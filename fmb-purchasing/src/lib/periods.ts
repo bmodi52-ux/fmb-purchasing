@@ -1,4 +1,4 @@
-import { gregorianToHijri, hijriToGregorian } from "@/lib/hijri/hijri";
+import { gregorianToHijri, hijriToGregorian, type HijriDate } from "@/lib/hijri/hijri";
 import { fiscalYearHijri, formatFiscalYear } from "@/lib/fiscal-year";
 
 /**
@@ -186,6 +186,34 @@ export function formatRange(start: string, end: string): string {
       timeZone: "UTC",
     });
   return `${fmt(start)} – ${fmt(end)}`;
+}
+
+/**
+ * The Hijri date of a calendar day. hijri.ts reads a Date's local fields, so
+ * the Date is built from local fields too: `new Date("2026-07-01")` is UTC
+ * midnight, which west of Greenwich is the day before.
+ */
+export function hijriOfIso(iso: string): HijriDate {
+  return gregorianToHijri(localFromIso(iso));
+}
+
+/**
+ * The Hijri month a calendar day falls in: a key that sorts in date order
+ * ("h1447-09") and a label ("Ramadan 1447").
+ */
+export function hijriMonthOf(iso: string): { key: string; label: string } {
+  const h = hijriOfIso(iso);
+  return { key: `h${pad(h.year, 4)}-${pad(h.month)}`, label: `${HIJRI_MONTH_SHORT[h.month - 1]} ${h.year}` };
+}
+
+/**
+ * Which months a period's figures are grouped by: Hijri months for anything
+ * Hijri — a year, quarter or month, and "so far this Hijri year" — since a
+ * Hijri year split into Gregorian months cuts Ramadan in two. Gregorian
+ * otherwise.
+ */
+export function monthCalendarFor(period: Pick<Period, "calendar" | "code">): "hijri" | "gregorian" {
+  return period.calendar === "hijri" || period.code.startsWith("h-") ? "hijri" : "gregorian";
 }
 
 /** The same range in Hijri dates, e.g. "16 Muharram 1448 – 25 Muharram 1449 H". */
