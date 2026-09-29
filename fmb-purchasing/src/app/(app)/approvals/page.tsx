@@ -143,13 +143,15 @@ export default async function ApprovalsPage() {
   const budgets = budgetCategoryIds.length ? await loadBudgets(admin, budgetCategoryIds) : [];
   const spendByPeriod = new Map<string, Map<string, number>>();
   if (budgets.length) {
-    for (const code of [...new Set(expenses.map((e) => periodOf(e).code))]) {
-      const period = parsePeriod(code, today);
-      const ledger = await loadLedger(period);
+    // One Hijri year per ledger, loaded together: a queue spanning a year
+    // boundary used to wait for one year's ledger before asking for the next.
+    const codes = [...new Set(expenses.map((e) => periodOf(e).code))];
+    const ledgers = await Promise.all(codes.map((code) => loadLedger(parsePeriod(code, today))));
+    codes.forEach((code, i) => {
       const spend = new Map<string, number>();
-      for (const l of ledger.lines) if (l.categoryId) spend.set(l.categoryId, (spend.get(l.categoryId) ?? 0) + l.lineTotal);
+      for (const l of ledgers[i].lines) if (l.categoryId) spend.set(l.categoryId, (spend.get(l.categoryId) ?? 0) + l.lineTotal);
       spendByPeriod.set(code, spend);
-    }
+    });
   }
   const budgetNotesFor = (e: (typeof expenses)[number], lines: NonNullable<typeof lineItems>) => {
     if (!budgets.length) return [];
