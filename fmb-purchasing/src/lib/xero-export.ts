@@ -1,3 +1,4 @@
+import { toCsv } from "@/lib/csv";
 import { xeroTaxType } from "@/lib/gst-summary";
 
 /**
@@ -42,38 +43,31 @@ export const XERO_COLUMNS = [
   "Currency",
 ];
 
-function csvCell(value: string | number): string {
-  const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
 /** Xero's import reads dates as DD/MM/YYYY for an Australian organisation. */
 function xeroDate(iso: string): string {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 }
 
 export function buildXeroBillsCsv(lines: XeroBillLine[]): string {
-  const rows = lines.map((l) =>
-    [
-      l.contactName,
-      "",
-      // Xero wants each bill's number unique; a vendor's own invoice number is
-      // not always, so the entry number goes first.
-      [l.expenseNumber, l.invoiceNumber].filter(Boolean).join(" / ") || "No number",
-      l.expenseNumber ?? "",
-      xeroDate(l.invoiceDate),
-      xeroDate(l.dueDate),
-      l.description || "Expense",
-      1,
-      l.lineTotal.toFixed(2),
-      l.accountCode ?? "",
-      xeroTaxType(l),
-      "AUD",
-    ]
-      .map(csvCell)
-      .join(",")
-  );
-  return [XERO_COLUMNS.join(","), ...rows].join("\r\n") + "\r\n";
+  const rows = lines.map((l) => [
+    l.contactName,
+    "",
+    // Xero wants each bill's number unique; a vendor's own invoice number is
+    // not always, so the entry number goes first.
+    [l.expenseNumber, l.invoiceNumber].filter(Boolean).join(" / ") || "No number",
+    l.expenseNumber ?? "",
+    xeroDate(l.invoiceDate),
+    xeroDate(l.dueDate),
+    l.description || "Expense",
+    1,
+    l.lineTotal.toFixed(2),
+    l.accountCode ?? "",
+    xeroTaxType(l),
+    "AUD",
+  ]);
+  // Read by Xero's importer, not opened in Excel: no BOM, and a description
+  // such as "-10% off" goes exactly as written.
+  return toCsv([XERO_COLUMNS, ...rows], { bom: false, guardFormulas: false });
 }
 
 /** Lines that would import without an account code, which Xero refuses. */
