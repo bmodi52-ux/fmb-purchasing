@@ -6,15 +6,14 @@ import { PeriodPicker } from "@/components/period-picker";
 import { formatMonthLabel, type Dimension } from "@/lib/reporting/aggregate";
 import { MultiSelectMenu } from "./reports/multi-select-menu";
 import {
-  computeWidgetData,
   widgetPeriodCode,
   WIDGET_KINDS,
   type WidgetConfig,
+  type WidgetData,
   type WidgetKind,
   type StatMetric,
 } from "./reports/dashboard-widgets";
-import type { Ledger } from "@/lib/reporting/ledger-rows";
-import { fetchWidgetPreviewData, type WidgetPreviewData } from "./reports/preview-data-actions";
+import { fetchWidgetOptions, previewWidget, type WidgetOptions } from "./reports/preview-data-actions";
 import { addDashboardWidget, updateDashboardWidget } from "./reports/dashboard-widgets-actions";
 import { WidgetBody } from "./widget-body";
 import { Dialog } from "@/components/dialog";
@@ -64,7 +63,10 @@ export function AddWidgetDialog({
   const [statMetric, setStatMetric] = useState<StatMetric>(editing?.config.statMetric ?? "spend");
   const [saving, setSaving] = useState(false);
 
-  const [preview, setPreview] = useState<WidgetPreviewData | null>(null);
+  // The filter menus for the period on screen, fetched once per period.
+  const [options, setOptions] = useState<WidgetOptions | null>(null);
+  // The preview as the server computed it, and for which widget and period.
+  const [preview, setPreview] = useState<{ key: string; period: string; data: WidgetData } | null>(null);
 
   // Whole years can follow whichever year is current ("h-current"); anything
   // else is fixed to the dates chosen.
@@ -77,18 +79,17 @@ export function AddWidgetDialog({
 
   // Cleared the moment the period changes (during render, not in an effect —
   // the supported way to react to a changed value without an extra render
-  // pass) so the preview below never shows one period's figures under
-  // another's label while the new fetch is still in flight.
+  // pass) so the menus below never offer one period's vendors under another.
   const [seenPeriod, setSeenPeriod] = useState(periodChoice);
   if (periodChoice !== seenPeriod) {
     setSeenPeriod(periodChoice);
-    setPreview(null);
+    setOptions(null);
   }
 
   useEffect(() => {
     let cancelled = false;
-    fetchWidgetPreviewData(periodChoice).then((data) => {
-      if (!cancelled) setPreview(data);
+    fetchWidgetOptions(periodChoice).then((data) => {
+      if (!cancelled) setOptions(data);
     });
     return () => {
       cancelled = true;
@@ -116,16 +117,36 @@ export function AddWidgetDialog({
           : categoryIds
       : undefined,
     itemId: needsItem ? itemId : undefined,
-    itemLabel: needsItem ? preview?.itemOptions.find((o) => o.value === itemId)?.label : undefined,
+    itemLabel: needsItem ? options?.itemOptions.find((o) => o.value === itemId)?.label : undefined,
     statMetric: needsStatMetric ? statMetric : undefined,
   };
 
-  const raw: Ledger | null = preview
-    ? { expenses: preview.expenses, lines: preview.lines, unitCosts: preview.unitCosts }
-    : null;
+  // The widget exactly as it would be saved: the preview is asked for again
+  // whenever any of it changes, and computed on the server just as the home
+  // page will compute it.
+  const previewKey = JSON.stringify([kind, config]);
+  const previewReady = options != null && (!needsItem || !!itemId);
 
-  const previewReady = raw != null && (!needsItem || !!itemId);
-  const previewData = previewReady ? computeWidgetData(kind, config, raw!, today) : null;
+  useEffect(() => {
+    if (!previewReady) return;
+    const [k, c] = JSON.parse(previewKey) as [WidgetKind, WidgetConfig];
+    let cancelled = false;
+    // A short pause, so a run of ticks in a filter menu asks once.
+    const timer = setTimeout(() => {
+      previewWidget(k, c).then((data) => {
+        if (!cancelled) setPreview({ key: previewKey, period: c.period ?? "", data });
+      });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [previewKey, previewReady]);
+
+  // Last figures stay up while new ones are on their way — but only for the
+  // same period, so one period's figures never sit under another's label.
+  const previewData = previewReady && preview?.period === periodChoice ? preview.data : null;
+  const previewStale = previewData != null && preview?.key !== previewKey;
 
   async function handleSave() {
     setSaving(true);
@@ -254,7 +275,7 @@ export function AddWidgetDialog({
                 className="input text-sm"
               >
                 <option value="">Choose an item…</option>
-                {preview?.itemOptions.map((o) => (
+                {options?.itemOptions.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
@@ -283,28 +304,30 @@ export function AddWidgetDialog({
           <div className="flex flex-wrap gap-3">
             <MultiSelectMenu
               label="Vendors"
-              options={preview?.vendorOptions ?? []}
+              options={options?.vendorOptions ?? []}
               selected={vendorIds}
               onApply={setVendorIds}
             />
             <MultiSelectMenu
               label="Categories"
-              options={preview?.categoryOptions ?? []}
+              options={options?.categoryOptions ?? []}
               selected={categoryIds}
               onApply={setCategoryIds}
             />
             <MultiSelectMenu
               label="Items"
-              options={preview?.itemOptions ?? []}
+              options={options?.itemOptions ?? []}
               selected={itemIds}
               onApply={setItemIds}
             />
           </div>
 
           <div className="rounded-xl border border-ink/10 bg-cream/60 p-3">
-            <p className="mb-2 text-xs text-ink/45">Preview</p>
+            <p className="mb-2 text-xs text-ink/45">Preview{previewStale && " · updating…"}</p>
             {previewData ? (
-              <WidgetBody data={previewData} />
+              <div className={previewStale ? "opacity-60 transition-opacity" : "transition-opacity"}>
+                <WidgetBody data={previewData} />
+              </div>
             ) : (
               <p className="text-sm text-ink/50">
                 {needsItem && !itemId ? "Choose an item to preview." : "Loading…"}

@@ -20,7 +20,7 @@ import {
   type RawLedgerRows,
   type RawLineRow,
 } from "./ledger-rows.ts";
-import { averageUnitCosts, perUnitRows } from "../../app/(app)/reports/unit-costs.ts";
+import { averageUnitCosts, perUnitRows } from "./unit-costs.ts";
 
 /**
  * Every report reconciles with the records it is built from, and with every

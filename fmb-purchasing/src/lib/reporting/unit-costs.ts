@@ -11,9 +11,11 @@
  * doesn't depend on the contents, still shows.
  */
 
-import type { PaidCostRow } from "@/lib/reporting/ledger-rows.ts";
-import type { Slice } from "@/lib/reporting/aggregate.ts";
-import type { LineSeriesData } from "./charts.tsx";
+import type { PaidCostRow } from "./ledger-rows.ts";
+import type { Slice } from "./aggregate.ts";
+
+/** One line per vendor, as the trend chart draws it. */
+export type VendorSeries = { name: string; points: { x: string; y: number }[] };
 
 export type PerUnitRow = {
   groupName: string;
@@ -61,7 +63,7 @@ export function perUnitRows(
 }
 
 /** One line per vendor for the trend chart: dated, undisputed purchases only. */
-export function perUnitVendorSeries(rows: PerUnitRow[]): LineSeriesData[] {
+export function perUnitVendorSeries(rows: PerUnitRow[]): VendorSeries[] {
   const byVendorName = new Map<string, PerUnitRow[]>();
   for (const r of rows) {
     if (!r.receiptDate || r.disputed) continue;

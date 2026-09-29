@@ -16,21 +16,15 @@ import { PrintButton } from "./print-button";
 import { SavedViews } from "./saved-views";
 import type { SavedReportView } from "@/lib/saved-report-views";
 import {
-  totals,
   percentChange,
-  byMonth,
-  byMonthBreakdown,
-  byCategory,
-  byVendor,
-  byItem,
-  byStatus,
-  insights,
-  compare,
   MAX_COMPARE_SUBJECTS,
-  type Slice,
-  type Dimension,
   type Bucket,
+  type Comparison,
+  type Dimension,
+  type Insight,
+  type MonthBreakdown,
 } from "@/lib/reporting/aggregate";
+import type { SpendReport } from "@/lib/reporting/spend-report";
 import {
   HeroFigure,
   StatTile,
@@ -44,7 +38,7 @@ import {
   formatMoney,
   formatCompact,
 } from "./charts";
-import { perUnitVendorSeries, type AverageUnitCost, type PerUnitRow } from "./unit-costs";
+import { perUnitVendorSeries, type AverageUnitCost, type PerUnitRow } from "@/lib/reporting/unit-costs";
 
 /** Palette slot per stage, fixed so colour follows the stage and not its rank. */
 const STATUS_SLOT: Record<string, number> = {
@@ -80,26 +74,28 @@ function buildFilterSummary(
   return parts.join(" · ");
 }
 
+/**
+ * Draws a report the server has already worked out (lib/reporting/spend-report).
+ * Nothing here computes a figure: the page sends the figures, not the rows.
+ */
 export function ReportsView({
   query,
+  report,
   basisLabel,
   today,
   earliest,
   vendors,
   categories,
   items,
-  current,
-  previous,
   periodLabel,
   previousLabel,
-  perUnitRows,
-  unitCostByItem,
   hasCategoryOrItemFilter,
   savedViews,
   userId,
   teams,
 }: {
   query: ReportQuery;
+  report: SpendReport;
   /** Which expenses count, and by which date (lib/reporting/basis). */
   basisLabel: string;
   today: string;
@@ -107,12 +103,8 @@ export function ReportsView({
   vendors: FilterOption[];
   categories: FilterOption[];
   items: FilterOption[];
-  current: Slice;
-  previous: Slice | null;
   periodLabel: string;
   previousLabel: string;
-  perUnitRows: PerUnitRow[];
-  unitCostByItem: Record<string, AverageUnitCost>;
   hasCategoryOrItemFilter: boolean;
   savedViews: SavedReportView[];
   userId: string;
@@ -120,13 +112,7 @@ export function ReportsView({
 }) {
   const [calendar, setCalendar] = useState<"gregorian" | "hijri">("gregorian");
 
-  const now = useMemo(() => totals(current), [current]);
-  const before = useMemo(() => (previous ? totals(previous) : null), [previous]);
-  const monthly = useMemo(() => byMonth(current), [current]);
-  const found = useMemo(
-    () => insights(current, previous, periodLabel, previousLabel),
-    [current, previous, periodLabel, previousLabel]
-  );
+  const { now, before, monthly, insights: found, section } = report;
 
   const spendDelta = before ? percentChange(now.spend, before.spend) : null;
   const countDelta = before ? percentChange(now.expenseCount, before.expenseCount) : null;
@@ -238,26 +224,35 @@ export function ReportsView({
               </section>
             </Printable>
 
-            {query.section === "overview" && (
-              <OverviewSection current={current} monthly={monthly} found={found} />
+            {section.key === "overview" && (
+              <OverviewSection monthly={monthly} found={found} statusMix={section.statusMix} />
             )}
-            {query.section === "breakdown" && <BreakdownSection query={query} current={current} />}
-            {query.section === "compare" && (
+            {section.key === "breakdown" && (
+              <BreakdownSection
+                query={query}
+                dimension={section.dimension}
+                ranked={section.ranked}
+                overTime={section.overTime}
+              />
+            )}
+            {section.key === "compare" && (
               <CompareSection
                 query={query}
-                current={current}
-                vendors={vendors}
-                categories={categories}
-                items={items}
-                unitCostByItem={unitCostByItem}
+                dimension={section.dimension}
+                comparison={section.comparison}
+                chosenCount={section.chosenCount}
+                optionCount={
+                  section.dimension === "item"
+                    ? items.length
+                    : section.dimension === "category"
+                      ? categories.length
+                      : vendors.length
+                }
+                unitCostByItem={section.unitCostByItem}
               />
             )}
-            {query.section === "unit-costs" && (
-              <UnitCostsSection
-                perUnitRows={perUnitRows}
-                calendar={calendar}
-                onCalendarChange={setCalendar}
-              />
+            {section.key === "unit-costs" && (
+              <UnitCostsSection perUnitRows={section.rows} calendar={calendar} onCalendarChange={setCalendar} />
             )}
           </>
         )}
@@ -269,16 +264,14 @@ export function ReportsView({
 /* ------------------------------------------------------------------ */
 
 function OverviewSection({
-  current,
   monthly,
   found,
+  statusMix,
 }: {
-  current: Slice;
   monthly: Bucket[];
-  found: ReturnType<typeof insights>;
+  found: Insight[];
+  statusMix: Bucket[];
 }) {
-  const statusMix = useMemo(() => byStatus(current), [current]);
-
   return (
     <>
       {found.length > 0 && (
@@ -349,8 +342,17 @@ const BREAKDOWN_CONFIG: Record<
  * exact figures. One dimension picker rather than three tabs — the same
  * pattern Compare already uses for choosing what to group by.
  */
-function BreakdownSection({ query, current }: { query: ReportQuery; current: Slice }) {
-  const dimension = query.breakdownBy;
+function BreakdownSection({
+  query,
+  dimension,
+  ranked,
+  overTime,
+}: {
+  query: ReportQuery;
+  dimension: Dimension;
+  ranked: Bucket[];
+  overTime: MonthBreakdown;
+}) {
   const config = BREAKDOWN_CONFIG[dimension];
 
   const selectedCount =
@@ -389,7 +391,8 @@ function BreakdownSection({ query, current }: { query: ReportQuery; current: Sli
       </div>
 
       <DimensionSection
-        current={current}
+        ranked={ranked}
+        breakdown={overTime}
         dimension={dimension}
         title={config.title}
         unit={config.unit}
@@ -406,25 +409,20 @@ function BreakdownSection({ query, current }: { query: ReportQuery; current: Sli
 /* ------------------------------------------------------------------ */
 
 function DimensionSection({
-  current,
+  ranked,
+  breakdown,
   dimension,
   title,
   unit,
   filterHint,
 }: {
-  current: Slice;
+  ranked: Bucket[];
+  breakdown: MonthBreakdown;
   dimension: Dimension;
   title: string;
   unit: "lines" | "expenses";
   filterHint?: string;
 }) {
-  const ranked = useMemo(() => {
-    if (dimension === "category") return byCategory(current);
-    if (dimension === "vendor") return byVendor(current);
-    return byItem(current);
-  }, [current, dimension]);
-
-  const breakdown = useMemo(() => byMonthBreakdown(current, dimension), [current, dimension]);
   const total = ranked.reduce((s, b) => s + b.spend, 0);
 
   return (
@@ -528,36 +526,21 @@ function DimensionSection({
  */
 function CompareSection({
   query,
-  current,
-  vendors,
-  categories,
-  items,
+  dimension,
+  comparison,
+  chosenCount,
+  optionCount,
   unitCostByItem,
 }: {
   query: ReportQuery;
-  current: Slice;
-  vendors: FilterOption[];
-  categories: FilterOption[];
-  items: FilterOption[];
+  dimension: Dimension;
+  comparison: Comparison;
+  chosenCount: number;
+  optionCount: number;
   unitCostByItem: Record<string, AverageUnitCost>;
 }) {
-  const dimension = query.compareBy;
-
-  // Subjects come from the filter menus, so there is one place to pick
-  // things rather than a parallel selector that could disagree with them.
-  const chosen =
-    dimension === "item" ? query.items : dimension === "category" ? query.categories : query.vendors;
-
-  const comparison = useMemo(
-    () => compare(current, dimension, chosen, MAX_COMPARE_SUBJECTS),
-    [current, dimension, chosen]
-  );
-
-  const optionCount =
-    dimension === "item" ? items.length : dimension === "category" ? categories.length : vendors.length;
-
-  const usingDefaults = chosen.length === 0;
-  const overCap = chosen.length > MAX_COMPARE_SUBJECTS;
+  const usingDefaults = chosenCount === 0;
+  const overCap = chosenCount > MAX_COMPARE_SUBJECTS;
 
   return (
     <>
@@ -594,7 +577,7 @@ function CompareSection({
 
       {overCap && (
         <p className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-xs text-ink/75">
-          {chosen.length} selected, showing the first {MAX_COMPARE_SUBJECTS}. Past that the cards get
+          {chosenCount} selected, showing the first {MAX_COMPARE_SUBJECTS}. Past that the cards get
           too narrow to read and the palette runs out of hues that stay distinct for colourblind
           readers.
         </p>

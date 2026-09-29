@@ -1,7 +1,7 @@
 "use client";
 
 import type { WidgetData } from "./reports/dashboard-widgets";
-import { perUnitVendorSeries, type PerUnitRow } from "./reports/unit-costs";
+import { perUnitVendorSeries, type PerUnitRow } from "@/lib/reporting/unit-costs";
 import {
   HeroFigure,
   ColumnChart,
