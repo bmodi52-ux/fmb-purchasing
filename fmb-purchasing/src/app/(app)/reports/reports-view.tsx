@@ -82,6 +82,7 @@ export function ReportsView({
   savedViews,
   userId,
   teams,
+  nav,
 }: {
   query: ReportQuery;
   report: SpendReport;
@@ -100,6 +101,8 @@ export function ReportsView({
   savedViews: SavedReportView[];
   userId: string;
   teams: { id: string; name: string }[];
+  /** The links between report pages (report-nav), drawn on the server. */
+  nav: React.ReactNode;
 }) {
   const [calendar, setCalendar] = useState<"gregorian" | "hijri">("gregorian");
 
@@ -116,6 +119,7 @@ export function ReportsView({
   return (
     <PrintRegistryProvider>
       <div className="flex flex-col gap-5">
+        {nav}
         <div>
           <h1 className="page-title text-ink">Reports</h1>
           <p className="page-description mt-1">
