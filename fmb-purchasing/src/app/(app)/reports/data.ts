@@ -4,7 +4,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { categoryLabelsById } from "@/lib/categories";
 import { allRows, allRowsForIds } from "@/lib/supabase/all-rows";
 import { LINE_OFFER } from "@/lib/supabase/relationships";
-import { expenseDateFilter } from "@/lib/periods-data";
 import { inPeriod } from "@/lib/periods";
 import { expenseDate, type ExpenseRecord, type LineRecord } from "./aggregate";
 
@@ -72,7 +71,8 @@ async function ledgerFingerprint(range: DateRange): Promise<string> {
   const { data, count } = await admin
     .from("expenses")
     .select("updated_at", { count: "exact" })
-    .or(expenseDateFilter(range.start, range.end))
+    .gte("report_date", range.start)
+    .lte("report_date", range.end)
     .order("updated_at", { ascending: false })
     .limit(1);
 
@@ -117,6 +117,7 @@ type RawExpense = {
   status: string;
   receipt_date: string | null;
   created_at: string;
+  report_date: string;
   total: number;
   gst_amount: number;
 };
@@ -147,8 +148,9 @@ const loadCachedReportRows = unstable_cache(
       allRows<RawExpense>((from, to) =>
         admin
           .from("expenses")
-          .select("id, expense_number, vendor_id, vendor_name_raw, status, receipt_date, created_at, total, gst_amount")
-          .or(expenseDateFilter(start, end))
+          .select("id, expense_number, vendor_id, vendor_name_raw, status, receipt_date, created_at, report_date, total, gst_amount")
+          .gte("report_date", start)
+          .lte("report_date", end)
           .not("status", "in", NOT_SPEND_FILTER)
           .order("id")
           .range(from, to)
@@ -198,6 +200,7 @@ const loadCachedReportRows = unstable_cache(
       status: e.status,
       receiptDate: e.receipt_date,
       createdAt: e.created_at,
+      reportDate: e.report_date,
       total: Number(e.total),
       gst: Number(e.gst_amount),
     }));
@@ -227,7 +230,11 @@ const loadCachedReportRows = unstable_cache(
 
     return { allExpenses, allLines, paidCosts };
   },
-  ["report-raw-data"],
+  // The version names the shape of what is cached. The cache outlives a
+  // deploy, so when that shape changes the version must too, or new code reads
+  // an hour of entries written by the old — as it would have here, when
+  // expenses gained reportDate (0083).
+  ["report-raw-data", "v2"],
   { tags: [REPORT_DATA_TAG], revalidate: 3600 }
 );
 

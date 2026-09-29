@@ -48,7 +48,7 @@ export default async function ApprovalsPage() {
     admin
       .from("expenses")
       .select(
-        "id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, subtotal, gst_amount, gst_printed, total, submitted_by, submitter_comment, payee_id, created_at, receipt_total, receipt_total_scanned, receipt_total_note"
+        "id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, report_date, subtotal, gst_amount, gst_printed, total, submitted_by, submitter_comment, payee_id, created_at, receipt_total, receipt_total_scanned, receipt_total_note"
       )
       .eq("status", "submitted")
       .order("created_at"),
@@ -138,7 +138,7 @@ export default async function ApprovalsPage() {
   // includes expenses waiting for approval, this one among them.
   const today = todayIso();
   const periodOf = (e: (typeof expenses)[number]) =>
-    parsePeriod(periodCode("hijri", yearContaining("hijri", e.receipt_date ?? e.created_at.slice(0, 10))), today);
+    parsePeriod(periodCode("hijri", yearContaining("hijri", e.report_date)), today);
   const budgetCategoryIds = [...new Set((lineItems ?? []).map((l) => l.category_id).filter(Boolean) as string[])];
   const budgets = budgetCategoryIds.length ? await loadBudgets(admin, budgetCategoryIds) : [];
   const spendByPeriod = new Map<string, Map<string, number>>();

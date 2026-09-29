@@ -55,6 +55,7 @@ export const LEDGERED_MIGRATIONS = [
   "0080_vendor_merge.sql",
   "0081_brand_offers.sql",
   "0082_price_undo.sql",
+  "0083_expense_report_date.sql",
 ] as const;
 
 export type MigrationStatus =

@@ -33,6 +33,7 @@ const expenses: ExpenseRecord[] = [
     status: "paid",
     receiptDate: "2026-05-05",
     createdAt: "2026-05-06T10:00:00Z",
+    reportDate: "2026-05-05",
     total: 1320,
     gst: 120,
   },
@@ -44,6 +45,7 @@ const expenses: ExpenseRecord[] = [
     status: "submitted",
     receiptDate: "2026-05-20",
     createdAt: "2026-05-21T10:00:00Z",
+    reportDate: "2026-05-20",
     total: 300,
     gst: 27.27,
   },
@@ -56,6 +58,7 @@ const expenses: ExpenseRecord[] = [
     // No receipt date: must fall back to createdAt, in June not May.
     receiptDate: null,
     createdAt: "2026-06-02T10:00:00Z",
+    reportDate: "2026-06-02",
     total: 200,
     gst: 18.18,
   },
@@ -113,14 +116,22 @@ const all = applyFilters(expenses, lines, NO_FILTERS);
 /* ------------------------------------------------------------------ */
 
 describe("expenseDate", () => {
-  test("prefers the receipt date", () => {
+  test("is the day the database dated the expense on", () => {
     assert.equal(expenseDate(expenses[0]), "2026-05-05");
+    assert.equal(expenseDate(expenses[2]), "2026-06-02");
   });
 
-  test("falls back to the submission date when the receipt had none", () => {
-    // Without this, a third of today's expenses would vanish from every
-    // time-based chart.
-    assert.equal(expenseDate(expenses[2]), "2026-06-02");
+  test("never works the day out again from the UTC timestamp", () => {
+    // Submitted undated at 8:30am on 1 July in Sydney, which is still 30 June
+    // in UTC. The stored day is what counts; the rule that sets it is tested
+    // against Postgres in lib/report-date.test.ts.
+    const early = {
+      ...expenses[2],
+      createdAt: "2026-06-30T22:30:00Z",
+      reportDate: "2026-07-01",
+    };
+    assert.equal(expenseDate(early), "2026-07-01");
+    assert.equal(monthKey(expenseDate(early)), "2026-07");
   });
 });
 
