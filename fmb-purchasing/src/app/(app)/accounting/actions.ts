@@ -7,7 +7,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission, type ActionKey } from "@/lib/permissions";
 import { parsePeriod } from "@/lib/periods";
 import { todayIso } from "@/lib/periods-data";
-import { loadAccountingPeriod, type Basis } from "@/lib/accounting-data";
+import { loadAccountingPeriod, loadLodgedPeriods, type Basis } from "@/lib/accounting-data";
+import { LOCK_COLUMNS, lodgementFromRow, lodgementSnapshot, outstandingAdjustments } from "@/lib/gst-lodgement";
 import { buildXeroBillsCsv, linesMissingAccountCodes } from "@/lib/xero-export";
 import { reportError } from "@/lib/errors";
 
@@ -55,12 +56,28 @@ export async function lockPeriod(formData: FormData): Promise<void> {
   const user = await requireAccounting();
   const period = parsePeriod(String(formData.get("period") ?? ""), todayIso());
   const note = String(formData.get("note") ?? "").trim() || null;
-  const { error } = await createAdminClient().from("locked_periods").insert({
+  // The basis on screen when the period was locked is the one it was lodged on.
+  const basis: Basis = formData.get("basis") === "paid" ? "paid" : "receipt";
+  const admin = createAdminClient();
+
+  // What goes on the return: this period's figures, and the adjustments owed
+  // to it by earlier lodged periods — recorded, so a re-reading of this
+  // period later can say what was lodged, and no later return takes the same
+  // adjustment again (0085).
+  const [{ gstExpenses, gstLines }, { data: lockRows }] = await Promise.all([
+    loadAccountingPeriod(admin, period, basis),
+    admin.from("locked_periods").select(LOCK_COLUMNS).is("unlocked_at", null),
+  ]);
+  const lodgements = (lockRows ?? []).map(lodgementFromRow);
+  const owed = outstandingAdjustments(await loadLodgedPeriods(admin, lodgements, period.start), lodgements);
+
+  const { error } = await admin.from("locked_periods").insert({
     start_date: period.start,
     end_date: period.end,
     label: period.label,
     note,
     locked_by: user.id,
+    ...lodgementSnapshot(gstExpenses, gstLines, basis, owed.expenses),
   });
   if (error) {
     await reportError({ source: "locked-periods", error: error.message, userId: user.id });

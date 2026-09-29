@@ -7,7 +7,8 @@ import { leafCategories, categoryLabelsById, sortCategories } from "@/lib/catego
 import { formatDateTime } from "@/lib/format";
 import { parsePeriod } from "@/lib/periods";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
-import { loadAccountingPeriod, type Basis } from "@/lib/accounting-data";
+import { loadAccountingPeriod, loadLodgedPeriods, type Basis } from "@/lib/accounting-data";
+import { LOCK_COLUMNS, lodgementFromRow, outstandingAdjustments, sinceLodged } from "@/lib/gst-lodgement";
 import { summariseGst } from "@/lib/gst-summary";
 import { PeriodPicker } from "@/components/period-picker";
 import { DownloadLinks } from "@/components/download-links";
@@ -48,13 +49,24 @@ export default async function AccountingPage({
     loadAccountingPeriod(admin, period, basis),
     earliestExpenseDate(admin),
     admin.from("categories").select("id, name, parent_category_id, account_code").order("sort_order"),
-    admin.from("locked_periods").select("id, label, start_date, end_date, note, locked_by, locked_at, unlocked_at").order("start_date", { ascending: false }),
+    admin.from("locked_periods").select(LOCK_COLUMNS).order("start_date", { ascending: false }),
   ]);
 
   const gst = summariseGst(gstExpenses, gstLines);
   const labels = categoryLabelsById(categoryRows ?? []);
   const leaves = leafCategories(sortCategories(categoryRows ?? []));
-  const alreadyLocked = (locks ?? []).some((l) => !l.unlocked_at && l.start_date === period.start && l.end_date === period.end);
+  const activeLocks = (locks ?? []).filter((l) => !l.unlocked_at);
+  const lodgements = activeLocks.map(lodgementFromRow);
+  const thisLodgement = lodgements.find((l) => l.start === period.start && l.end === period.end) ?? null;
+  const alreadyLocked = thisLodgement !== null;
+
+  // A lodged period read again: what was lodged, and what has been dated in
+  // it since — adjustments for a later return, not changes to this one (0085).
+  const since = thisLodgement?.basis === basis ? sinceLodged(thisLodgement, gstExpenses) : [];
+  // A period still to be lodged: what earlier lodged periods owe it.
+  const owed = alreadyLocked
+    ? null
+    : outstandingAdjustments(await loadLodgedPeriods(admin, lodgements, period.start), lodgements);
   const basisHref = (b: Basis) => `/accounting?period=${period.code}&basis=${b}`;
 
   return (
@@ -133,7 +145,70 @@ export default async function AccountingPage({
           </div>
         )}
 
-        {gst.adjustments.length > 0 && (
+        {thisLodgement?.basis && (
+          <div className="rounded-lg border border-ink/10 bg-ink/[0.02] p-4 text-sm">
+            <p className="font-medium text-ink">
+              As lodged, {formatDateTime(thisLodgement.lockedAt)} —{" "}
+              {thisLodgement.basis === "paid" ? "by payment date" : "by receipt date"}
+            </p>
+            <p className="mt-1 tabular-nums text-ink/75">
+              G11 {money(thisLodgement.g11 ?? 0)} · G10 {money(thisLodgement.g10 ?? 0)} · 1B {money(thisLodgement.oneB ?? 0)}
+            </p>
+            {thisLodgement.basis !== basis ? (
+              <p className="mt-1 text-xs text-ink/55">
+                Lodged by {thisLodgement.basis === "paid" ? "payment" : "receipt"} date: switch to that to see what has
+                changed since.
+              </p>
+            ) : since.length > 0 ? (
+              <>
+                <p className="mt-2 text-xs text-ink/60">
+                  Dated in this period but not in what was lodged — adjustments for the next return, where they are
+                  listed to add:
+                </p>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {since.map((e) => (
+                    <li key={e.id}>
+                      <Link href={`/expenses/${e.id}`} className="tabular-nums text-xs font-medium underline-offset-2 hover:underline">
+                        {e.expenseNumber ?? "Expense"}
+                      </Link>{" "}
+                      {e.vendorName} · {money(e.total)} · GST {money(e.gst)}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="mt-1 text-xs text-ink/55">Nothing has changed since it was lodged.</p>
+            )}
+          </div>
+        )}
+
+        {owed && owed.expenses.length > 0 && (
+          <div className="rounded-lg border border-gold/40 bg-gold/5 p-4 text-sm">
+            <p className="font-medium text-ink">Adjustments from lodged periods, for this return</p>
+            <p className="mt-1 text-xs text-ink/60">
+              Dated in a period already lodged, but not in what was lodged for it. They belong in this return as
+              adjustments; locking this period records them as taken.
+            </p>
+            <p className="mt-2 tabular-nums text-ink/75">
+              G11 {money(owed.summary.g11)} · G10 {money(owed.summary.g10)} · 1B {money(owed.summary.oneB)}
+            </p>
+            <ul className="mt-2 flex flex-col gap-1">
+              {owed.expenses.map((e) => (
+                <li key={e.id}>
+                  <Link href={`/expenses/${e.id}`} className="tabular-nums text-xs font-medium underline-offset-2 hover:underline">
+                    {e.expenseNumber ?? "Expense"}
+                  </Link>{" "}
+                  {e.vendorName} · {money(e.total)} · GST {money(e.gst)}
+                  <span className="text-xs text-ink/50"> · from {owed.fromPeriod.get(e.id)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Locks from before 0085 kept no figures, so their late approvals are
+            still found by approval date. */}
+        {gst.adjustments.length > 0 && !thisLodgement?.basis && (
           <div className="rounded-lg border border-gold/40 bg-gold/5 p-4">
             <p className="text-sm font-medium text-ink">Adjustments: approved after their period was lodged</p>
             <ul className="mt-2 flex flex-col gap-1 text-sm">
@@ -205,6 +280,8 @@ export default async function AccountingPage({
         {!alreadyLocked && (
           <form action={lockPeriod} className="flex flex-wrap items-end gap-2 card p-3 text-sm">
             <input type="hidden" name="period" value={period.code} />
+            {/* Lodged on the basis on screen, and its figures kept (0085). */}
+            <input type="hidden" name="basis" value={basis} />
             <label className="flex flex-col gap-1 text-xs">
               <span className="text-ink/55">Note (optional)</span>
               <input name="note" placeholder="Lodged 28 July" className="input w-56 text-sm" />
