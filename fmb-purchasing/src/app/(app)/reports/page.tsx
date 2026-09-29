@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parsePeriod, previousPeriod } from "@/lib/periods";
+import { comparisonPeriod, parsePeriod } from "@/lib/periods";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import {
   applyFilters,
@@ -49,7 +49,9 @@ export default async function ReportsPage({
   const params = await searchParams;
   const today = todayIso();
   const period = parsePeriod(params.period ?? params.fy, today);
-  const previousRange = previousPeriod(period, today);
+  // Like with like: a period still under way compares with the same stretch
+  // of the one before, not all of it.
+  const previousRange = comparisonPeriod(period, today);
 
   // The period before comes back in the same fetch so the dashboard can show
   // change without a second round trip — the function runs a long way from

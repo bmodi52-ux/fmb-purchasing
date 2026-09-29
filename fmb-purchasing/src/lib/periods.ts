@@ -344,6 +344,39 @@ export function previousPeriod(period: Period, today: string): Period {
   return parsePeriod(rangeCode(start, end), today);
 }
 
+/**
+ * What a period's figures should be compared with.
+ *
+ * The period before — cut to the same stretch when this one is still under
+ * way. Reports opens on the whole current year, and comparing seven months of
+ * it with all twelve of last year read as spend falling by nearly half every
+ * single time. A quarter or month in progress did the same. So a period that
+ * has started and not ended compares with as many days of the one before,
+ * counted from its start: which is what "so far this year" already did.
+ *
+ * Budgets keeps previousPeriod: copying last year's budgets wants the whole
+ * year, not a comparison.
+ */
+export function comparisonPeriod(period: Period, today: string): Period {
+  const previous = previousPeriod(period, today);
+  const underWay = period.start <= today && today < period.end;
+  if (!underWay) return previous;
+
+  const end = addDays(previous.start, dayCount(period.start, today) - 1);
+  if (end >= previous.end) return previous;
+  return {
+    code: rangeCode(previous.start, end),
+    calendar: null,
+    year: null,
+    part: { type: "year" },
+    start: previous.start,
+    end,
+    // A named period reads well cut short; a range's own label would still
+    // give its full dates, so a cut range is labelled by what it now covers.
+    label: previous.calendar ? `${previous.label}, same stretch` : formatRange(previous.start, end),
+  };
+}
+
 /** Whether a calendar day falls in the period. */
 export function inPeriod(period: Pick<Period, "start" | "end">, iso: string): boolean {
   return iso >= period.start && iso <= period.end;
