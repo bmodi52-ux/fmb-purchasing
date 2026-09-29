@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { refreshVendorRegistration, registrationIsStale } from "@/lib/vendor-registration";
 import { revalidatePath } from "next/cache";
-import { revalidateReports } from "../reports/data";
+import { revalidateReports } from "@/lib/reporting/ledger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { allRows } from "@/lib/supabase/all-rows";
 import { getCurrentUser } from "@/lib/auth/session";

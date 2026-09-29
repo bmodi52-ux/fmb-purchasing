@@ -11,8 +11,8 @@
  * doesn't depend on the contents, still shows.
  */
 
-import type { PaidCostRow } from "./data.ts";
-import type { Slice } from "./aggregate.ts";
+import type { PaidCostRow } from "@/lib/reporting/ledger-rows.ts";
+import type { Slice } from "@/lib/reporting/aggregate.ts";
 import type { LineSeriesData } from "./charts.tsx";
 
 export type PerUnitRow = {

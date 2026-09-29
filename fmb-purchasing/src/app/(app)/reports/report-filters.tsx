@@ -1,51 +1,10 @@
 import Link from "next/link";
+import type { FilterOption } from "@/lib/reporting/aggregate";
+import { STATUS_BASES } from "@/lib/reporting/basis";
+import { SECTIONS, buildHref, type ReportQuery, type ReportSection } from "@/lib/reporting/query";
 import { FilterControls } from "./filter-controls";
 
-export type FilterOption = { value: string; label: string };
-
-export type ReportSection = "overview" | "breakdown" | "compare" | "unit-costs";
-
-export const SECTIONS: { key: ReportSection; label: string }[] = [
-  { key: "overview", label: "Overview" },
-  { key: "breakdown", label: "Breakdown" },
-  { key: "compare", label: "Compare" },
-  { key: "unit-costs", label: "Unit costs" },
-];
-
-export type CompareDimension = "item" | "category" | "vendor";
-
-export type ReportQuery = {
-  /** A period code from lib/periods — any kind of year, a quarter, a month or a range. */
-  period: string;
-  section: ReportSection;
-  vendors: string[];
-  categories: string[];
-  items: string[];
-  breakdownBy: CompareDimension;
-  compareBy: CompareDimension;
-};
-
-/**
- * Rebuilds the page URL with one thing changed.
- *
- * Every control resolves to one of these, so the URL is the only state there
- * is: a view can be linked, the back button steps through what you looked
- * at, and no client-side selection can drift out of step with what's shown.
- */
-export function buildHref(query: ReportQuery, patch: Partial<ReportQuery>): string {
-  const next = { ...query, ...patch };
-  const params = new URLSearchParams();
-
-  params.set("period", next.period);
-  if (next.section !== "overview") params.set("section", next.section);
-  if (next.breakdownBy !== "category") params.set("breakdownBy", next.breakdownBy);
-  if (next.compareBy !== "item") params.set("compareBy", next.compareBy);
-  for (const v of next.vendors) params.append("vendor", v);
-  for (const c of next.categories) params.append("category", c);
-  for (const i of next.items) params.append("item", i);
-
-  return `/reports?${params.toString()}`;
-}
+export type { FilterOption };
 
 export function SectionTabs({ query, active }: { query: ReportQuery; active: ReportSection }) {
   return (
@@ -94,6 +53,25 @@ export function ReportFilters({
         categories={categories}
         items={items}
       />
+
+      {/* Which expenses count. Everything live by default, which is what a
+          budget is used up by; approved and paid is what the GST return
+          counts, so a figure here can be put beside Accounting's. */}
+      <div className="flex flex-col gap-1 text-xs">
+        <span className="text-ink/55">Counting</span>
+        <div className="segmented">
+          {STATUS_BASES.map((b) => (
+            <Link
+              key={b.key}
+              href={buildHref(query, { status: b.key })}
+              aria-current={query.status === b.key ? "true" : undefined}
+              className="segment"
+            >
+              {b.short}
+            </Link>
+          ))}
+        </div>
+      </div>
 
       {isFiltered && (
         <Link

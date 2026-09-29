@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { PeriodPicker } from "@/components/period-picker";
 import { MultiSelectMenu } from "./multi-select-menu";
-import { buildHref, type ReportQuery, type FilterOption } from "./report-filters";
+import { buildHref, type ReportQuery } from "@/lib/reporting/query";
+import type { FilterOption } from "./report-filters";
 
 /**
  * The filter row's controls.

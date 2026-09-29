@@ -1,8 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { computeWidgetData, type WidgetConfig } from "./dashboard-widgets.ts";
-import type { ExpenseRecord, LineRecord } from "./aggregate.ts";
-import type { PaidCostRow, ReportRawData } from "./data.ts";
+import type { ExpenseRecord, LineRecord } from "@/lib/reporting/aggregate.ts";
+import type { Ledger, PaidCostRow } from "@/lib/reporting/ledger-rows.ts";
 
 const expenses: ExpenseRecord[] = [
   {
@@ -120,10 +120,10 @@ const paidCosts: PaidCostRow[] = [
   },
 ];
 
-const raw: ReportRawData = {
-  allExpenses: expenses,
-  allLines: lines,
-  paidCosts,
+const raw = {
+  expenses: expenses as Ledger["expenses"],
+  lines: lines as Ledger["lines"],
+  unitCosts: paidCosts,
 };
 
 const TODAY = "2026-09-11";

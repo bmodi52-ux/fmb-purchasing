@@ -24,8 +24,8 @@ import {
   type MonthBreakdown,
   type Totals,
   type Slice,
-} from "./aggregate.ts";
-import type { ReportRawData } from "./data.ts";
+} from "@/lib/reporting/aggregate.ts";
+import type { Ledger } from "@/lib/reporting/ledger-rows.ts";
 import { perUnitRows, type PerUnitRow } from "./unit-costs.ts";
 
 export type WidgetKind =
@@ -96,13 +96,13 @@ export function widgetPeriodCode(config: Pick<WidgetConfig, "period" | "fy">): s
 }
 
 /** The same slice Reports would build for these filters, scoped to the widget's period. */
-export function sliceFor(config: WidgetConfig, raw: ReportRawData, today: string): Slice {
+export function sliceFor(config: WidgetConfig, raw: Ledger, today: string): Slice {
   const period = parsePeriod(widgetPeriodCode(config), today);
   const currentIds = new Set(
-    raw.allExpenses.filter((e) => inPeriod(period, expenseDate(e))).map((e) => e.id)
+    raw.expenses.filter((e) => inPeriod(period, expenseDate(e))).map((e) => e.id)
   );
-  const currentExpenses = raw.allExpenses.filter((e) => currentIds.has(e.id));
-  const currentLines = raw.allLines.filter((l) => currentIds.has(l.expenseId));
+  const currentExpenses = raw.expenses.filter((e) => currentIds.has(e.id));
+  const currentLines = raw.lines.filter((l) => currentIds.has(l.expenseId));
 
   return applyFilters(currentExpenses, currentLines, {
     month: config.month,
@@ -115,7 +115,7 @@ export function sliceFor(config: WidgetConfig, raw: ReportRawData, today: string
 export function computeWidgetData(
   kind: WidgetKind,
   config: WidgetConfig,
-  raw: ReportRawData,
+  raw: Ledger,
   today: string
 ): WidgetData {
   const slice = sliceFor(config, raw, today);
@@ -154,7 +154,7 @@ export function computeWidgetData(
     case "unit-cost-chart":
     case "unit-cost-table": {
       // The same rows the Unit costs section shows, for the one item.
-      const rows = perUnitRows(raw.paidCosts, slice, (itemId) => itemId === config.itemId, config.itemLabel ?? "Item");
+      const rows = perUnitRows(raw.unitCosts, slice, (itemId) => itemId === config.itemId, config.itemLabel ?? "Item");
       return { kind, rows, itemLabel: config.itemLabel ?? rows[0]?.groupName ?? "Item" };
     }
 

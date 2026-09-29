@@ -1,8 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { averageUnitCosts, perUnitRows, perUnitVendorSeries } from "./unit-costs.ts";
-import type { ExpenseRecord, Slice } from "./aggregate.ts";
-import type { PaidCostRow } from "./data.ts";
+import type { ExpenseRecord, Slice } from "@/lib/reporting/aggregate.ts";
+import type { PaidCostRow } from "@/lib/reporting/ledger-rows.ts";
 
 // Asserted rather than annotated so it type-checks both before and after
 // ExpenseRecord gains reportDate (0083).

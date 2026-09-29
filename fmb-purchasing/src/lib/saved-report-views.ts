@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ReportQuery } from "@/app/(app)/reports/report-filters";
+import { queryFromSaved, type ReportQuery } from "@/lib/reporting/query";
 
 /**
  * Saved report views (#41, migration 0053): a report's period, filters and
@@ -58,16 +58,24 @@ export async function loadSavedViews(
     .order("name");
   if (error || !rows?.length) return [];
 
-  const views = rows.map((r) => ({
-    id: r.id as string,
-    ownerId: r.owner_id as string,
-    ownerName: "",
-    name: r.name as string,
-    query: r.query as ReportQuery,
-    sharedWith: r.shared_with as ViewSharing,
-    teamIds: ((r.saved_report_view_teams as { team_id: string }[] | null) ?? []).map((t) => t.team_id),
-    updatedAt: r.updated_at as string,
-  }));
+  // Read through the same checks as the URL, so a view saved before a field
+  // existed opens with that field's default rather than without it.
+  const views = rows.flatMap((r) => {
+    const query = queryFromSaved(r.query);
+    if (!query) return [];
+    return [
+      {
+        id: r.id as string,
+        ownerId: r.owner_id as string,
+        ownerName: "",
+        name: r.name as string,
+        query,
+        sharedWith: r.shared_with as ViewSharing,
+        teamIds: ((r.saved_report_view_teams as { team_id: string }[] | null) ?? []).map((t) => t.team_id),
+        updatedAt: r.updated_at as string,
+      },
+    ];
+  });
   const visible = views.filter((v) => canSeeView(v, user));
 
   const ownerIds = [...new Set(visible.map((v) => v.ownerId))];

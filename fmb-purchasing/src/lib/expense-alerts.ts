@@ -107,19 +107,19 @@ async function checkBudgetThresholds(
   ];
   const budgetSetters = builtInPercents.length ? await userIdsWithPermission(admin, "budgets", "edit_master_data") : [];
 
-  const { loadReportRawData, withinRange } = await import("@/app/(app)/reports/data");
+  const { loadLedger } = await import("@/lib/reporting/ledger");
   const budgets = await loadBudgets(admin, categoryIds);
   const today = todayIso();
 
   for (const calendar of calendars) {
     const period = parsePeriod(periodCode(calendar, yearContaining(calendar, date)), today);
     const perCategory = budgetsForPeriod(budgets, period.start, period.end);
-    const raw = withinRange(await loadReportRawData(period), period);
+    const ledger = await loadLedger(period);
 
     for (const categoryId of categoryIds) {
       const budget = perCategory.get(categoryId);
       if (!budget || budget.amount <= 0) continue;
-      const spentAfter = raw.allLines.filter((l) => l.categoryId === categoryId).reduce((s, l) => s + l.lineTotal, 0);
+      const spentAfter = ledger.lines.filter((l) => l.categoryId === categoryId).reduce((s, l) => s + l.lineTotal, 0);
       const thisExpense = lines
         .filter((l) => l.category_id === categoryId)
         .reduce((s, l) => s + Number(l.line_total), 0);

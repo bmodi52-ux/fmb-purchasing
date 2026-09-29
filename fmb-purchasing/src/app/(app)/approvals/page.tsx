@@ -14,7 +14,7 @@ import { mayLackTaxInvoice } from "@/lib/gst-summary";
 import { parsePeriod, periodCode, yearContaining } from "@/lib/periods";
 import { todayIso } from "@/lib/periods-data";
 import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
-import { loadReportRawData, withinRange } from "../reports/data";
+import { loadLedger } from "@/lib/reporting/ledger";
 import { loadPriceFlags, loadSpendFlags } from "@/lib/price-alerts-data";
 import { receiptFlags } from "@/lib/receipt-flags";
 import { describePriceFlag, describeUnusualSpend, isSeriousPriceFlag } from "@/lib/price-alerts";
@@ -145,9 +145,9 @@ export default async function ApprovalsPage() {
   if (budgets.length) {
     for (const code of [...new Set(expenses.map((e) => periodOf(e).code))]) {
       const period = parsePeriod(code, today);
-      const raw = withinRange(await loadReportRawData(period), period);
+      const ledger = await loadLedger(period);
       const spend = new Map<string, number>();
-      for (const l of raw.allLines) if (l.categoryId) spend.set(l.categoryId, (spend.get(l.categoryId) ?? 0) + l.lineTotal);
+      for (const l of ledger.lines) if (l.categoryId) spend.set(l.categoryId, (spend.get(l.categoryId) ?? 0) + l.lineTotal);
       spendByPeriod.set(code, spend);
     }
   }

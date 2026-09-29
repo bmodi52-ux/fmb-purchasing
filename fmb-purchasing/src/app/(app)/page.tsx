@@ -4,7 +4,7 @@ import { userCan } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parsePeriod } from "@/lib/periods";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
-import { loadReportRawData } from "./reports/data";
+import { loadLedger } from "@/lib/reporting/ledger";
 import { computeWidgetData, widgetPeriodCode } from "./reports/dashboard-widgets";
 import { HomeDashboard, type SavedWidget } from "./home-dashboard";
 import { TodayPanel } from "./today-panel";
@@ -60,7 +60,7 @@ export default async function DashboardPage() {
   const distinctCodes = [...new Set(rows.map((r) => widgetPeriodCode(r.config)))];
   const rawByCode = new Map(
     await Promise.all(
-      distinctCodes.map(async (code) => [code, await loadReportRawData(parsePeriod(code, today))] as const)
+      distinctCodes.map(async (code) => [code, await loadLedger(parsePeriod(code, today))] as const)
     )
   );
 

@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { reportError } from "@/lib/errors";
 import { canSeeView, type ViewSharing } from "@/lib/saved-report-views";
-import { SECTIONS, type CompareDimension, type ReportQuery } from "./report-filters";
+import { queryFromSaved } from "@/lib/reporting/query";
 
 /**
  * Saving, sharing, copying and deleting report views (#41). Every change is
@@ -19,35 +19,6 @@ async function requireReports() {
   if (!user) redirect("/login");
   await requirePermission(user, "reports", "view");
   return user;
-}
-
-const DIMENSIONS: CompareDimension[] = ["item", "category", "vendor"];
-
-/** A report query as the page would build it, whatever was posted. */
-function queryFrom(raw: unknown): ReportQuery | null {
-  let value: unknown = raw;
-  if (typeof raw === "string") {
-    try {
-      value = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  }
-  if (!value || typeof value !== "object") return null;
-  const q = value as Record<string, unknown>;
-  const list = (v: unknown) =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.length <= 64).slice(0, 200) : [];
-  const period = typeof q.period === "string" && q.period.length <= 64 ? q.period : null;
-  if (!period) return null;
-  return {
-    period,
-    section: SECTIONS.some((s) => s.key === q.section) ? (q.section as ReportQuery["section"]) : "overview",
-    vendors: list(q.vendors),
-    categories: list(q.categories),
-    items: list(q.items),
-    breakdownBy: DIMENSIONS.includes(q.breakdownBy as CompareDimension) ? (q.breakdownBy as CompareDimension) : "category",
-    compareBy: DIMENSIONS.includes(q.compareBy as CompareDimension) ? (q.compareBy as CompareDimension) : "item",
-  };
 }
 
 function sharingFrom(formData: FormData): { sharedWith: ViewSharing; teamIds: string[] } {
@@ -85,7 +56,7 @@ export async function saveReportView(_prev: SavedViewState, formData: FormData):
 
   const viewId = String(formData.get("view_id") ?? "");
   const replaceQuery = !viewId || formData.get("replace_query") === "on";
-  const query = replaceQuery ? queryFrom(formData.get("query")) : null;
+  const query = replaceQuery ? queryFromSaved(formData.get("query")) : null;
   if (replaceQuery && !query) return { status: "error", message: "The report on screen could not be read. Reload and try again." };
 
   const admin = createAdminClient();
