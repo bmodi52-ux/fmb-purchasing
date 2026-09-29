@@ -168,9 +168,9 @@ describe("GST download", () => {
       { id: "e1", expenseNumber: "E-1", vendorName: "Equipment Co", total: 8816.5, gst: 798.5, hasAttachment: true, vendorAbn: "1", vendorGstRegistered: true, lateForLockedPeriod: false },
     ];
     const lines: XeroBillLine[] = [
-      { expenseNumber: "E-1", invoiceNumber: null, contactName: "Equipment Co", invoiceDate: "2026-07-20", dueDate: "2026-07-20", description: "Oven", lineTotal: 8800, gst: 800, isCapital: true, accountCode: "700" },
-      { expenseNumber: "E-1", invoiceNumber: null, contactName: "Equipment Co", invoiceDate: "2026-07-20", dueDate: "2026-07-20", description: "Discount", lineTotal: -16.5, gst: -1.5, isCapital: false, accountCode: null },
-      { expenseNumber: "E-1", invoiceNumber: null, contactName: "Equipment Co", invoiceDate: "2026-07-20", dueDate: "2026-07-20", description: "Milk", lineTotal: 33, gst: 0, isCapital: false, accountCode: "400" },
+      { expenseId: "e1", expenseNumber: "E-1", invoiceNumber: null, contactName: "Equipment Co", invoiceDate: "2026-07-20", dueDate: "2026-07-20", description: "Oven", lineTotal: 8800, gst: 800, isCapital: true, accountCode: "700" },
+      { expenseId: "e1", expenseNumber: "E-1", invoiceNumber: null, contactName: "Equipment Co", invoiceDate: "2026-07-20", dueDate: "2026-07-20", description: "Discount", lineTotal: -16.5, gst: -1.5, isCapital: false, accountCode: null },
+      { expenseId: "e1", expenseNumber: "E-1", invoiceNumber: null, contactName: "Equipment Co", invoiceDate: "2026-07-20", dueDate: "2026-07-20", description: "Milk", lineTotal: 33, gst: 0, isCapital: false, accountCode: "400" },
     ];
     const summary = summariseGst(expenses, lines.map((x) => ({ expenseId: "e1", lineTotal: x.lineTotal, gst: x.gst, isCapital: x.isCapital, gstApportioned: false })));
     const [detail] = gstTables(summary, expenses, lines);

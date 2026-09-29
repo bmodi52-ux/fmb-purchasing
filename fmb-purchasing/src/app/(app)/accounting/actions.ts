@@ -10,6 +10,8 @@ import { todayIso } from "@/lib/periods-data";
 import { loadAccountingPeriod, loadLodgedPeriods, type Basis } from "@/lib/accounting-data";
 import { LOCK_COLUMNS, lodgementFromRow, lodgementSnapshot, outstandingAdjustments } from "@/lib/gst-lodgement";
 import { buildXeroBillsCsv, linesMissingAccountCodes } from "@/lib/xero-export";
+import { billHistory, billsOf, linesToExport } from "@/lib/xero-export-log";
+import { loadPriorBills, recordExport } from "@/lib/xero-export-log-data";
 import { reportError } from "@/lib/errors";
 
 async function requireAccounting(action: ActionKey = "manage") {
@@ -19,19 +21,59 @@ async function requireAccounting(action: ActionKey = "manage") {
   return user;
 }
 
-/** The Xero bills file for a period (#38). */
+/**
+ * The Xero bills file for a period (#38), recorded as it is handed over
+ * (0087). With `newOnly`, bills an earlier file already held are left out, so
+ * importing this one doesn't add them to Xero a second time.
+ */
 export async function exportXeroBills(
   periodCode: string,
-  basis: Basis
-): Promise<{ filename: string; content: string; rows: number; missingAccountCodes: number }> {
-  await requireAccounting("export");
+  basis: Basis,
+  newOnly = false
+): Promise<{
+  filename: string;
+  content: string;
+  rows: number;
+  bills: number;
+  missingAccountCodes: number;
+  /** Bills in the file that an earlier file held too. */
+  sentBefore: number;
+  /** Of those, how many have changed since — to correct in Xero by hand. */
+  changedSince: number;
+  /** Bills left out because an earlier file held them. */
+  leftOut: number;
+}> {
+  const user = await requireAccounting("export");
   const period = parsePeriod(periodCode, todayIso());
-  const { xeroLines } = await loadAccountingPeriod(createAdminClient(), period, basis);
+  const admin = createAdminClient();
+  const { xeroLines } = await loadAccountingPeriod(admin, period, basis);
+
+  const all = billsOf(xeroLines);
+  const history = billHistory(all, await loadPriorBills(admin, all.map((b) => b.expenseId)));
+  const lines = linesToExport(xeroLines, history, newOnly);
+  const bills = billsOf(lines);
+  const included = new Set(bills.map((b) => b.expenseId));
+  const sent = history.sent.filter((b) => included.has(b.expenseId));
+  const missingAccountCodes = linesMissingAccountCodes(lines);
+
+  if (bills.length > 0) {
+    try {
+      await recordExport(admin, { userId: user.id, period, basis, newOnly, bills, lineCount: lines.length, missingAccountCodes });
+    } catch (e) {
+      await reportError({ source: "xero-export", error: e instanceof Error ? e.message : String(e), userId: user.id });
+      throw new Error("The file couldn't be recorded, so it wasn't made. Try again.");
+    }
+  }
+
   return {
-    filename: `xero-bills-${period.code}-${basis}.csv`,
-    content: buildXeroBillsCsv(xeroLines),
-    rows: xeroLines.length,
-    missingAccountCodes: linesMissingAccountCodes(xeroLines),
+    filename: `xero-bills-${period.code}-${basis}${newOnly ? "-new" : ""}.csv`,
+    content: buildXeroBillsCsv(lines),
+    rows: lines.length,
+    bills: bills.length,
+    missingAccountCodes,
+    sentBefore: sent.length,
+    changedSince: history.sent.filter((b) => b.changed).length,
+    leftOut: newOnly ? history.sent.length : 0,
   };
 }
 

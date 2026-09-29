@@ -77,6 +77,7 @@ describe("buildXeroBillsCsv", () => {
   test("one row per line, Australian dates, quoted where needed", () => {
     const csv = buildXeroBillsCsv([
       {
+        expenseId: "e12",
         expenseNumber: "E-0012",
         invoiceNumber: "INV, 7",
         contactName: "Taj Mart",

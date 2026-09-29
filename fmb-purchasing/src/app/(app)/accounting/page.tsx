@@ -15,6 +15,8 @@ import { DownloadLinks } from "@/components/download-links";
 import { SubmitButton } from "@/components/submit-button";
 import { lockPeriod, setCategoryAccountCode, unlockPeriod } from "./actions";
 import { XeroExportButton } from "./xero-export-button";
+import { billHistory, billsOf } from "@/lib/xero-export-log";
+import { loadPriorBills, loadRecentExports } from "@/lib/xero-export-log-data";
 import { AutosaveInput } from "@/components/autosave-input";
 
 export const metadata = { title: "Accounting" };
@@ -45,12 +47,19 @@ export default async function AccountingPage({
   const basis: Basis = params.basis === "paid" ? "paid" : "receipt";
 
   const admin = createAdminClient();
-  const [{ gstExpenses, gstLines }, earliest, { data: categoryRows }, { data: locks }] = await Promise.all([
-    loadAccountingPeriod(admin, period, basis),
-    earliestExpenseDate(admin),
-    admin.from("categories").select("id, name, parent_category_id, account_code").order("sort_order"),
-    admin.from("locked_periods").select(LOCK_COLUMNS).order("start_date", { ascending: false }),
-  ]);
+  const [{ gstExpenses, gstLines, xeroLines }, earliest, { data: categoryRows }, { data: locks }, recentExports] =
+    await Promise.all([
+      loadAccountingPeriod(admin, period, basis),
+      earliestExpenseDate(admin),
+      admin.from("categories").select("id, name, parent_category_id, account_code").order("sort_order"),
+      admin.from("locked_periods").select(LOCK_COLUMNS).order("start_date", { ascending: false }),
+      loadRecentExports(admin, period),
+    ]);
+
+  // Which of this period's bills an earlier Xero file already held (0087).
+  const bills = billsOf(xeroLines);
+  const xeroHistory = billHistory(bills, await loadPriorBills(admin, bills.map((b) => b.expenseId)));
+  const lastSent = xeroHistory.sent.map((b) => b.lastExportedAt).sort().at(-1) ?? null;
 
   const gst = summariseGst(gstExpenses, gstLines);
   const labels = categoryLabelsById(categoryRows ?? []);
@@ -242,7 +251,45 @@ export default async function AccountingPage({
             live connection to Xero is planned once how purchases reach Xero today is confirmed.
           </p>
         </div>
-        <XeroExportButton period={period.code} basis={basis} />
+        {xeroHistory.sent.length > 0 && (
+          <p className="max-w-2xl text-xs text-ink/70">
+            {xeroHistory.sent.length} of the {bills.length} bills in this period went in an earlier file
+            {lastSent ? `, the latest downloaded ${formatDateTime(lastSent)}` : ""}. Importing them again would add them
+            to Xero twice.
+            {xeroHistory.sent.some((b) => b.changed) && (
+              <span className="text-danger">
+                {" "}
+                {xeroHistory.sent.filter((b) => b.changed).length} of them have changed since (
+                {xeroHistory.sent
+                  .filter((b) => b.changed)
+                  .slice(0, 5)
+                  .map((b) => b.expenseNumber ?? "an expense")
+                  .join(", ")}
+                ) — correct those in Xero by hand.
+              </span>
+            )}
+          </p>
+        )}
+        <XeroExportButton
+          period={period.code}
+          basis={basis}
+          sentBefore={xeroHistory.sent.length}
+          fresh={xeroHistory.fresh.length}
+        />
+        {recentExports.length > 0 && (
+          <div className="max-w-2xl">
+            <p className="text-xs text-ink/55">Files downloaded for this period</p>
+            <ul className="mt-1 flex flex-col gap-0.5 text-xs text-ink/70">
+              {recentExports.map((x) => (
+                <li key={x.exportedAt}>
+                  {formatDateTime(x.exportedAt)} · {x.by} · {x.periodLabel},{" "}
+                  {x.basis === "paid" ? "by payment date" : "by receipt date"}
+                  {x.newOnly ? ", new bills only" : ""} · {x.bills} {x.bills === 1 ? "bill" : "bills"}, {money(x.total)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section className="flex flex-col gap-3">
