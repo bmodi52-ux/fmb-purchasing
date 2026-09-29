@@ -5,7 +5,7 @@
  * can never disagree with what Reports would show for the same filters.
  */
 
-import { inPeriod, parsePeriod } from "@/lib/periods";
+import { inPeriod, monthCalendarFor, parsePeriod } from "@/lib/periods";
 import {
   applyFilters,
   expenseDate,
@@ -119,10 +119,12 @@ export function computeWidgetData(
   today: string
 ): WidgetData {
   const slice = sliceFor(config, raw, today);
+  // A widget on a Hijri year groups by Hijri month, as Reports does.
+  const calendar = monthCalendarFor(parsePeriod(widgetPeriodCode(config), today));
 
   switch (kind) {
     case "spend-over-time":
-      return { kind, monthly: byMonth(slice) };
+      return { kind, monthly: byMonth(slice, calendar) };
 
     case "status-mix":
       return { kind, statusMix: byStatus(slice) };
@@ -141,13 +143,13 @@ export function computeWidgetData(
 
     case "breakdown-over-time": {
       const dimension = config.dimension ?? "category";
-      return { kind, breakdown: byMonthBreakdown(slice, dimension), dimension };
+      return { kind, breakdown: byMonthBreakdown(slice, dimension, 6, calendar), dimension };
     }
 
     case "compare-chart":
     case "compare-table": {
       const dimension = config.compareBy ?? "item";
-      const comparison = compare(slice, dimension, config.compareSubjectIds ?? [], MAX_COMPARE_SUBJECTS);
+      const comparison = compare(slice, dimension, config.compareSubjectIds ?? [], MAX_COMPARE_SUBJECTS, calendar);
       return { kind, comparison, dimension };
     }
 

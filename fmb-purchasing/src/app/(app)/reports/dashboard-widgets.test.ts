@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { computeWidgetData, type WidgetConfig } from "./dashboard-widgets.ts";
+import { hijriMonthOf } from "@/lib/periods";
 import type { ExpenseRecord, LineRecord } from "@/lib/reporting/aggregate.ts";
 import type { Ledger, PaidCostRow } from "@/lib/reporting/ledger-rows.ts";
 
@@ -153,9 +154,19 @@ describe("computeWidgetData", () => {
     if (data.kind !== "spend-over-time") return;
     // Only e1 (May) and e2 (July) belong to fy 1447 — e-old (fy 1446) must
     // not contribute a third bucket even though its date also falls in May.
+    // A Hijri year's widget groups by Hijri month, as Reports does.
     assert.deepEqual(
       data.monthly.map((m) => m.key),
-      ["2026-05", "2026-07"]
+      [hijriMonthOf("2026-05-05").key, hijriMonthOf("2026-07-20").key]
+    );
+  });
+
+  test("a widget on a financial year keeps Gregorian months", () => {
+    const data = computeWidgetData("spend-over-time", { ...BASE_CONFIG, fy: undefined, period: "au2026" }, raw, TODAY);
+    assert.ok(data.kind === "spend-over-time");
+    assert.deepEqual(
+      data.monthly.map((m) => m.key),
+      ["2026-07"]
     );
   });
 

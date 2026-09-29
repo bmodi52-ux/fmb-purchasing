@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { computeSpendReport } from "./spend-report.ts";
+import { computeSpendReport, forScreen, TRANSACTIONS_ON_SCREEN } from "./spend-report.ts";
 import {
   applyFilters,
   byCategory,
@@ -129,5 +129,46 @@ describe("computeSpendReport", () => {
       previousLabel: "FY 2025–26",
     });
     assert.equal(r.before, null);
+  });
+});
+
+describe("Transactions", () => {
+  test("every line in the slice, newest first, adding up to the headline", () => {
+    const r = reportFor({ section: "transactions" });
+    assert.ok(r.section.key === "transactions");
+    assert.equal(r.section.total, lines.length);
+    assert.deepEqual(r.section.rows.map((x) => x.date), ["2026-08-20", "2026-08-10", "2026-08-10", "2026-07-03"]);
+    assert.equal(Math.round(r.section.rows.reduce((s, x) => s + x.amount, 0) * 100) / 100, r.now.spend);
+  });
+
+  test("a filter narrows the list as it narrows the figures", () => {
+    const meatOnly = applyFilters(expenses, lines, { ...NO_FILTERS, categoryIds: ["meat"] });
+    const r = computeSpendReport({
+      current: meatOnly,
+      previous: null,
+      unitCosts,
+      query: queryFromSearchParams({ section: "transactions", category: "meat" }, "au2026"),
+      periodLabel: "FY",
+      previousLabel: "FY-1",
+    });
+    assert.ok(r.section.key === "transactions");
+    assert.deepEqual(new Set(r.section.rows.map((x) => x.category)), new Set(["meat"]));
+  });
+
+  test("the page gets the newest thousand, and is told how many there are", () => {
+    const many = Array.from({ length: TRANSACTIONS_ON_SCREEN + 5 }, (_, i) => line("e1", "meat", "mutton", 1 + i));
+    const r = computeSpendReport({
+      current: applyFilters(expenses, many, NO_FILTERS),
+      previous: null,
+      unitCosts,
+      query: queryFromSearchParams({ section: "transactions" }, "au2026"),
+      periodLabel: "FY",
+      previousLabel: "FY-1",
+    });
+    const screen = forScreen(r);
+    assert.ok(screen.section.key === "transactions" && r.section.key === "transactions");
+    assert.equal(screen.section.rows.length, TRANSACTIONS_ON_SCREEN);
+    assert.equal(screen.section.total, TRANSACTIONS_ON_SCREEN + 5);
+    assert.equal(r.section.rows.length, TRANSACTIONS_ON_SCREEN + 5, "the download keeps them all");
   });
 });

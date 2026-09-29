@@ -122,7 +122,7 @@ const slice = applyFilters(
 );
 
 describe("Reports download", () => {
-  for (const section of ["overview", "breakdown", "compare"]) {
+  for (const section of ["overview", "breakdown", "compare", "transactions"]) {
     test(`${section}: the main table's total is the page's total spend`, () => {
       const report = computeSpendReport({
         current: slice,

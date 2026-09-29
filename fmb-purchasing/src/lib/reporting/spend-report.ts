@@ -28,6 +28,7 @@ import {
   type Dimension,
   type Insight,
   type MonthBreakdown,
+  type MonthCalendar,
   type Slice,
   type Totals,
 } from "./aggregate.ts";
@@ -47,7 +48,67 @@ export type SpendSection =
       /** Per-item average paid per unit, for item cards. */
       unitCostByItem: Record<string, AverageUnitCost>;
     }
-  | { key: "unit-costs"; rows: PerUnitRow[] };
+  | { key: "unit-costs"; rows: PerUnitRow[] }
+  | {
+      key: "transactions";
+      /** Newest first. The page may show only the first of them; the download has all. */
+      rows: TransactionRow[];
+      /** How many there are in all, before any is left off the page. */
+      total: number;
+    };
+
+/**
+ * One line behind the figures: every report on the page adds these up, so
+ * listing them is how any figure is traced to the receipts it came from.
+ */
+export type TransactionRow = {
+  expenseId: string;
+  entry: string | null;
+  date: string;
+  vendor: string;
+  /** The item, or what the receipt said when the line matched none. */
+  item: string;
+  category: string;
+  status: string;
+  amount: number;
+  gst: number;
+};
+
+/** How many transactions the page lists; the download has them all. */
+export const TRANSACTIONS_ON_SCREEN = 1000;
+
+/** The report as the page is sent it: a long transaction list cut to what a page can hold. */
+export function forScreen(report: SpendReport): SpendReport {
+  const s = report.section;
+  if (s.key !== "transactions" || s.rows.length <= TRANSACTIONS_ON_SCREEN) return report;
+  return { ...report, section: { ...s, rows: s.rows.slice(0, TRANSACTIONS_ON_SCREEN) } };
+}
+
+const STATUS_WORD: Record<string, string> = { submitted: "Awaiting review", approved: "Approved", paid: "Paid" };
+
+/** A slice's lines as transactions, newest first. */
+export function transactionRows(slice: Slice): TransactionRow[] {
+  const expenseById = new Map(slice.expenses.map((e) => [e.id, e]));
+  return slice.lines
+    .flatMap((l) => {
+      const e = expenseById.get(l.expenseId);
+      if (!e) return [];
+      return [
+        {
+          expenseId: e.id,
+          entry: e.expenseNumber,
+          date: e.reportDate,
+          vendor: e.vendorName,
+          item: l.itemName,
+          category: l.categoryName,
+          status: STATUS_WORD[e.status] ?? e.status,
+          amount: l.lineTotal,
+          gst: l.gst,
+        },
+      ];
+    })
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.entry ?? "").localeCompare(a.entry ?? ""));
+}
 
 export type SpendReport = {
   now: Totals;
@@ -56,6 +117,8 @@ export type SpendReport = {
   monthly: Bucket[];
   insights: Insight[];
   section: SpendSection;
+  /** Which months `monthly` and the sections' months are. */
+  calendar: MonthCalendar;
 };
 
 export function computeSpendReport({
@@ -65,6 +128,7 @@ export function computeSpendReport({
   query,
   periodLabel,
   previousLabel,
+  calendar = "gregorian",
 }: {
   current: Slice;
   previous: Slice | null;
@@ -73,6 +137,8 @@ export function computeSpendReport({
   query: ReportQuery;
   periodLabel: string;
   previousLabel: string;
+  /** Which months to group by — Hijri for a Hijri period (lib/periods monthCalendarFor). */
+  calendar?: MonthCalendar;
 }): SpendReport {
   // Only items still in the slice: a category or item filter has to narrow
   // the unit costs too, or they would contradict everything above them.
@@ -82,9 +148,10 @@ export function computeSpendReport({
   return {
     now: totals(current),
     before: previous ? totals(previous) : null,
-    monthly: byMonth(current),
+    monthly: byMonth(current, calendar),
     insights: insights(current, previous, periodLabel, previousLabel),
-    section: section(current, unitCosts, query, keepItem),
+    section: section(current, unitCosts, query, keepItem, calendar),
+    calendar,
   };
 }
 
@@ -92,7 +159,8 @@ function section(
   current: Slice,
   unitCosts: PaidCostRow[],
   query: ReportQuery,
-  keepItem: (itemId: string) => boolean
+  keepItem: (itemId: string) => boolean,
+  calendar: MonthCalendar
 ): SpendSection {
   switch (query.section) {
     case "overview":
@@ -102,7 +170,7 @@ function section(
       const dimension = query.breakdownBy;
       const ranked =
         dimension === "category" ? byCategory(current) : dimension === "vendor" ? byVendor(current) : byItem(current);
-      return { key: "breakdown", dimension, ranked, overTime: byMonthBreakdown(current, dimension) };
+      return { key: "breakdown", dimension, ranked, overTime: byMonthBreakdown(current, dimension, 6, calendar) };
     }
 
     case "compare": {
@@ -110,7 +178,7 @@ function section(
       // Subjects come from the filter menus, so there is one place to pick
       // things rather than a parallel selector that could disagree with them.
       const chosen = dimension === "item" ? query.items : dimension === "category" ? query.categories : query.vendors;
-      const comparison = compare(current, dimension, chosen, MAX_COMPARE_SUBJECTS);
+      const comparison = compare(current, dimension, chosen, MAX_COMPARE_SUBJECTS, calendar);
       const unitCostByItem =
         dimension === "item"
           ? Object.fromEntries(
@@ -122,5 +190,10 @@ function section(
 
     case "unit-costs":
       return { key: "unit-costs", rows: perUnitRows(unitCosts, current, keepItem) };
+
+    case "transactions": {
+      const rows = transactionRows(current);
+      return { key: "transactions", rows, total: rows.length };
+    }
   }
 }

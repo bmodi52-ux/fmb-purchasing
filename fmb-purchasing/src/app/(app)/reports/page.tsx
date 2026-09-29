@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
+import { forScreen } from "@/lib/reporting/spend-report";
 import { loadSpendView } from "@/lib/reporting/spend-view";
 import { loadSavedViews } from "@/lib/saved-report-views";
 import { ReportsView } from "./reports-view";
@@ -33,7 +34,7 @@ export default async function ReportsPage({
   return (
     <ReportsView
       query={view.query}
-      report={view.report}
+      report={forScreen(view.report)}
       basisLabel={view.basisLabel}
       summary={view.summary}
       today={todayIso()}

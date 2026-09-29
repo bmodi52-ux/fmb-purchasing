@@ -19,6 +19,8 @@ import {
   type ExpenseRecord,
   type LineRecord,
 } from "./aggregate.ts";
+import { hijriToGregorian } from "@/lib/hijri/hijri";
+import { isoFromLocal, monthCalendarFor, parsePeriod } from "@/lib/periods";
 
 /* ------------------------------------------------------------------ */
 /* Fixtures — shaped like the real data: lines sum exactly to totals   */
@@ -563,5 +565,61 @@ describe("insights", () => {
   test("flags what is still awaiting review", () => {
     const found = insights(all, null, "this year", "last year");
     assert.ok(found.some((i) => i.text.includes("awaiting review")));
+  });
+});
+
+describe("months in the period's calendar", () => {
+  const day = (year: number, month: number, d: number) => isoFromLocal(hijriToGregorian({ year, month, day: d }));
+  const ramadanFirst = day(1447, 9, 1);
+  const ramadanTwentieth = day(1447, 9, 20);
+  const zilhaj = day(1447, 12, 5);
+  const muharram = day(1448, 1, 5);
+
+  const at = (id: string, iso: string, amount: number) => ({
+    expense: { ...expenses[0], id, receiptDate: iso, reportDate: iso, total: amount },
+    line: { ...lines[0], expenseId: id, lineTotal: amount },
+  });
+  const rows = [at("r1", ramadanFirst, 100), at("r2", ramadanTwentieth, 50), at("z", zilhaj, 10), at("m", muharram, 1)];
+  const slice = applyFilters(rows.map((r) => r.expense), rows.map((r) => r.line), NO_FILTERS);
+
+  test("Ramadan is one bar, though it spans two Gregorian months", () => {
+    assert.notEqual(ramadanFirst.slice(0, 7), ramadanTwentieth.slice(0, 7), "the fixture crosses a Gregorian month");
+    const hijri = byMonth(slice, "hijri");
+    assert.deepEqual(
+      hijri.map((m) => [m.label, m.spend, m.count]),
+      [
+        ["Ramadan 1447", 150, 2],
+        ["Zilhaj 1447", 10, 1],
+        ["Muharram 1448", 1, 1],
+      ]
+    );
+  });
+
+  test("Hijri months stay in date order across the turn of the Hijri year", () => {
+    const keys = byMonth(slice, "hijri").map((m) => m.key);
+    assert.deepEqual(keys, [...keys].sort());
+    assert.deepEqual(
+      byMonthBreakdown(slice, "category", 6, "hijri").months.map((m) => m.label),
+      ["Ramadan 1447", "Zilhaj 1447", "Muharram 1448"]
+    );
+    assert.deepEqual(
+      compare(slice, "category", [], 4, "hijri").months.map((m) => m.label),
+      ["Ramadan 1447", "Zilhaj 1447", "Muharram 1448"]
+    );
+  });
+
+  test("Gregorian stays the default", () => {
+    assert.equal(byMonth(slice)[0].key, ramadanFirst.slice(0, 7));
+  });
+
+  test("a Hijri period groups by Hijri month; any other by Gregorian", () => {
+    const T = "2026-09-11";
+    assert.equal(monthCalendarFor(parsePeriod("h1448", T)), "hijri");
+    assert.equal(monthCalendarFor(parsePeriod("h1448-q2", T)), "hijri");
+    assert.equal(monthCalendarFor(parsePeriod("h-current", T)), "hijri");
+    assert.equal(monthCalendarFor(parsePeriod("h-ytd", T)), "hijri");
+    assert.equal(monthCalendarFor(parsePeriod("au2026", T)), "gregorian");
+    assert.equal(monthCalendarFor(parsePeriod("last12", T)), "gregorian");
+    assert.equal(monthCalendarFor(parsePeriod("r2026-01-01_2026-03-31", T)), "gregorian");
   });
 });
