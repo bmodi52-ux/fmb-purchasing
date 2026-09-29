@@ -49,6 +49,26 @@ describe("summariseGst — #38", () => {
     assert.equal(xeroTaxType({ gst: 200, isCapital: true }), "CAPEXINPUT");
     assert.equal(xeroTaxType({ gst: 0, isCapital: true }), "EXEMPTCAPITAL");
   });
+
+  test("a discount off taxable goods stays taxable, so Xero takes its GST off too", () => {
+    assert.equal(xeroTaxType({ gst: -1.5, isCapital: false }), "INPUT");
+    assert.equal(xeroTaxType({ gst: -20, isCapital: true }), "CAPEXINPUT");
+  });
+
+  test("the GST Xero will work out from the file matches 1B", () => {
+    // Tax inclusive, as the import is told: Xero takes a taxable line's GST
+    // as one eleventh of it, and none from an exempt one.
+    const lines = [
+      { expenseId: "e1", lineTotal: 110, gst: 10, isCapital: false, gstApportioned: false },
+      { expenseId: "e1", lineTotal: -16.5, gst: -1.5, isCapital: false, gstApportioned: false },
+      { expenseId: "e1", lineTotal: 40, gst: 0, isCapital: false, gstApportioned: false },
+    ];
+    const xeroGst = lines.reduce(
+      (sum, l) => sum + (xeroTaxType(l) === "INPUT" ? Math.round((l.lineTotal / 11) * 100) / 100 : 0),
+      0
+    );
+    assert.equal(xeroGst, summariseGst([expense({ total: 133.5, gst: 8.5 })], lines).oneB);
+  });
 });
 
 describe("buildXeroBillsCsv", () => {

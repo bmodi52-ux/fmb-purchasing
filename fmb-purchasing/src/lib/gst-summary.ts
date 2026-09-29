@@ -99,8 +99,14 @@ export function summariseGst(expenses: GstExpense[], lines: GstLine[]): GstSumma
 /**
  * The Xero tax type for a line, from what the line already knows: whether GST
  * applies and whether it is capital. These are Xero's Australian codes.
+ *
+ * Any GST at all makes a line taxable, whichever its sign. A discount off
+ * taxable goods carries negative GST, and coding it GST-free would leave Xero
+ * claiming GST on the full price while 1B here counts the discount — the bill
+ * and the return would disagree by exactly the discount's GST.
  */
 export function xeroTaxType(line: Pick<GstLine, "gst" | "isCapital">): string {
-  if (line.isCapital) return line.gst > 0 ? "CAPEXINPUT" : "EXEMPTCAPITAL";
-  return line.gst > 0 ? "INPUT" : "EXEMPTEXPENSES";
+  const taxable = line.gst !== 0;
+  if (line.isCapital) return taxable ? "CAPEXINPUT" : "EXEMPTCAPITAL";
+  return taxable ? "INPUT" : "EXEMPTEXPENSES";
 }
