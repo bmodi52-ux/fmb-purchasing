@@ -6,7 +6,7 @@ import { LINE_OFFER } from "@/lib/supabase/relationships";
 import { allRowsForIds } from "@/lib/supabase/all-rows";
 import { getColumnPreference } from "@/lib/column-prefs";
 import { ALL_TIME, parsePeriod } from "@/lib/periods";
-import { earliestExpenseDate, expenseDateFilter, todayIso } from "@/lib/periods-data";
+import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { PeriodPicker } from "@/components/period-picker";
 import { categoryLabelsById } from "@/lib/categories";
@@ -120,7 +120,7 @@ export default async function AllExpensesPage({
       .order("created_at", { ascending: false })
       .order("id")
       .range(from, Math.min(from + PAGE, ALL_YEARS_CAP) - 1);
-    if (!showAllYears) query = query.or(expenseDateFilter(period.start, period.end));
+    if (!showAllYears) query = query.gte("report_date", period.start).lte("report_date", period.end);
     const { data, count: total } = await query;
     expenses.push(...((data ?? []) as ExpenseQueryRow[]));
     count = total ?? expenses.length;

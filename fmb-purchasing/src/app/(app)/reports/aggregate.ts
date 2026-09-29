@@ -21,6 +21,12 @@ export type ExpenseRecord = {
   /** ISO date. Null when the receipt carried no date. */
   receiptDate: string | null;
   createdAt: string;
+  /**
+   * The day this expense counts on, as the database stores it (0083): the
+   * receipt date, or the day it was submitted in Sydney. Read, never worked
+   * out here, so a report and the lock on a lodged period agree on it.
+   */
+  reportDate: string;
   total: number;
   gst: number;
 };
@@ -72,12 +78,17 @@ export const NO_FILTERS: Filters = {
  * The date an expense counts against.
  *
  * Prefers the date on the receipt, because that is when the money was spent.
- * Falls back to submission for the expenses that arrived without one —
- * roughly a third of them today — so nothing silently drops out of a
- * time-based chart.
+ * Falls back to the day of submission, in Sydney, for the expenses that
+ * arrived without one, so nothing silently drops out of a time-based chart.
+ *
+ * That rule lives in the database (expenses.report_date, 0083), which is what
+ * a period's expenses are fetched by. It used to be worked out again here from
+ * the UTC timestamp, which put a receipt submitted undated before mid-morning
+ * on the 1st in the previous month — a different day from the one the
+ * lodged-period lock used.
  */
 export function expenseDate(e: ExpenseRecord): string {
-  return e.receiptDate ?? e.createdAt.slice(0, 10);
+  return e.reportDate;
 }
 
 /** "2026-05" — the bucket key for month grouping. */

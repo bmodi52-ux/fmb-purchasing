@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { allRows, allRowsForIds } from "@/lib/supabase/all-rows";
-import { expenseDateFilter } from "@/lib/periods-data";
 import type { GstExpense, GstLine } from "@/lib/gst-summary";
 import type { XeroBillLine } from "@/lib/xero-export";
 
@@ -23,7 +22,7 @@ type ExpenseRow = {
   vendor_name_raw: string | null;
   invoice_number: string | null;
   receipt_date: string | null;
-  created_at: string;
+  report_date: string;
   decided_at: string | null;
   payment_date: string | null;
   total: number;
@@ -49,13 +48,13 @@ export async function loadAccountingPeriod(
   const expenses = await allRows<ExpenseRow>((from, to) => {
     let q = admin
       .from("expenses")
-      .select("id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, created_at, decided_at, payment_date, total, gst_amount")
+      .select("id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, report_date, decided_at, payment_date, total, gst_amount")
       .order("id")
       .range(from, to);
     q =
       basis === "paid"
         ? q.eq("status", "paid").gte("payment_date", range.start).lte("payment_date", range.end)
-        : q.in("status", ["approved", "paid"]).or(expenseDateFilter(range.start, range.end));
+        : q.in("status", ["approved", "paid"]).gte("report_date", range.start).lte("report_date", range.end);
     return q;
   });
   const ids = expenses.map((e) => e.id);
@@ -85,7 +84,7 @@ export async function loadAccountingPeriod(
   const accountCode = new Map((categories ?? []).map((c) => [c.id as string, (c.account_code as string | null) ?? null]));
 
   const gstExpenses: GstExpense[] = expenses.map((e) => {
-    const date = e.receipt_date ?? e.created_at.slice(0, 10);
+    const date = e.report_date;
     const vendor = e.vendor_id ? vendorById.get(e.vendor_id) : undefined;
     return {
       id: e.id,
@@ -113,7 +112,7 @@ export async function loadAccountingPeriod(
   const expenseById = new Map(expenses.map((e) => [e.id, e]));
   const xeroLines: XeroBillLine[] = lines.map((l) => {
     const e = expenseById.get(l.expense_id)!;
-    const date = e.receipt_date ?? e.created_at.slice(0, 10);
+    const date = e.report_date;
     return {
       expenseNumber: e.expense_number,
       invoiceNumber: e.invoice_number,

@@ -16,7 +16,7 @@ type LineWithExpense = {
   expenses: {
     expense_number: string | null;
     receipt_date: string | null;
-    created_at: string;
+    report_date: string;
     status: string;
     vendor_name_raw: string | null;
     invoice_number: string | null;
@@ -53,7 +53,7 @@ export async function loadPurchaseRows(
       .from("expense_line_items")
       .select(
         "id, expense_id, pricelist_item_id, description_raw, quantity, unit_price, line_total, " +
-          "expenses!inner(expense_number, receipt_date, created_at, status, vendor_name_raw, invoice_number, submitted_by)"
+          "expenses!inner(expense_number, receipt_date, report_date, status, vendor_name_raw, invoice_number, submitted_by)"
       )
       .in("pricelist_item_id", offerIds)
       .neq("expenses.status", "withdrawn"),
@@ -98,7 +98,7 @@ export async function loadPurchaseRows(
         expenseNumber: e.expense_number,
         canOpen: canOpenExpense(l.expense_id, e.submitted_by),
         hasReceipt: withFiles.has(l.expense_id),
-        receiptDate: e.receipt_date ?? e.created_at.slice(0, 10),
+        receiptDate: e.report_date,
         vendorName: e.vendor_name_raw ?? "—",
         invoiceNumber: e.invoice_number,
         description: l.description_raw ?? "",
