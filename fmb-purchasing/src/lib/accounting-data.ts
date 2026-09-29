@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { allRows } from "@/lib/supabase/all-rows";
+import { allRows, allRowsForIds } from "@/lib/supabase/all-rows";
 import { expenseDateFilter } from "@/lib/periods-data";
 import type { GstExpense, GstLine } from "@/lib/gst-summary";
 import type { XeroBillLine } from "@/lib/xero-export";
@@ -41,17 +41,6 @@ type LineRow = {
   is_capital: boolean;
 };
 
-const CHUNK = 150;
-
-async function chunked<T>(ids: string[], page: (ids: string[], from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>) {
-  const out: T[] = [];
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const slice = ids.slice(i, i + CHUNK);
-    out.push(...(await allRows<T>((from, to) => page(slice, from, to))));
-  }
-  return out;
-}
-
 export async function loadAccountingPeriod(
   admin: SupabaseClient,
   range: { start: string; end: string },
@@ -73,7 +62,7 @@ export async function loadAccountingPeriod(
 
   const vendorIds = [...new Set(expenses.map((e) => e.vendor_id).filter(Boolean) as string[])];
   const [lines, attachments, vendors, { data: categories }, { data: locks }] = await Promise.all([
-    chunked<LineRow>(ids, (slice, from, to) =>
+    allRowsForIds<LineRow>(ids, (slice, from, to) =>
       admin
         .from("expense_line_items")
         .select("id, expense_id, category_id, description_raw, line_total, line_gst, gst_applicable, is_capital")
@@ -81,10 +70,10 @@ export async function loadAccountingPeriod(
         .order("id")
         .range(from, to)
     ),
-    chunked<{ expense_id: string; id: string }>(ids, (slice, from, to) =>
+    allRowsForIds<{ expense_id: string; id: string }>(ids, (slice, from, to) =>
       admin.from("expense_attachments").select("id, expense_id").in("expense_id", slice).order("id").range(from, to)
     ),
-    chunked<{ id: string; name: string; abn: string | null; gst_registered: boolean | null }>(vendorIds, (slice, from, to) =>
+    allRowsForIds<{ id: string; name: string; abn: string | null; gst_registered: boolean | null }>(vendorIds, (slice, from, to) =>
       admin.from("vendors").select("id, name, abn, gst_registered").in("id", slice).order("id").range(from, to)
     ),
     admin.from("categories").select("id, name, parent_category_id, account_code"),
