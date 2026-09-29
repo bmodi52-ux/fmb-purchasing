@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { liveAllocations } from "@/lib/live-allocations";
 import {
   cheapestBuy,
   progressOf,
@@ -93,8 +94,8 @@ export async function loadProcurement(
   const ownerIds = [...new Set(rows.map((r) => r.owner_id).filter(Boolean) as string[])];
 
   const vendorIds = [...new Set(rows.map((r) => r.vendor_id).filter(Boolean) as string[])];
-  const [{ data: allocations }, { data: packs }, { data: owners }, { data: vendors }, { data: contacts }] = await Promise.all([
-    admin.from("expense_line_allocations").select("menu_requirement_id, quantity, amount").in("menu_requirement_id", ids),
+  const [allocations, { data: packs }, { data: owners }, { data: vendors }, { data: contacts }] = await Promise.all([
+    liveAllocations(admin, ids),
     admin
       .from("item_pack_sizes")
       .select("id, item_id, label, total_quantity, inner_quantity, inner_unit_id, pack_count, sold_loose, packaging")
@@ -120,12 +121,9 @@ export async function loadProcurement(
   }
 
   const allocationsBy = new Map<string, { quantity: number; amount: number }[]>();
-  for (const a of allocations ?? []) {
-    const key = a.menu_requirement_id as string;
-    allocationsBy.set(key, [
-      ...(allocationsBy.get(key) ?? []),
-      { quantity: Number(a.quantity), amount: Number(a.amount) },
-    ]);
+  for (const a of allocations) {
+    const key = a.menu_requirement_id;
+    allocationsBy.set(key, [...(allocationsBy.get(key) ?? []), { quantity: a.quantity, amount: a.amount }]);
   }
 
   // Loose packs are left out: something sold by weight needs no rounding, and
