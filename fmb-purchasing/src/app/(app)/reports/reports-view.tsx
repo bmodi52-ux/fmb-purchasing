@@ -44,19 +44,8 @@ import {
   seriesHue,
   formatMoney,
   formatCompact,
-  type LineSeriesData,
 } from "./charts";
-
-export type PerUnitRow = {
-  groupName: string;
-  vendorName: string;
-  receiptDate: string | null;
-  normalizedQuantity: number;
-  normalizedUnit: string;
-  perUnit: number;
-  /** What one pack — a box, a bag — cost. Null when bought loose, where it is the per-unit figure. */
-  perPack: number | null;
-};
+import { perUnitVendorSeries, type AverageUnitCost, type PerUnitRow } from "./unit-costs";
 
 /** Palette slot per stage, fixed so colour follows the stage and not its rank. */
 const STATUS_SLOT: Record<string, number> = {
@@ -109,20 +98,6 @@ function buildFilterSummary(
   return parts.join(" · ");
 }
 
-function perUnitVendorSeries(rows: PerUnitRow[]): LineSeriesData[] {
-  const byVendorName = new Map<string, PerUnitRow[]>();
-  for (const r of rows) {
-    if (!r.receiptDate) continue;
-    byVendorName.set(r.vendorName, [...(byVendorName.get(r.vendorName) ?? []), r]);
-  }
-  return [...byVendorName.entries()].map(([name, vendorRows]) => ({
-    name,
-    points: [...vendorRows]
-      .sort((a, b) => (a.receiptDate ?? "").localeCompare(b.receiptDate ?? ""))
-      .map((r) => ({ x: r.receiptDate!, y: r.perUnit })),
-  }));
-}
-
 export function ReportsView({
   query,
   today,
@@ -152,7 +127,7 @@ export function ReportsView({
   periodLabel: string;
   previousLabel: string;
   perUnitRows: PerUnitRow[];
-  unitCostByItem: Record<string, { average: number; unit: string }>;
+  unitCostByItem: Record<string, AverageUnitCost>;
   hasCategoryOrItemFilter: boolean;
   savedViews: SavedReportView[];
   userId: string;
@@ -578,7 +553,7 @@ function CompareSection({
   vendors: FilterOption[];
   categories: FilterOption[];
   items: FilterOption[];
-  unitCostByItem: Record<string, { average: number; unit: string }>;
+  unitCostByItem: Record<string, AverageUnitCost>;
 }) {
   const dimension = query.compareBy;
 
@@ -759,6 +734,7 @@ function UnitCostsSection({
     }
     return [...groups.entries()];
   }, [perUnitRows]);
+  const disputedCount = perUnitRows.filter((r) => r.disputed).length;
 
   return (
     <Panel
@@ -776,7 +752,8 @@ function UnitCostsSection({
                   quantity: r.normalizedQuantity,
                   unit: r.normalizedUnit,
                   per_pack_cost: r.perPack ?? "",
-                  per_unit_cost: r.perUnit,
+                  per_unit_cost: r.disputed ? "" : r.perUnit,
+                  pack_in_doubt: r.disputed ? "yes" : "",
                 }))
               )
           : undefined
@@ -807,6 +784,14 @@ function UnitCostsSection({
         </p>
       ) : (
         <div className="flex flex-col gap-6">
+          {disputedCount > 0 && (
+            <p className="text-xs text-ink/55">
+              {disputedCount} {disputedCount === 1 ? "purchase is" : "purchases are"} left out of the
+              trends and averages: the pack&rsquo;s contents and the receipt disagree by five times or
+              more, so the per-unit figure can&rsquo;t be trusted — the Pricelist leaves{" "}
+              {disputedCount === 1 ? "it" : "them"} out too. Marked &ldquo;pack in doubt&rdquo; below.
+            </p>
+          )}
           {grouped.map(([groupName, rows]) => {
             const series = perUnitVendorSeries(rows);
             const datedPoints = series.reduce((n, s) => n + s.points.length, 0);
@@ -818,8 +803,7 @@ function UnitCostsSection({
                     <LineChart series={series} valueFormat={(v) => `$${v.toFixed(2)}`} height={150} />
                   ) : (
                     <p className="text-xs text-ink/50">
-                      One purchase so far — a trend appears once there is something to compare it
-                      against.
+                      A trend appears once there are two dated purchases to compare.
                     </p>
                   )}
                   <div className="mt-2 overflow-x-auto">
@@ -847,7 +831,13 @@ function UnitCostsSection({
                               {r.perPack != null ? `$${r.perPack.toFixed(2)}` : "—"}
                             </td>
                             <td className="py-1 text-right tabular-nums tabular-nums">
-                              ${r.perUnit.toFixed(2)}
+                              {r.disputed ? (
+                                <span className="text-ink/45" title="The pack's contents and the receipt disagree by five times or more">
+                                  pack in doubt
+                                </span>
+                              ) : (
+                                `$${r.perUnit.toFixed(2)}`
+                              )}
                             </td>
                           </tr>
                         ))}

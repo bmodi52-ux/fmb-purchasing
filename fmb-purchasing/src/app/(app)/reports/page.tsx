@@ -14,7 +14,8 @@ import {
 } from "./aggregate";
 import { loadReportRawData, spanOf, withinRange } from "./data";
 import { loadSavedViews } from "@/lib/saved-report-views";
-import { ReportsView, type PerUnitRow } from "./reports-view";
+import { ReportsView } from "./reports-view";
+import { averageUnitCosts, perUnitRows as perUnitRowsFor } from "./unit-costs";
 import {
   SECTIONS,
   type ReportSection,
@@ -99,50 +100,16 @@ export default async function ReportsPage({
 
   /* ---------------- per-unit trends, scoped to the same slice ------------ */
 
-  const visibleExpenseIds = new Set(current.expenses.map((e) => e.id));
+  // Only items still in the slice: a category or item filter has to narrow
+  // this section too, or it would contradict everything above it.
   const visibleItemIds = new Set(current.lines.map((l) => l.itemId).filter(Boolean) as string[]);
-  const vendorNameByExpense = new Map(current.expenses.map((e) => [e.id, e.vendorName]));
+  const keepItem = (itemId: string) => visibleItemIds.has(itemId);
 
-  const perUnitRows: PerUnitRow[] = currentRaw.paidCosts
-    .filter((c) => visibleExpenseIds.has(c.expense_id))
-    // Only items still in the slice: a category or item filter has to narrow
-    // this section too, or it would contradict everything above it.
-    .filter((c) => visibleItemIds.has(c.item_id))
-    .map((c) => ({
-      groupName: c.item_name ?? "—",
-      vendorName: vendorNameByExpense.get(c.expense_id) ?? "—",
-      receiptDate: c.receipt_date ?? null,
-      normalizedQuantity: Number(c.base_quantity),
-      normalizedUnit: c.base_unit_code,
-      perUnit: Number(c.cost_per_base_unit),
-      // A loose line's pack is one unit, so its per-pack price is the per-unit one.
-      perPack: c.sold_loose ? null : Number(c.line_total) / Number(c.normalized_quantity),
-    }))
-    .sort(
-      (a, b) =>
-        a.groupName.localeCompare(b.groupName) ||
-        (a.receiptDate ?? "").localeCompare(b.receiptDate ?? "")
-    );
+  const perUnitRows = perUnitRowsFor(currentRaw.paidCosts, current, keepItem);
 
-  /* ---------------- average unit cost, for the Compare cards ------------- */
-
-  // Averaged across every purchase of the item in the slice, from the same
-  // view the Unit costs section reads — so a figure here and a figure there
-  // can never disagree.
-  const unitCostByItem = new Map<string, { average: number; unit: string }>();
-  {
-    const acc = new Map<string, { sum: number; n: number; unit: string }>();
-    for (const c of currentRaw.paidCosts) {
-      if (!visibleExpenseIds.has(c.expense_id) || !visibleItemIds.has(c.item_id)) continue;
-      const entry = acc.get(c.item_id) ?? { sum: 0, n: 0, unit: c.base_unit_code };
-      entry.sum += Number(c.cost_per_base_unit);
-      entry.n += 1;
-      acc.set(c.item_id, entry);
-    }
-    for (const [itemId, v] of acc) {
-      unitCostByItem.set(itemId, { average: v.sum / v.n, unit: v.unit });
-    }
-  }
+  // The Compare cards' average, from the same rows the Unit costs section
+  // reads, so a figure here and a figure there can never disagree.
+  const unitCostByItem = averageUnitCosts(currentRaw.paidCosts, current, keepItem);
 
   const section = (SECTIONS.some((s) => s.key === params.section)
     ? params.section

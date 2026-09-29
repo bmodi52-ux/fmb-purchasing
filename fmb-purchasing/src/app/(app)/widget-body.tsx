@@ -1,7 +1,7 @@
 "use client";
 
 import type { WidgetData } from "./reports/dashboard-widgets";
-import type { PerUnitRow } from "./reports/reports-view";
+import { perUnitVendorSeries, type PerUnitRow } from "./reports/unit-costs";
 import {
   HeroFigure,
   ColumnChart,
@@ -13,7 +13,6 @@ import {
   seriesHue,
   formatMoney,
   formatCompact,
-  type LineSeriesData,
 } from "./reports/charts";
 
 /** Palette slot per stage, fixed so colour follows the stage and not its rank — same mapping Reports uses. */
@@ -30,20 +29,6 @@ const STAT_LABEL: Record<string, string> = {
   averageExpense: "Average expense",
   gst: "GST",
 };
-
-function perUnitVendorSeries(rows: PerUnitRow[]): LineSeriesData[] {
-  const byVendorName = new Map<string, PerUnitRow[]>();
-  for (const r of rows) {
-    if (!r.receiptDate) continue;
-    byVendorName.set(r.vendorName, [...(byVendorName.get(r.vendorName) ?? []), r]);
-  }
-  return [...byVendorName.entries()].map(([name, vendorRows]) => ({
-    name,
-    points: [...vendorRows]
-      .sort((a, b) => (a.receiptDate ?? "").localeCompare(b.receiptDate ?? ""))
-      .map((r) => ({ x: r.receiptDate!, y: r.perUnit })),
-  }));
-}
 
 /** Renders whatever a saved (or previewed) widget's computed data calls for. */
 export function WidgetBody({ data }: { data: WidgetData }) {
@@ -261,7 +246,9 @@ function UnitCostTable({ rows }: { rows: PerUnitRow[] }) {
               <td className="py-1 pr-3 text-right tabular-nums text-ink/60 tabular-nums">
                 {r.perPack != null ? `$${r.perPack.toFixed(2)}` : "—"}
               </td>
-              <td className="py-1 text-right tabular-nums tabular-nums">${r.perUnit.toFixed(2)}</td>
+              <td className="py-1 text-right tabular-nums tabular-nums">
+                {r.disputed ? <span className="text-ink/45">pack in doubt</span> : `$${r.perUnit.toFixed(2)}`}
+              </td>
             </tr>
           ))}
         </tbody>
