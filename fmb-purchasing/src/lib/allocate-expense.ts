@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { liveAllocations } from "@/lib/live-allocations";
 import { proposeAllocations, type AllocatableLine, type OpenRequirement } from "@/lib/procurement";
 
 /**
@@ -77,14 +78,12 @@ export async function allocateExpenseToMenus(
   if (!requirementRows || requirementRows.length === 0) return 0;
 
   const ids = requirementRows.map((r) => r.id as string);
-  const { data: already } = await admin
-    .from("expense_line_allocations")
-    .select("menu_requirement_id, quantity")
-    .in("menu_requirement_id", ids);
+  // What's already covered — by receipts that still count. A declined
+  // receipt's allocation stays on record, but must not leave its replacement
+  // with nothing to match.
   const allocated = new Map<string, number>();
-  for (const row of already ?? []) {
-    const key = row.menu_requirement_id as string;
-    allocated.set(key, (allocated.get(key) ?? 0) + Number(row.quantity));
+  for (const row of await liveAllocations(admin, ids)) {
+    allocated.set(row.menu_requirement_id, (allocated.get(row.menu_requirement_id) ?? 0) + row.quantity);
   }
 
   const open: OpenRequirement[] = requirementRows.map((row) => {

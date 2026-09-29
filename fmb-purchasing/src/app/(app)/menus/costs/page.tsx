@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { liveAllocations } from "@/lib/live-allocations";
 import { formatPlainDate } from "@/lib/format";
 import { todayIso } from "@/lib/periods-data";
 import { SECTION_LABEL, type SectionKey } from "@/lib/menu-sections";
@@ -81,12 +82,11 @@ export default async function ThaaliCostsPage({
         .neq("status", "cancelled")
     : { data: [] };
   const reqIds = (requirements ?? []).map((r) => r.id as string);
-  const { data: allocations } = reqIds.length
-    ? await admin.from("expense_line_allocations").select("menu_requirement_id, quantity, amount").in("menu_requirement_id", reqIds)
-    : { data: [] };
+  // Only receipts that still count: a declined one is not money spent on the day.
+  const allocations = await liveAllocations(admin, reqIds);
 
   const allocationsBy = new Map<string, { quantity: number; amount: number }[]>();
-  for (const a of allocations ?? []) {
+  for (const a of allocations) {
     const key = a.menu_requirement_id as string;
     allocationsBy.set(key, [...(allocationsBy.get(key) ?? []), { quantity: Number(a.quantity), amount: Number(a.amount) }]);
   }

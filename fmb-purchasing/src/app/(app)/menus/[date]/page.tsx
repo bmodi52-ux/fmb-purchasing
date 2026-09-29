@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { can, getUserPermissions, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { liveAllocations } from "@/lib/live-allocations";
 import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { formatPlainDate } from "@/lib/format";
@@ -119,20 +120,18 @@ export default async function MenuDayPage({
         .select("id, item_id, quantity, planned_cost, status, base_unit_code, items ( name )")
         .eq("menu_day_id", day.id)
     : { data: [] };
-  const { data: allocations } = (requirements ?? []).length
-    ? await admin
-        .from("expense_line_allocations")
-        .select("menu_requirement_id, quantity, amount")
-        .in("menu_requirement_id", (requirements ?? []).map((r) => r.id as string))
-    : { data: [] };
+  const allocations = await liveAllocations(
+    admin,
+    (requirements ?? []).map((r) => r.id as string)
+  );
 
   const allocationsBy = new Map<string, { quantity: number; amount: number }[]>();
-  for (const a of allocations ?? []) {
+  for (const a of allocations) {
     const key = a.menu_requirement_id as string;
     allocationsBy.set(key, [...(allocationsBy.get(key) ?? []), { quantity: Number(a.quantity), amount: Number(a.amount) }]);
   }
   const plannedTotal = (requirements ?? []).reduce((sum, r) => sum + Number(r.planned_cost ?? 0), 0);
-  const actualTotal = (allocations ?? []).reduce((sum, a) => sum + Number(a.amount), 0);
+  const actualTotal = allocations.reduce((sum, a) => sum + a.amount, 0);
   const stillToBuy = (requirements ?? []).filter(
     (r) => !progressOf({ quantity: Number(r.quantity) }, allocationsBy.get(r.id as string) ?? []).complete
   ).length;
