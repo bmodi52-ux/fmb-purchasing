@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parsePeriod } from "@/lib/periods";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
-import { loadLedger } from "@/lib/reporting/ledger";
-import { computeWidgetData, widgetPeriodCode } from "./reports/dashboard-widgets";
+import { canSeeReport, findReport } from "@/lib/reporting/registry";
+import { computeWidgets } from "@/lib/reporting/widget-data";
+import { readWidget, widgetHref, type WidgetReport, type WidgetSpec } from "@/lib/reporting/widgets";
 import { HomeDashboard, type SavedWidget } from "./home-dashboard";
 import { TodayPanel } from "./today-panel";
 
@@ -48,26 +48,32 @@ export default async function DashboardPage() {
     earliestExpenseDate(admin),
   ]);
 
-  const rows = (widgetRows ?? []).map((r) => ({
-    id: r.id as string,
-    kind: r.kind as SavedWidget["kind"],
-    title: r.title as string,
-    config: r.config as SavedWidget["config"],
-  }));
+  // Each row as a spec, whichever shape it was saved in — and only for a
+  // report its owner can still see, by the registry's own rule.
+  const read = (widgetRows ?? []).flatMap((r) => {
+    const spec = readWidget({ kind: r.kind as string, config: r.config });
+    return spec ? [{ id: r.id as string, title: r.title as string, spec }] : [];
+  });
+  const reports = [...new Set(read.map((r) => r.spec.report))];
+  const visible = new Set<WidgetReport>(
+    (await Promise.all(reports.map(async (key) => ((await canSeeReport(user, key)) ? [key] : [])))).flat()
+  );
+  const rows = read.filter((r) => visible.has(r.spec.report));
 
-  // One fetch per distinct period across every saved widget, not one per
-  // widget — several widgets commonly share a period.
-  const distinctCodes = [...new Set(rows.map((r) => widgetPeriodCode(r.config)))];
-  const rawByCode = new Map(
-    await Promise.all(
-      distinctCodes.map(async (code) => [code, await loadLedger(parsePeriod(code, today))] as const)
-    )
+  // Widgets on the same report with the same settings share one load of it.
+  const computed = await computeWidgets(
+    admin,
+    rows.map((r) => r.spec),
+    today
   );
 
-  const widgets: SavedWidget[] = rows.map((r) => ({
-    ...r,
-    data: computeWidgetData(r.kind, r.config, rawByCode.get(widgetPeriodCode(r.config))!, today),
-    periodLabel: parsePeriod(widgetPeriodCode(r.config), today).label,
+  const widgets: SavedWidget[] = rows.map((r, i) => ({
+    id: r.id,
+    title: r.title,
+    spec: r.spec as WidgetSpec,
+    data: computed[i].data,
+    summary: computed[i].summary,
+    href: widgetHref(r.spec, findReport(r.spec.report)!.path),
   }));
 
   return (

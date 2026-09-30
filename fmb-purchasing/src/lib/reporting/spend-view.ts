@@ -2,7 +2,7 @@ import { comparisonPeriod, monthCalendarFor, parsePeriod, type Period } from "@/
 import { applyFilters, filterOptionsFor, type FilterOption, type Filters, type Slice } from "./aggregate.ts";
 import { describeBasis, withStatusBasis } from "./basis.ts";
 import { loadLedger } from "./ledger.ts";
-import { spanOf, withinRange } from "./ledger-rows.ts";
+import { spanOf, withinRange, type Ledger } from "./ledger-rows.ts";
 import { queryFromSearchParams, type ReportQuery } from "./query.ts";
 import { computeSpendReport, type SpendReport } from "./spend-report.ts";
 
@@ -23,21 +23,32 @@ export type SpendView = {
   summary: string;
 };
 
-export async function loadSpendView(
-  params: Record<string, string | string[] | undefined>,
-  today: string
-): Promise<SpendView> {
+type Params = Record<string, string | string[] | undefined>;
+
+function periodsOf(params: Params, today: string): { period: Period; previousRange: Period } {
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   // `fy` is the fiscal-year parameter from before #22, still honoured for old links.
   const period = parsePeriod(one(params.period) ?? one(params.fy), today);
-  const asked = queryFromSearchParams(params, period.code);
   // Like with like: a period still under way compares with the same stretch
   // of the one before, not all of it.
-  const previousRange = comparisonPeriod(period, today);
+  return { period, previousRange: comparisonPeriod(period, today) };
+}
 
+export async function loadSpendView(params: Params, today: string): Promise<SpendView> {
+  const { period, previousRange } = periodsOf(params, today);
   // The period before comes back in the same load, so change can be shown
   // without a second one.
-  const ledger = withStatusBasis(await loadLedger(spanOf(period, previousRange)), asked.status);
+  return spendViewFromLedger(params, today, await loadLedger(spanOf(period, previousRange)));
+}
+
+/**
+ * The same, from a ledger already loaded — one covering the period and the
+ * one before it. Pure, so a test or a caller holding the ledger can use it.
+ */
+export function spendViewFromLedger(params: Params, today: string, loaded: Ledger): SpendView {
+  const { period, previousRange } = periodsOf(params, today);
+  const asked = queryFromSearchParams(params, period.code);
+  const ledger = withStatusBasis(loaded, asked.status);
   const currentLedger = withinRange(ledger, period);
   const previousLedger = withinRange(ledger, previousRange);
 

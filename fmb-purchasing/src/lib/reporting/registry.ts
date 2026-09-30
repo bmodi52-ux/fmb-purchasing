@@ -2,7 +2,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { loadAccountingPeriod } from "@/lib/accounting-data";
 import { summariseGst } from "@/lib/gst-summary";
 import { parsePeriod } from "@/lib/periods";
-import type { ActionKey, PageKey } from "@/lib/permissions";
+import type { CurrentUser } from "@/lib/auth/session";
+import { userCan, type ActionKey, type PageKey } from "@/lib/permissions";
 import { DATE_BASIS_LABEL, type DateBasis } from "./basis.ts";
 import { budgetTables, loadBudgetView } from "./budget-view.ts";
 import { gstTables } from "./gst-tables.ts";
@@ -28,6 +29,8 @@ export type ReportDefinition = {
   key: string;
   title: string;
   permission: { page: PageKey; action: ActionKey };
+  /** The page it is a download of — and where a home-page widget from it leads. */
+  path: string;
   build(params: Params, today: string): Promise<ReportDocument>;
 };
 
@@ -36,6 +39,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 export const REPORTS: ReportDefinition[] = [
   {
     key: "money-out",
+    path: "/reports/money-out",
     title: "Money out",
     // Payee names and amounts, never bank details — those stay on Payments.
     permission: { page: "reports", action: "view" },
@@ -45,6 +49,7 @@ export const REPORTS: ReportDefinition[] = [
   },
   {
     key: "exceptions",
+    path: "/reports/exceptions",
     title: "Exceptions",
     permission: { page: "reports", action: "view" },
     async build(params, today) {
@@ -53,6 +58,7 @@ export const REPORTS: ReportDefinition[] = [
   },
   {
     key: "spend",
+    path: "/reports",
     title: "Reports",
     permission: { page: "reports", action: "view" },
     async build(params, today) {
@@ -68,6 +74,7 @@ export const REPORTS: ReportDefinition[] = [
   },
   {
     key: "budgets",
+    path: "/budgets",
     title: "Budgets",
     permission: { page: "budgets", action: "view" },
     async build(params, today) {
@@ -83,6 +90,7 @@ export const REPORTS: ReportDefinition[] = [
   },
   {
     key: "gst",
+    path: "/accounting",
     title: "GST",
     // The detail lists every line claimed on, so it takes the export grant
     // the Xero file does, not just the right to look at the page.
@@ -103,4 +111,10 @@ export const REPORTS: ReportDefinition[] = [
 
 export function findReport(key: string | undefined): ReportDefinition | undefined {
   return REPORTS.find((r) => r.key === (key ?? "spend"));
+}
+
+/** Whether someone may see a report — its page, its download, a widget from it. */
+export async function canSeeReport(user: CurrentUser, key: string): Promise<boolean> {
+  const report = REPORTS.find((r) => r.key === key);
+  return report ? userCan(user, report.permission.page, report.permission.action) : false;
 }
