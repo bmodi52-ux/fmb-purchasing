@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, userCan } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import { forScreen } from "@/lib/reporting/spend-report";
 import { loadSpendView } from "@/lib/reporting/spend-view";
 import { loadSavedViews } from "@/lib/saved-report-views";
+import { ReportNav } from "./report-nav";
 import { ReportsView } from "./reports-view";
 
 export const metadata = { title: "Reports" };
@@ -22,13 +23,15 @@ export default async function ReportsPage({
   await requirePermission(user, "reports", "view");
 
   const admin = createAdminClient();
-  const [view, earliest, savedViews, { data: teams }] = await Promise.all([
+  const [view, earliest, savedViews, { data: teams }, canBudgets, canGst] = await Promise.all([
     // Worked out on the server, so the browser is sent the figures rather
     // than the rows — and shared with the download of this page.
     loadSpendView(await searchParams, todayIso()),
     earliestExpenseDate(admin),
     loadSavedViews(admin, user),
     admin.from("teams").select("id, name").order("name"),
+    userCan(user, "budgets", "view"),
+    userCan(user, "accounting", "view"),
   ]);
 
   return (
@@ -48,6 +51,7 @@ export default async function ReportsPage({
       savedViews={savedViews}
       userId={user.id}
       teams={(teams ?? []).map((t) => ({ id: t.id as string, name: t.name as string }))}
+      nav={<ReportNav active="spend" canBudgets={canBudgets} canGst={canGst} />}
     />
   );
 }

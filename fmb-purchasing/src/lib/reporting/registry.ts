@@ -9,6 +9,8 @@ import { gstTables } from "./gst-tables.ts";
 import { SECTIONS } from "./query.ts";
 import { spendReportTables } from "./spend-tables.ts";
 import { loadSpendView } from "./spend-view.ts";
+import { exceptionsDocument, loadExceptionsView } from "./exceptions-data.ts";
+import { loadMoneyOutView, moneyOutDocument } from "./money-out-view.ts";
 import { safeFilename, type ReportDocument } from "./tables.ts";
 
 /**
@@ -32,6 +34,23 @@ export type ReportDefinition = {
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export const REPORTS: ReportDefinition[] = [
+  {
+    key: "money-out",
+    title: "Money out",
+    // Payee names and amounts, never bank details — those stay on Payments.
+    permission: { page: "reports", action: "view" },
+    async build(params, today) {
+      return moneyOutDocument(await loadMoneyOutView(createAdminClient(), params, today), today);
+    },
+  },
+  {
+    key: "exceptions",
+    title: "Exceptions",
+    permission: { page: "reports", action: "view" },
+    async build(params, today) {
+      return exceptionsDocument(await loadExceptionsView(createAdminClient(), params, today));
+    },
+  },
   {
     key: "spend",
     title: "Reports",

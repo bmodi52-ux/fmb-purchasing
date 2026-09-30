@@ -29,6 +29,16 @@ export function formatDateTime(date: string | Date): string {
   return new Date(date).toLocaleString("en-AU", { timeZone: ORG_TIME_ZONE });
 }
 
+/** The calendar day an instant falls on here, `YYYY-MM-DD` — not in UTC, which is the day before each morning. */
+export function orgDay(instant: string | Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: ORG_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(instant));
+}
+
 /**
  * A date read off a receipt, normalised to `YYYY-MM-DD` for a date input.
  *
