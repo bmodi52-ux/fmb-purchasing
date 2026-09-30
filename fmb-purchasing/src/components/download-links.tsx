@@ -1,7 +1,9 @@
 /**
- * Excel and CSV downloads of a report (reports/export). `href` is the export
- * URL without a format; each link adds its own. Plain links, so a download
- * needs no script and the browser shows its own progress.
+ * Excel, CSV and PDF downloads of a report (reports/export). `href` is the
+ * export URL without a format; each link adds its own. Plain links, so a
+ * download needs no script and the browser shows its own progress. The PDF
+ * is the report's tables as text; Print, where a page has it, is a picture of
+ * the screen, charts and all.
  */
 export function DownloadLinks({ href, label }: { href: string; label?: string }) {
   const pill =
@@ -15,6 +17,9 @@ export function DownloadLinks({ href, label }: { href: string; label?: string })
       </a>
       <a href={`${href}${sep}format=csv`} download className={pill}>
         CSV
+      </a>
+      <a href={`${href}${sep}format=pdf`} download className={pill}>
+        PDF
       </a>
     </div>
   );

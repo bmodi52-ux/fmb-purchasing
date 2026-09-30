@@ -4,11 +4,24 @@ import { reportError } from "@/lib/errors";
 import { userCan } from "@/lib/permissions";
 import { todayIso } from "@/lib/periods-data";
 import { findReport } from "@/lib/reporting/registry";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { documentToPdf } from "@/lib/reporting/pdf";
 import { documentToCsv } from "@/lib/reporting/tables";
 import { documentToXlsx } from "@/lib/reporting/xlsx";
 
+/** The logo for a PDF's header; without it the header is words alone. */
+async function logoDataUrl(): Promise<string | null> {
+  try {
+    const png = await readFile(path.join(process.cwd(), "public", "fmb-logo.png"));
+    return `data:image/png;base64,${png.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Downloads: any report in lib/reporting/registry, as CSV or Excel, built on
+ * Downloads: any report in lib/reporting/registry, as CSV, Excel or PDF, built on
  * the server from the same loader and the same URL parameters as its page —
  * so what is downloaded is what was on screen.
  *
@@ -36,7 +49,8 @@ export async function GET(request: NextRequest) {
     return new Response("You don't have access to this report.", { status: 403 });
   }
 
-  const format = search.get("format") === "csv" ? "csv" : "xlsx";
+  const asked = search.get("format");
+  const format = asked === "csv" || asked === "pdf" ? asked : "xlsx";
   try {
     const doc = await report.build(params, todayIso());
     const headers = {
@@ -45,6 +59,11 @@ export async function GET(request: NextRequest) {
     };
     if (format === "csv") {
       return new Response(documentToCsv(doc), { headers: { ...headers, "Content-Type": "text/csv; charset=utf-8" } });
+    }
+    if (format === "pdf") {
+      return new Response(Buffer.from(documentToPdf(doc, await logoDataUrl())), {
+        headers: { ...headers, "Content-Type": "application/pdf" },
+      });
     }
     return new Response(Buffer.from(await documentToXlsx(doc)), {
       headers: { ...headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },

@@ -71,6 +71,13 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // A report's PDF is made on the server and carries the logo, read from
+  // public/ — which is served from the CDN, not bundled with the function,
+  // unless it is asked for here.
+  outputFileTracingIncludes: {
+    "/reports/export": ["./public/fmb-logo.png"],
+  },
+
   experimental: {
     // Server Actions cap request bodies at 1MB by default, and receipts are
     // uploaded through one. A PDF forwarded from email sits well under that
