@@ -57,6 +57,7 @@ export function accountingFromLedger(
   const xeroLines: XeroBillLine[] = ledger.lines.map((l) => {
     const e = expenseById.get(l.expenseId)!;
     return {
+      expenseId: e.id,
       expenseNumber: e.expenseNumber,
       invoiceNumber: e.invoiceNumber,
       contactName: e.vendorName,

@@ -206,6 +206,7 @@ test("a receipt goes from submitted to paid, into a bank file and Xero, and back
   // ---- The Xero bills row for each line.
   const csv = buildXeroBillsCsv(
     lines.map((l) => ({
+      expenseId: expense.id,
       expenseNumber: expense.expense_number,
       invoiceNumber: "INV-433964",
       contactName: "Fresh Poultry",

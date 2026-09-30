@@ -16,6 +16,8 @@ import { xeroTaxType } from "@/lib/gst-summary";
  */
 
 export type XeroBillLine = {
+  /** The expense the bill is — one bill per expense. */
+  expenseId: string;
   expenseNumber: string | null;
   invoiceNumber: string | null;
   contactName: string;
