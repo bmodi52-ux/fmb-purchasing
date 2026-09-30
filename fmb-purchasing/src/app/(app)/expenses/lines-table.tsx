@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ColumnsDataTable, type ColumnDef } from "@/components/columns-data-table";
 import { formatDate } from "@/lib/format";
+import { isSpend } from "@/lib/expense-status";
 import { LINE_KIND_LABELS } from "../submit/reconciliation-strip";
 import type { StoredLineKind } from "@/lib/line-kinds";
 
@@ -153,6 +154,9 @@ export function LinesTable({
   initialVisible: string[];
 }) {
   const total = rows.reduce((sum, r) => sum + r.lineTotal, 0);
+  // Declined expenses are listed here but are not spend: say how much of the
+  // total they are, so it can be checked against Reports, which leaves them out.
+  const declined = rows.filter((r) => !isSpend(r.status)).reduce((sum, r) => sum + r.lineTotal, 0);
 
   return (
     <div className="flex flex-col gap-3">
@@ -169,7 +173,10 @@ export function LinesTable({
           table owns that state. Stated so the page can be checked against the
           expense view, which is the reason charges are listed here at all. */}
       <p className="text-xs text-ink/50">
-        {rows.length.toLocaleString()} lines, {money(total)} in total before filtering.
+        {rows.length.toLocaleString()} lines, {money(total)} in total before filtering
+        {declined !== 0
+          ? ` — ${money(declined)} of it on declined expenses, which Reports leaves out, so ${money(total - declined)} is spend.`
+          : "."}
       </p>
     </div>
   );
