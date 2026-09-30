@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadThaaliCosts, thaaliCostTables } from "@/app/(app)/menus/costs/data";
 import { loadAccountingPeriod } from "@/lib/accounting-data";
 import { summariseGst } from "@/lib/gst-summary";
 import { parsePeriod } from "@/lib/periods";
@@ -85,6 +86,22 @@ export const REPORTS: ReportDefinition[] = [
         subtitle: `${period.label} · ${DATE_BASIS_LABEL.receipt} · submitted, approved and paid · amounts include GST`,
         filenameBase: safeFilename(`budgets-${period.code}`),
         tables: budgetTables(view),
+      };
+    },
+  },
+  {
+    key: "thaali-costs",
+    path: "/menus/costs",
+    title: "Thaali costs",
+    permission: { page: "menus", action: "view" },
+    async build(params, today) {
+      const view = await loadThaaliCosts(createAdminClient(), params, today);
+      const kitchen = view.kitchens.find((k) => k.id === view.kitchenId)?.name ?? "Both kitchens";
+      return {
+        title: `Thaali costs — ${view.period.label}`,
+        subtitle: `${view.period.label} · ${kitchen} · planned at release prices, spent from receipts allocated to each day · dishes at today's prices`,
+        filenameBase: safeFilename(`thaali-costs-${view.period.code}`),
+        tables: thaaliCostTables(view),
       };
     },
   },
