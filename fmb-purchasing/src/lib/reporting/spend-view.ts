@@ -67,6 +67,7 @@ export async function loadSpendView(
     periodLabel: period.label,
     previousLabel: previousRange.label,
     calendar: monthCalendarFor(period),
+    receiptLines: currentLedger.lines,
   });
 
   const basisLabel = describeBasis(query.status);
@@ -77,8 +78,15 @@ export async function loadSpendView(
     options,
     report,
     basisLabel,
-    summary: `${describeFilters(query, period.label, options)} · ${basisLabel}`,
+    summary: `${describeFilters(query, period.label, options)} · ${basisLabel}${discountsNote(report.discountsLeftOut)}`,
   };
+}
+
+/** What a filtered download says about the discounts it is before; "" when none. */
+export function discountsNote(leftOut: number): string {
+  if (leftOut >= 0) return "";
+  const amount = (-leftOut).toLocaleString("en-AU", { style: "currency", currency: "AUD" });
+  return ` · before ${amount} of discounts on these receipts`;
 }
 
 /** The period and active filters as one plain-language line. */
