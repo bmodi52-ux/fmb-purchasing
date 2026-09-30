@@ -20,6 +20,7 @@ import {
   byStatus,
   byVendor,
   compare,
+  discountsLeftOut,
   insights,
   totals,
   MAX_COMPARE_SUBJECTS,
@@ -27,6 +28,7 @@ import {
   type Comparison,
   type Dimension,
   type Insight,
+  type LineRecord,
   type MonthBreakdown,
   type MonthCalendar,
   type Slice,
@@ -119,6 +121,12 @@ export type SpendReport = {
   section: SpendSection;
   /** Which months `monthly` and the sections' months are. */
   calendar: MonthCalendar;
+  /**
+   * Under a category or item filter, the discounts on the matching receipts
+   * that the filter left out (aggregate discountsLeftOut): the figures are
+   * before them. 0 when there is no such filter, or nothing was left out.
+   */
+  discountsLeftOut: number;
 };
 
 export function computeSpendReport({
@@ -129,6 +137,7 @@ export function computeSpendReport({
   periodLabel,
   previousLabel,
   calendar = "gregorian",
+  receiptLines = [],
 }: {
   current: Slice;
   previous: Slice | null;
@@ -139,6 +148,8 @@ export function computeSpendReport({
   previousLabel: string;
   /** Which months to group by — Hijri for a Hijri period (lib/periods monthCalendarFor). */
   calendar?: MonthCalendar;
+  /** Every line of the period, filtered or not — to say what a filter left out. */
+  receiptLines?: (LineRecord & { kind: string })[];
 }): SpendReport {
   // Only items still in the slice: a category or item filter has to narrow
   // the unit costs too, or they would contradict everything above them.
@@ -152,6 +163,8 @@ export function computeSpendReport({
     insights: insights(current, previous, periodLabel, previousLabel),
     section: section(current, unitCosts, query, keepItem, calendar),
     calendar,
+    discountsLeftOut:
+      query.categories.length > 0 || query.items.length > 0 ? discountsLeftOut(current, receiptLines) : 0,
   };
 }
 

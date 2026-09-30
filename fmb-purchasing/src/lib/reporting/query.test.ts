@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { buildHref, queryFromSaved, queryFromSearchParams, type ReportQuery } from "./query.ts";
+import { discountsNote } from "./spend-view.ts";
 import { describeBasis, parseStatusBasis, withStatusBasis } from "./basis.ts";
 import { flattenLineEmbed, monthsCovering, withinRange, type EmbeddedLineRow, type Ledger } from "./ledger-rows.ts";
 
@@ -131,5 +132,12 @@ describe("ledger rows", () => {
       withinRange(ledger, { start: "2026-07-01", end: "2026-07-31" }).expenses.map((x) => x.id),
       ["jul1", "jul31"]
     );
+  });
+});
+
+describe("discountsNote", () => {
+  test("a download's subtitle says what it is before, and nothing when there is nothing", () => {
+    assert.equal(discountsNote(-588.95), " · before $588.95 of discounts on these receipts");
+    assert.equal(discountsNote(0), "");
   });
 });

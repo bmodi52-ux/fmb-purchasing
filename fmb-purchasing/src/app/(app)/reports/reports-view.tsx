@@ -187,6 +187,15 @@ export function ReportsView({
                   {isFiltered && (
                     <p className="mt-2 text-xs text-ink/45">Filtered — not the whole period.</p>
                   )}
+                  {/* A discount is a line of its own with no category, so a
+                      category or item filter never keeps it: these figures are
+                      before it, and say by how much. */}
+                  {report.discountsLeftOut < 0 && (
+                    <p className="mt-1 text-xs text-ink/55">
+                      Before {formatMoney(-report.discountsLeftOut)} of discounts on these receipts, which have no
+                      category of their own.
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-3">

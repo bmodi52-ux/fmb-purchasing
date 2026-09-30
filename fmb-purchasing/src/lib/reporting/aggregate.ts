@@ -222,6 +222,25 @@ export function applyFilters(
   return { expenses: keptExpenses, lines: keptLines };
 }
 
+/**
+ * Discounts on a filtered slice's receipts that the filter leaves out.
+ *
+ * A category or item filter keeps the lines that match, and a discount is
+ * nearly always a line of its own with no category, so it never does: the
+ * figures for "Meat" are what the meat cost before the receipt's discounts.
+ * They are kept that way — a discount can't honestly be pinned on one line of
+ * a receipt — and this says by how much, so the page can. Negative, like the
+ * discounts; 0 when the filter left none out.
+ */
+export function discountsLeftOut(slice: Slice, receiptLines: (LineRecord & { kind: string })[]): number {
+  const receipts = new Set(slice.expenses.map((e) => e.id));
+  const kept = new Set<LineRecord>(slice.lines);
+  const total = receiptLines
+    .filter((l) => l.kind === "discount" && receipts.has(l.expenseId) && !kept.has(l))
+    .reduce((sum, l) => sum + l.lineTotal, 0);
+  return Math.round(total * 100) / 100;
+}
+
 /* ------------------------------------------------------------------ */
 /* Headline figures                                                    */
 /* ------------------------------------------------------------------ */

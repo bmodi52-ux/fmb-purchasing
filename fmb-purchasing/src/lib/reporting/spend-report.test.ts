@@ -172,3 +172,58 @@ describe("Transactions", () => {
     assert.equal(r.section.rows.length, TRANSACTIONS_ON_SCREEN + 5, "the download keeps them all");
   });
 });
+
+describe("discounts a category or item filter leaves out", () => {
+  // e2: rice 150, mutton 50, and a $20 discount with no category.
+  const withKind = [
+    ...lines.map((l) => ({ ...l, kind: "goods" })),
+    { ...line("e2", "", null, -20), categoryId: null, kind: "discount" },
+    // A discount on a receipt the filter drops entirely is not this view's.
+    { ...line("e3", "", null, -5), categoryId: null, kind: "discount" },
+  ];
+  const run = (params: Record<string, string>) => {
+    const query = queryFromSearchParams(params, "au2026");
+    const current = applyFilters(expenses, withKind, {
+      month: null,
+      vendorIds: query.vendors,
+      categoryIds: query.categories,
+      itemIds: query.items,
+    });
+    return computeSpendReport({
+      current,
+      previous: null,
+      unitCosts,
+      query,
+      periodLabel: "FY",
+      previousLabel: "",
+      receiptLines: withKind,
+    });
+  };
+
+  test("filtered to a category, the figures are before the discount on those receipts, and say so", () => {
+    const r = run({ category: "meat" });
+    // Mutton on e1 and e2; e2's discount is not in the figure…
+    assert.equal(r.now.spend, 350);
+    // …and is reported as left out. e3 isn't in the view, so its discount isn't either.
+    assert.equal(r.discountsLeftOut, -20);
+  });
+
+  test("an item filter reports the same", () => {
+    assert.equal(run({ item: "rice" }).discountsLeftOut, -20);
+  });
+
+  test("with no category or item filter, nothing is left out", () => {
+    assert.equal(run({}).discountsLeftOut, 0);
+    // A vendor filter keeps whole receipts, discounts and all.
+    assert.equal(run({ vendor: "Costco" }).discountsLeftOut, 0);
+  });
+
+  test("a discount filed under the chosen category is in the figure, not left out", () => {
+    const filed = withKind.map((l) => (l.kind === "discount" && l.expenseId === "e2" ? { ...l, categoryId: "meat" } : l));
+    const query = queryFromSearchParams({ category: "meat" }, "au2026");
+    const current = applyFilters(expenses, filed, { month: null, vendorIds: [], categoryIds: ["meat"], itemIds: [] });
+    const r = computeSpendReport({ current, previous: null, unitCosts, query, periodLabel: "FY", previousLabel: "", receiptLines: filed });
+    assert.equal(r.now.spend, 330);
+    assert.equal(r.discountsLeftOut, 0);
+  });
+});
