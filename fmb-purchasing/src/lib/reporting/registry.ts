@@ -91,6 +91,7 @@ export const REPORTS: ReportDefinition[] = [
   },
   {
     key: "thaali-costs",
+    path: "/menus/costs",
     title: "Thaali costs",
     permission: { page: "menus", action: "view" },
     async build(params, today) {
