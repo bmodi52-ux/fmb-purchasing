@@ -196,6 +196,10 @@ export default async function AllExpensesPage({
                 ? "Every expense across FMB."
                 : `Expenses dated in ${period.label}, by receipt date.`}
           </p>
+          <p className="mt-1 text-xs text-ink/55">
+            Declined expenses are listed with the rest, marked as declined; Reports leaves them out of spend. Withdrawn
+            ones are not listed.
+          </p>
           <div className="mt-3">
             <ViewToggle linesView={linesView} />
           </div>
