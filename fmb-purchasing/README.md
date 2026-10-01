@@ -43,7 +43,7 @@ Needs a `.env.local` — copy `.env.local.example` and fill it in:
 | `NEXT_PUBLIC_SANDBOX` | set to `1` on the sandbox deployment only: shows the banner and keeps email to trainees — see `docs/sandbox.md` |
 
 ```bash
-npm test          # 323 tests, incl. migrations applied to a real Postgres
+npm test          # every test, incl. migrations applied to a real Postgres
 npx tsc --noEmit  # the check ESLint cannot do
 npx eslint .
 ```
@@ -52,7 +52,7 @@ CI runs all three on every pull request.
 
 ## How it is put together
 
-Read these three notes before changing anything; each explains a decision that
+Read these four notes before changing anything; each explains a decision that
 looks wrong until you know why.
 
 **Authorization is in application code, not RLS.** Every table has RLS enabled
@@ -68,7 +68,7 @@ Fatimi/Misri tabular implementation with its own test suite; `src/lib/fiscal-yea
 wraps it. Dates are computed in `Australia/Sydney`, never in the server's UTC.
 
 **Money arithmetic lives in two places on purpose.** `src/lib/expense-money.ts`
-and `src/app/(app)/reports/aggregate.ts` are pure and tested; the SQL costing
+and `src/lib/reporting/aggregate.ts` are pure and tested; the SQL costing
 views in `supabase/migrations/0010_cost_views.sql` (as amended by 0014 and 0026)
 are tested against a real Postgres. Two rules matter throughout:
 
@@ -78,6 +78,17 @@ are tested against a real Postgres. Two rules matter throughout:
   `create_expense_with_lines`.
 - GST is a property of **the line**, not a share of the total. Most of what this
   kitchen buys is GST-free.
+
+**Reports share one ledger and one registry.** Spending, Budgets and GST read
+`src/lib/reporting/ledger.ts`, which loads a period's expenses and lines once —
+one rule for which vendor a receipt is from and which day it counts on — and
+caches it a month at a time. Money out and Exceptions report how things stand
+now, so they read the tables directly (`money-out-data.ts`, `exceptions-data.ts`).
+Each report states which expenses it counts and by which date (`basis.ts`) and
+is an entry in `registry.ts`, which is what `/reports/export` downloads from as
+CSV, Excel or PDF. A home-page widget names a registry report and is computed by
+that report's own loader (`widgets.ts`, `widget-data.ts`), so a download or a
+widget is always a piece of its page. Adding a report is adding an entry there.
 
 ## Migrations
 
@@ -95,6 +106,7 @@ Useful scripts in `scripts/`:
 | `create-receipts-bucket.mjs` | creates the private `receipts` storage bucket |
 | `compare-extraction.mjs` | runs real receipts through several models and scores them — `--dry-run` first, it spends money |
 | `dry-run-sql.mjs` | applies a migration to a throwaway database |
+| `reconcile-reports.mjs` | checks, read-only, that the records reports are built from add up — run it before and after changing how anything is counted |
 
 ## Backups
 

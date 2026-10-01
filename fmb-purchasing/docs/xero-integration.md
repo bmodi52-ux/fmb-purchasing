@@ -15,6 +15,14 @@ Accounting → Xero → **Download Xero bills file** makes a CSV in Xero's purch
   (GST free), `CAPEXINPUT` and `EXEMPTCAPITAL` for capital purchases
 - amounts GST inclusive, as receipts are: choose **Tax inclusive** when Xero asks
 - the entry number (E-0012) leads the bill number, so re-importing is easy to spot
+- every download is recorded (`xero_exports`, migration 0087): who, when, which
+  period and basis, and which expenses it held at what total. The next download
+  says which of its bills went in an earlier file and leaves them out unless
+  asked not to, and names any that have changed since they were sent — those are
+  corrected in Xero by hand, since importing a bill again adds a second one
+
+The record is of files downloaded, not of what Xero imported: the app cannot see
+Xero until the live connection exists.
 
 This works whichever way purchases reach Xero today, and needs no connection or
 keys. It is the fallback even once the live connection exists.
