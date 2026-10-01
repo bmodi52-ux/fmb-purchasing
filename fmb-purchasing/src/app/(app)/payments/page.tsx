@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { allRows } from "@/lib/supabase/all-rows";
+import { statusesOf } from "@/lib/reporting/measures";
 import { vendorLabel } from "@/lib/vendor-names";
 import { expenseIdsWithAttachments } from "@/lib/receipt-storage";
 import { formatAccount, paymentInstructions } from "@/lib/payment-instruction";
@@ -41,7 +42,8 @@ export default async function PaymentsPage() {
     admin
       .from("expenses")
       .select("id, expense_number, vendor_id, vendor_name_raw, invoice_number, total, decided_at, submitted_by, payee_id")
-      .eq("status", "approved")
+      // Outstanding, as every report means it (measures.ts): approved, not yet paid.
+      .in("status", [...statusesOf("outstanding")])
       .order("decided_at")
       .order("id")
       .range(from, to)
