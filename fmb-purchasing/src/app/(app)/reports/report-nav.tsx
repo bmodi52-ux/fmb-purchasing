@@ -1,35 +1,21 @@
 import Link from "next/link";
-
-export type ReportArea = "spend" | "money-out" | "exceptions";
+import type { CurrentUser } from "@/lib/auth/session";
+import { reportNavFor } from "@/lib/reporting/registry";
 
 /**
- * Which report you are in, above every report page: what was spent, what has
- * gone out, and what needs checking — and, for those who can see them, the
- * budgets and the GST figures, which live on their own pages.
+ * Which report you are in, above every report page. The links are the
+ * registry's (lib/reporting/registry): a report given a place in the row
+ * there appears here, for everyone who may open it.
  */
-export function ReportNav({
-  active,
-  canBudgets,
-  canGst,
-}: {
-  active: ReportArea;
-  canBudgets: boolean;
-  canGst: boolean;
-}) {
-  const links: { href: string; label: string; area?: ReportArea }[] = [
-    { href: "/reports", label: "Spending", area: "spend" },
-    { href: "/reports/money-out", label: "Money out", area: "money-out" },
-    { href: "/reports/exceptions", label: "Exceptions", area: "exceptions" },
-    ...(canBudgets ? [{ href: "/budgets", label: "Budgets" }] : []),
-    ...(canGst ? [{ href: "/accounting", label: "GST" }] : []),
-  ];
+export async function ReportNav({ active, user }: { active: string; user: CurrentUser }) {
+  const links = await reportNavFor(user);
   return (
     <nav aria-label="Reports" className="flex flex-wrap gap-1.5">
       {links.map((l) => {
-        const current = l.area === active;
+        const current = l.key === active;
         return (
           <Link
-            key={l.href}
+            key={l.key}
             href={l.href}
             aria-current={current ? "page" : undefined}
             className={`rounded-full px-3 py-1 text-xs transition-colors ${

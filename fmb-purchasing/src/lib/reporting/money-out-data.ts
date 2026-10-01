@@ -4,6 +4,7 @@ import { addDays } from "@/lib/periods";
 import { allRows, allRowsForIds } from "@/lib/supabase/all-rows";
 import { vendorLabel } from "@/lib/vendor-names";
 import type { DateRange } from "./ledger-rows.ts";
+import { vendorKey } from "./filters.ts";
 import { statusesOf } from "./measures.ts";
 import type { MoneyExpense } from "./money-out.ts";
 
@@ -55,21 +56,25 @@ async function load(admin: SupabaseClient, where: (q: Query) => Query): Promise<
   const payeeName = new Map(payees.map((p) => [p.id, p.display_name]));
   const runNumber = new Map(runs.map((r) => [r.id, r.run_number]));
 
-  return rows.map((r) => ({
-    id: r.id,
-    entry: r.expense_number,
-    status: r.status,
-    vendor: vendorLabel(r.vendor_id ? vendorName.get(r.vendor_id) : null, r.vendor_name_raw),
-    payee: (r.payee_id ? payeeName.get(r.payee_id) : null) ?? "No payee recorded",
-    total: Number(r.total),
-    submittedOn: orgDay(r.created_at),
-    decidedOn: r.decided_at ? orgDay(r.decided_at) : null,
-    paidOn: r.payment_date,
-    runId: r.payment_run_id,
-    runNumber: r.payment_run_id ? (runNumber.get(r.payment_run_id) ?? null) : null,
-    reference: r.payment_reference,
-    bankConfirmedOn: r.bank_confirmed_on,
-  }));
+  return rows.map((r) => {
+    const vendor = vendorLabel(r.vendor_id ? vendorName.get(r.vendor_id) : null, r.vendor_name_raw);
+    return {
+      id: r.id,
+      entry: r.expense_number,
+      status: r.status,
+      vendor,
+      vendorKey: vendorKey(r.vendor_id, vendor),
+      payee: (r.payee_id ? payeeName.get(r.payee_id) : null) ?? "No payee recorded",
+      total: Number(r.total),
+      submittedOn: orgDay(r.created_at),
+      decidedOn: r.decided_at ? orgDay(r.decided_at) : null,
+      paidOn: r.payment_date,
+      runId: r.payment_run_id,
+      runNumber: r.payment_run_id ? (runNumber.get(r.payment_run_id) ?? null) : null,
+      reference: r.payment_reference,
+      bankConfirmedOn: r.bank_confirmed_on,
+    };
+  });
 }
 
 /** Paid (measures.ts), with the payment dated in the range. */

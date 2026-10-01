@@ -5,11 +5,8 @@ import { useMemo, useState } from "react";
 import { formatHijri } from "@/lib/hijri/hijri";
 import { hijriOfIso } from "@/lib/periods";
 import { formatDate } from "@/lib/format";
-import {
-  ReportFilters,
-  SectionTabs,
-  type FilterOption,
-} from "./report-filters";
+import { SectionTabs, type FilterOption } from "./report-filters";
+import { ReportFilterBar, type FilterKey } from "./report-filter-bar";
 import { SECTIONS, buildHref, type ReportQuery } from "@/lib/reporting/query";
 import { PrintRegistryProvider, Printable } from "./printable";
 import { PrintButton } from "./print-button";
@@ -69,7 +66,6 @@ function exportHref(query: ReportQuery): string {
 export function ReportsView({
   query,
   report,
-  basisLabel,
   summary,
   today,
   earliest,
@@ -82,12 +78,11 @@ export function ReportsView({
   savedViews,
   userId,
   teams,
-  nav,
+  header,
+  filters,
 }: {
   query: ReportQuery;
   report: SpendReport;
-  /** Which expenses count, and by which date (lib/reporting/basis). */
-  basisLabel: string;
   /** Period, filters and basis in one line — the heading of anything printed or downloaded. */
   summary: string;
   today: string;
@@ -101,8 +96,10 @@ export function ReportsView({
   savedViews: SavedReportView[];
   userId: string;
   teams: { id: string; name: string }[];
-  /** The links between report pages (report-nav), drawn on the server. */
-  nav: React.ReactNode;
+  /** The top of the page (report-header), drawn on the server. */
+  header: React.ReactNode;
+  /** Which of the standard filters this report takes (its registry entry). */
+  filters: FilterKey[];
 }) {
   const [calendar, setCalendar] = useState<"gregorian" | "hijri">("gregorian");
 
@@ -119,14 +116,7 @@ export function ReportsView({
   return (
     <PrintRegistryProvider>
       <div className="flex flex-col gap-5">
-        {nav}
-        <div>
-          <h1 className="page-title text-ink">Reports</h1>
-          <p className="page-description mt-1">
-            Spending over any period — Hijri year, financial year, quarter, month or your own dates.
-          </p>
-          <p className="mt-1 text-xs text-ink/55">{basisLabel}</p>
-        </div>
+        {header}
 
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-ink/10">
           <SectionTabs query={query} active={query.section} />
@@ -147,13 +137,14 @@ export function ReportsView({
 
         {/* One filter row, above every section — so whichever tab you are on,
             the numbers describe the same slice. */}
-        <ReportFilters
-          query={query}
+        <ReportFilterBar
+          filters={filters}
+          period={query.period}
           today={today}
           earliest={earliest}
-          vendors={vendors}
-          categories={categories}
-          items={items}
+          options={{ vendors, categories, items }}
+          selected={{ vendors: query.vendors, categories: query.categories, items: query.items }}
+          counting={query.status}
         />
 
         {empty ? (

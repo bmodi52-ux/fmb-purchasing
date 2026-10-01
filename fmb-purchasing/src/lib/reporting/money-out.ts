@@ -19,6 +19,8 @@ export type MoneyExpense = {
   entry: string | null;
   status: string;
   vendor: string;
+  /** The vendor as a filter keys it (filters.ts vendorKey). */
+  vendorKey: string;
   payee: string;
   total: number;
   submittedOn: string;

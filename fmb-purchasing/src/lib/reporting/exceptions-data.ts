@@ -1,10 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { categoryLabelsById } from "@/lib/categories";
 import { matchDuplicates } from "@/lib/duplicates";
 import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { parsePeriod, type Period } from "@/lib/periods";
 import { allRows, allRowsForIds } from "@/lib/supabase/all-rows";
 import { vendorLabel } from "@/lib/vendor-names";
+import type { FilterOption } from "./aggregate.ts";
 import { describeBasis, statusesFor } from "./basis.ts";
+import { describeSelection, offered, optionsOf, standardFilters, vendorKey, type StandardFilters } from "./filters.ts";
 import { exceptionTables, findExceptions, type DateConcern, type Exceptions } from "./exceptions.ts";
 import { safeFilename, type ReportDocument } from "./tables.ts";
 
@@ -54,10 +57,18 @@ const num = (v: number | string | null) => (v == null ? null : Number(v));
 // A sha256 is 64 characters, so fewer of them fit in a URL than ids do.
 const SHA_CHUNK = 60;
 
-export type ExceptionsView = { period: Period; report: Exceptions };
+export type ExceptionsView = {
+  period: Period;
+  report: Exceptions;
+  /** The standard filters as applied: only what the period offers. */
+  filters: Pick<StandardFilters, "vendors" | "categories" | "status">;
+  /** What the filter menus offer: the vendors and categories with spend in the period. */
+  options: { vendors: FilterOption[]; categories: FilterOption[] };
+};
 
 export async function loadExceptionsView(admin: SupabaseClient, params: Params, today: string): Promise<ExceptionsView> {
   const period = parsePeriod(one(params.period), today);
+  const asked = standardFilters(params);
 
   const expenseRows = await allRows<ExpenseRow>((from, to) =>
     admin
@@ -65,7 +76,7 @@ export async function loadExceptionsView(admin: SupabaseClient, params: Params, 
       .select(
         "id, expense_number, status, vendor_id, vendor_name_raw, invoice_number, report_date, total, gst_amount, gst_printed, receipt_total, receipt_total_scanned, receipt_total_note"
       )
-      .in("status", [...statusesFor("spend")])
+      .in("status", [...statusesFor(asked.status)])
       .gte("report_date", period.start)
       .lte("report_date", period.end)
       .order("id")
@@ -89,7 +100,7 @@ export async function loadExceptionsView(admin: SupabaseClient, params: Params, 
     allRows<{ id: string; name: string; parent_category_id: string | null }>((from, to) =>
       admin.from("categories").select("id, name, parent_category_id").order("id").range(from, to)
     ),
-    allRowsForIds<{ expense_id: string; item_name: string; line_total: number | string; cost_per_base_unit: number | string; base_unit_code: string }>(
+    allRowsForIds<{ line_item_id: string; expense_id: string; item_name: string; line_total: number | string; cost_per_base_unit: number | string; base_unit_code: string }>(
       ids,
       (slice, from, to) =>
         admin
@@ -164,25 +175,48 @@ export async function loadExceptionsView(admin: SupabaseClient, params: Params, 
   );
 
   const vendorName = new Map(vendors.map((v) => [v.id, v.name]));
-  const expenses = expenseRows.map((e) => ({
-    id: e.id,
-    entry: e.expense_number,
-    vendor: vendorLabel(e.vendor_id ? vendorName.get(e.vendor_id) : null, e.vendor_name_raw),
-    status: e.status,
-    reportDate: e.report_date,
-    total: Number(e.total),
-    gst: Number(e.gst_amount),
-    gstPrinted: num(e.gst_printed),
-    receiptTotal: num(e.receipt_total),
-    receiptTotalScanned: num(e.receipt_total_scanned),
-    receiptTotalNote: e.receipt_total_note,
-  }));
+  const everyExpense = expenseRows.map((e) => {
+    const vendor = vendorLabel(e.vendor_id ? vendorName.get(e.vendor_id) : null, e.vendor_name_raw);
+    return {
+      id: e.id,
+      entry: e.expense_number,
+      vendor,
+      vendorKey: vendorKey(e.vendor_id, vendor),
+      status: e.status,
+      reportDate: e.report_date,
+      total: Number(e.total),
+      gst: Number(e.gst_amount),
+      gstPrinted: num(e.gst_printed),
+      receiptTotal: num(e.receipt_total),
+      receiptTotalScanned: num(e.receipt_total_scanned),
+      receiptTotalNote: e.receipt_total_note,
+    };
+  });
+
+  // The menus offer what the period holds; a filter that matches none of it is dropped.
+  const categoryLabel = categoryLabelsById(categories);
+  const options = {
+    vendors: optionsOf(everyExpense.map((e) => ({ key: e.vendorKey, label: e.vendor }))),
+    categories: optionsOf(
+      lines.filter((l) => l.category_id).map((l) => ({ key: l.category_id!, label: categoryLabel.get(l.category_id!) ?? "A category" }))
+    ),
+  };
+  const filters = {
+    vendors: offered(asked.vendors, options.vendors),
+    categories: offered(asked.categories, options.categories),
+    status: asked.status,
+  };
+
+  const wantedVendors = new Set(filters.vendors);
+  const expenses = filters.vendors.length ? everyExpense.filter((e) => wantedVendors.has(e.vendorKey)) : everyExpense;
+  const kept = new Set(expenses.map((e) => e.id));
   const vendorOf = new Map(expenses.map((e) => [e.id, e.vendor]));
+  const counted = new Set<string>(statusesFor(filters.status));
 
   const report = findExceptions({
     range: period,
     expenses,
-    lines: lines.map((l) => ({
+    lines: lines.filter((l) => kept.has(l.expense_id)).map((l) => ({
       id: l.id,
       expenseId: l.expense_id,
       kind: l.kind,
@@ -197,12 +231,17 @@ export async function loadExceptionsView(admin: SupabaseClient, params: Params, 
     categories,
     disputedPacks: packs.map((p) => ({
       expenseId: p.expense_id,
+      lineId: p.line_item_id,
       itemName: p.item_name,
       lineTotal: Number(p.line_total),
       costPerBaseUnit: Number(p.cost_per_base_unit),
       baseUnit: p.base_unit_code,
     })),
-    dateConcerns: dates.map((d) => ({
+    // A date concern from outside the period carries no vendor to filter it
+    // by, so under a vendor filter only the period's own are kept.
+    dateConcerns: dates
+      .filter((d) => counted.has(d.status) && (filters.vendors.length === 0 || kept.has(d.expense_id)))
+      .map((d) => ({
       expenseId: d.expense_id,
       entry: d.expense_number,
       vendor: vendorOf.get(d.expense_id) ?? vendorLabel(null, d.vendor_name_raw),
@@ -213,16 +252,18 @@ export async function loadExceptionsView(admin: SupabaseClient, params: Params, 
       concern: d.concern,
     })),
     duplicates,
+    categoryIds: filters.categories,
   });
 
-  return { period, report };
+  return { period, report, filters, options };
 }
 
 export function exceptionsDocument(view: ExceptionsView): ReportDocument {
-  const { period, report } = view;
+  const { period, report, filters, options } = view;
+  const selection = describeSelection(filters, options);
   return {
     title: `Exceptions — ${period.label}`,
-    subtitle: `${period.label} · ${describeBasis("spend")} · ${report.flaggedExpenses} of ${report.expenseCount} expenses have something to check`,
+    subtitle: `${period.label}${selection ? ` · ${selection}` : ""} · ${describeBasis(filters.status)} · ${report.flaggedExpenses} of ${report.expenseCount} expenses have something to check`,
     filenameBase: safeFilename(`exceptions-${period.code}`),
     tables: exceptionTables(report),
   };
