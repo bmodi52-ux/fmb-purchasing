@@ -24,6 +24,8 @@ export type ExceptionExpense = {
   id: string;
   entry: string | null;
   vendor: string;
+  /** The vendor as a filter keys it (filters.ts vendorKey). */
+  vendorKey: string;
   status: string;
   /** The day it counts on in reports (0083). */
   reportDate: string;
@@ -51,6 +53,8 @@ export type ExceptionLine = {
 
 export type DisputedPack = {
   expenseId: string;
+  /** The line it was bought on, so a category filter can place it. */
+  lineId: string;
   itemName: string;
   lineTotal: number;
   costPerBaseUnit: number;
@@ -80,6 +84,13 @@ export type ExceptionsInput = {
   disputedPacks: DisputedPack[];
   dateConcerns: DateConcern[];
   duplicates: Map<string, DuplicateMatch[]>;
+  /**
+   * Narrow to these categories; none means all. A receipt is in a category
+   * when one of its lines is: checks on a line then list only the lines in
+   * it, and checks on a whole receipt — its total, its GST, its date — list
+   * the receipts that have such a line, judged on all their lines as ever.
+   */
+  categoryIds?: string[];
 };
 
 export type ExceptionKind =
@@ -209,9 +220,15 @@ const inRange = (day: string, r: DateRange) => day >= r.start && day <= r.end;
 
 export function findExceptions(input: ExceptionsInput): Exceptions {
   const rows = new Map<ExceptionKind, ExceptionRow[]>(EXCEPTION_CHECKS.map((c) => [c.kind, []]));
-  const byId = new Map(input.expenses.map((e) => [e.id, e]));
   const linesOf = new Map<string, ExceptionLine[]>();
   for (const l of input.lines) linesOf.set(l.expenseId, [...(linesOf.get(l.expenseId) ?? []), l]);
+
+  const wanted = new Set(input.categoryIds ?? []);
+  const narrowed = wanted.size > 0;
+  const inCategory = (l: ExceptionLine) => !narrowed || (l.categoryId !== null && wanted.has(l.categoryId));
+  const expenses = narrowed ? input.expenses.filter((e) => (linesOf.get(e.id) ?? []).some(inCategory)) : input.expenses;
+  const byId = new Map(expenses.map((e) => [e.id, e]));
+  const lineById = new Map(input.lines.map((l) => [l.id, l]));
 
   const push = (kind: ExceptionKind, e: ExceptionExpense, detail: string, amount: number) =>
     rows.get(kind)!.push({
@@ -227,7 +244,7 @@ export function findExceptions(input: ExceptionsInput): Exceptions {
   const hasChildren = new Set(input.categories.map((c) => c.parent_category_id).filter(Boolean));
   const categoryLabel = categoryLabelsById(input.categories);
 
-  for (const e of input.expenses) {
+  for (const e of expenses) {
     const lines = linesOf.get(e.id) ?? [];
 
     if (e.receiptTotal != null) {
@@ -258,7 +275,7 @@ export function findExceptions(input: ExceptionsInput): Exceptions {
       push("gst_printed", e, `The receipt prints ${money(e.gstPrinted!)}; the lines carry ${money(e.gst)}`, gstOff);
     }
 
-    for (const l of lines) {
+    for (const l of lines.filter(inCategory)) {
       if (l.notOnReceipt) {
         push("off_receipt", e, l.notOnReceiptNote ? `${l.description} — ${l.notOnReceiptNote}` : l.description, l.lineTotal);
       }
@@ -279,14 +296,16 @@ export function findExceptions(input: ExceptionsInput): Exceptions {
 
   for (const p of input.disputedPacks) {
     const e = byId.get(p.expenseId);
-    if (!e) continue;
+    const line = lineById.get(p.lineId);
+    if (!e || (narrowed && !(line && inCategory(line)))) continue;
     push("disputed_pack", e, `${p.itemName}: works out at ${money(p.costPerBaseUnit)} per ${p.baseUnit}`, p.lineTotal);
   }
 
   for (const c of input.dateConcerns) {
     const e = byId.get(c.expenseId);
-    // In the period by its date, or submitted in it and dated out of it.
-    if (!e && !inRange(c.submittedOn, input.range)) continue;
+    // In the period by its date, or submitted in it and dated out of it —
+    // though one dated out of it has no lines here to place it in a category.
+    if (!e && (narrowed || !inRange(c.submittedOn, input.range))) continue;
     rows.get("receipt_date")!.push({
       expenseId: c.expenseId,
       entry: c.entry,
@@ -312,8 +331,8 @@ export function findExceptions(input: ExceptionsInput): Exceptions {
   // it is listed, but its money isn't this period's.
   const flagged = new Set(groups.flatMap((g) => g.rows.map((r) => r.expenseId)).filter((id) => byId.has(id)));
   return {
-    expenseCount: input.expenses.length,
-    spend: sum(input.expenses.map((e) => e.total)),
+    expenseCount: expenses.length,
+    spend: sum(expenses.map((e) => e.total)),
     flaggedExpenses: flagged.size,
     flaggedSpend: sum([...flagged].map((id) => byId.get(id)!.total)),
     groups,

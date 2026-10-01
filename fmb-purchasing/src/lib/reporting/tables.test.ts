@@ -145,6 +145,8 @@ describe("Reports download", () => {
 describe("Budgets download", () => {
   test("Spent adds up to total spend, parent-category and uncategorised spend included", () => {
     const view: BudgetView = {
+      categoryOptions: [],
+      categories: [],
       rows: [
         { id: "a", label: "Meat › Mutton", budget: 1000, share: undefined, spent: 600, paid: 400, committed: 200, usedPct: 0.6 },
         { id: "b", label: "Dry goods", budget: null, share: undefined, spent: 100, paid: 0, committed: 100, usedPct: null },

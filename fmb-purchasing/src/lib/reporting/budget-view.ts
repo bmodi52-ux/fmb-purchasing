@@ -1,11 +1,13 @@
-import { MEASURES } from "./measures.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { categoryLabelsById, leafCategories, sortCategories } from "@/lib/categories";
 import { budgetsForPeriod, loadBudgets, type CategoryPeriodBudget, type StoredBudget } from "@/lib/budgets";
 import { budgetActuals, budgetByMonth, budgetTotals, type BudgetMonth, type BudgetTotals } from "@/lib/budget-actuals";
 import { monthCalendarFor, monthSpans, type Period } from "@/lib/periods";
+import type { FilterOption } from "./aggregate.ts";
+import { offered, optionsOf } from "./filters.ts";
 import { loadLedger } from "./ledger.ts";
 import type { DateRange } from "./ledger-rows.ts";
+import { MEASURES } from "./measures.ts";
 import type { ReportTable } from "./tables.ts";
 
 /**
@@ -34,7 +36,12 @@ export type BudgetRow = {
 };
 
 export type BudgetView = {
+  /** The categories shown: all of them, or the ones the page is narrowed to. */
   rows: BudgetRow[];
+  /** Every category a budget can be set on, for the filter menu. */
+  categoryOptions: FilterOption[];
+  /** The categories it is narrowed to; none means all. */
+  categories: string[];
   totals: BudgetTotals;
   /** Every budget, for "Start from last period's budgets". */
   budgets: StoredBudget[];
@@ -57,7 +64,9 @@ export type BudgetView = {
 
 export async function loadBudgetView(
   admin: SupabaseClient,
-  period: DateRange & Pick<Period, "calendar" | "code">
+  period: DateRange & Pick<Period, "calendar" | "code">,
+  /** Narrow to these categories (the standard category filter); none means all. */
+  categoryIds: string[] = []
 ): Promise<BudgetView> {
   const [{ data: categoryRows }, budgets, ledger] = await Promise.all([
     admin.from("categories").select("id, name, parent_category_id").order("sort_order"),
@@ -69,7 +78,7 @@ export async function loadBudgetView(
   const perCategory = budgetsForPeriod(budgets, period.start, period.end);
   const actuals = budgetActuals(ledger.lines, new Map(ledger.expenses.map((e) => [e.id, e.status])), categoryRows ?? []);
 
-  const rows: BudgetRow[] = leafCategories(sortCategories(categoryRows ?? []))
+  const everyRow: BudgetRow[] = leafCategories(sortCategories(categoryRows ?? []))
     .map((c) => {
       const share = perCategory.get(c.id);
       const budget = share && share.uncoveredDays < share.days ? share.amount : null;
@@ -87,6 +96,9 @@ export async function loadBudgetView(
     })
     .sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1) || b.spent - a.spent);
 
+  const { rows, categoryOptions, categories } = narrowBudgetRows(everyRow, categoryIds);
+  const narrowed = categories.length > 0;
+
   const budgeted = new Set(rows.filter((r) => r.budget !== null).map((r) => r.id));
   const dateOf = new Map(ledger.expenses.map((e) => [e.id, e.reportDate]));
   const months = budgeted.size
@@ -103,12 +115,31 @@ export async function loadBudgetView(
 
   return {
     rows,
+    categoryOptions,
+    categories,
     totals: budgetTotals(rows),
     budgets,
-    onParentCategories: actuals.onParentCategories.map((p) => ({ ...p, label: labels.get(p.categoryId) ?? "A category" })),
-    uncategorised: actuals.uncategorised,
+    // Spend outside every budgeted category is outside every chosen one too.
+    onParentCategories: narrowed
+      ? []
+      : actuals.onParentCategories.map((p) => ({ ...p, label: labels.get(p.categoryId) ?? "A category" })),
+    uncategorised: narrowed ? 0 : actuals.uncategorised,
     months,
   };
+}
+
+/**
+ * The rows the page shows: every category, or the ones asked for. A category
+ * asked for that no longer exists is dropped rather than leaving the page empty.
+ */
+export function narrowBudgetRows<R extends { id: string; label: string }>(
+  rows: R[],
+  categoryIds: string[]
+): { rows: R[]; categoryOptions: FilterOption[]; categories: string[] } {
+  const categoryOptions = optionsOf(rows.map((r) => ({ key: r.id, label: r.label })));
+  const categories = offered(categoryIds, categoryOptions);
+  const wanted = new Set(categories);
+  return { rows: categories.length ? rows.filter((r) => wanted.has(r.id)) : rows, categoryOptions, categories };
 }
 
 /**

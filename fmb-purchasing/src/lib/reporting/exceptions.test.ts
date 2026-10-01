@@ -19,6 +19,7 @@ function expense(over: Partial<ExceptionExpense> = {}): ExceptionExpense {
     id: `e${n}`,
     entry: `E-${String(n).padStart(4, "0")}`,
     vendor: "Harris Farm",
+    vendorKey: "v-harris",
     status: "approved",
     reportDate: "2026-07-15",
     total: 110,
@@ -141,8 +142,8 @@ describe("findExceptions", () => {
     const r = run({
       expenses: [e],
       disputedPacks: [
-        { expenseId: e.id, itemName: "Rice", lineTotal: 40, costPerBaseUnit: 0.004, baseUnit: "kg" },
-        { expenseId: "elsewhere", itemName: "Flour", lineTotal: 9, costPerBaseUnit: 1, baseUnit: "kg" },
+        { expenseId: e.id, lineId: "pack-line", itemName: "Rice", lineTotal: 40, costPerBaseUnit: 0.004, baseUnit: "kg" },
+        { expenseId: "elsewhere", lineId: "other-line", itemName: "Flour", lineTotal: 9, costPerBaseUnit: 1, baseUnit: "kg" },
       ],
     });
     assert.deepEqual(group(r, "disputed_pack").rows.map((x) => x.amount), [40]);
@@ -179,6 +180,58 @@ describe("findExceptions", () => {
     const r = run({ expenses: [over, under], lines: [line(over.id), line(under.id)] });
     assert.deepEqual(group(r, "receipt_gap").rows.map((x) => x.amount).sort(), [-10, 10]);
     assert.equal(group(r, "receipt_gap").amount, 20);
+  });
+});
+
+describe("narrowed to a category", () => {
+  // Two receipts: one all meat, one meat and an unclassified line.
+  const meatOnly = expense({ total: 100, receiptTotal: 90 });
+  const mixed = expense({ total: 60 });
+  const dairy = expense({ total: 30, receiptTotal: 25 });
+  const input = {
+    expenses: [meatOnly, mixed, dairy],
+    lines: [
+      line(meatOnly.id, { id: "m1", lineTotal: 100, categoryId: "meat" }),
+      line(mixed.id, { id: "x1", lineTotal: 40, categoryId: "meat", notOnReceipt: true, description: "Off-receipt meat" }),
+      line(mixed.id, { id: "x2", lineTotal: 20, categoryId: null, description: "Unclassified" }),
+      line(dairy.id, { id: "d1", lineTotal: 30, categoryId: "dairy", notOnReceipt: true, description: "Off-receipt milk" }),
+    ],
+    categories: [...CATEGORIES, { id: "dairy", name: "Dairy", parent_category_id: "food" }],
+  };
+
+  test("only receipts with a line in the category count, and are judged on all their lines", () => {
+    const r = run({ ...input, categoryIds: ["meat"] });
+    assert.equal(r.expenseCount, 2);
+    assert.equal(r.spend, 160);
+    // The meat receipt's total is checked against every line on it, as ever.
+    assert.deepEqual(group(r, "receipt_gap").rows.map((x) => x.expenseId), [meatOnly.id]);
+    // The dairy receipt's gap is not this view's.
+    assert.ok(!group(r, "receipt_gap").rows.some((x) => x.expenseId === dairy.id));
+  });
+
+  test("checks on a line list only the lines in the category", () => {
+    const r = run({ ...input, categoryIds: ["meat"] });
+    assert.deepEqual(group(r, "off_receipt").rows.map((x) => x.detail), ["Off-receipt meat"]);
+    // The unclassified line on the mixed receipt has no category to be in.
+    assert.equal(group(r, "uncategorised").rows.length, 0);
+    // Unfiltered, all three show.
+    const all = run(input);
+    assert.equal(group(all, "off_receipt").rows.length, 2);
+    assert.equal(group(all, "uncategorised").rows.length, 1);
+  });
+
+  test("a disputed pack is placed by the line it was bought on", () => {
+    const packs = [
+      { expenseId: meatOnly.id, lineId: "m1", itemName: "Mutton", lineTotal: 100, costPerBaseUnit: 1, baseUnit: "kg" },
+      { expenseId: dairy.id, lineId: "d1", itemName: "Milk", lineTotal: 30, costPerBaseUnit: 1, baseUnit: "l" },
+    ];
+    assert.deepEqual(group(run({ ...input, disputedPacks: packs, categoryIds: ["dairy"] }), "disputed_pack").rows.map((x) => x.amount), [30]);
+  });
+
+  test("a date concern from outside the period has no category to place it, so it is left out", () => {
+    const concern = { expenseId: "old", entry: "E-0045", vendor: "Coles", status: "submitted", total: 55, receiptDate: "1994-09-11", submittedOn: "2026-09-02", concern: "year_before_submission" as const };
+    assert.equal(group(run({ ...input, dateConcerns: [concern] }), "receipt_date").rows.length, 1);
+    assert.equal(group(run({ ...input, dateConcerns: [concern], categoryIds: ["meat"] }), "receipt_date").rows.length, 0);
   });
 });
 

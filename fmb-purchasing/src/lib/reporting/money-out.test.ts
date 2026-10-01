@@ -11,6 +11,7 @@ function expense(over: Partial<MoneyExpense> = {}): MoneyExpense {
     entry: `E-${String(n).padStart(4, "0")}`,
     status: "paid",
     vendor: "Harris Farm",
+    vendorKey: "v-harris",
     payee: "Aliasgar",
     total: 100,
     submittedOn: "2026-07-01",
