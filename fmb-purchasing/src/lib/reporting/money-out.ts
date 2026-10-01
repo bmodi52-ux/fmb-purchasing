@@ -263,104 +263,160 @@ export function pipeline(
 }
 
 /* ------------------------------------------------------------------ */
-/* Downloads                                                           */
+/* Tables — for the page and its download alike                        */
 /* ------------------------------------------------------------------ */
 
+export function transfersTable(r: PaymentsMade): ReportTable {
+  return {
+    title: "Transfers",
+    columns: [
+      { key: "paidOn", label: "Paid", kind: "date" },
+      { key: "run", label: "Run", kind: "text" },
+      { key: "payee", label: "Payee", kind: "text" },
+      { key: "reference", label: "Reference", kind: "text" },
+      { key: "expenses", label: "Expenses", kind: "count" },
+      { key: "amount", label: "Amount", kind: "money" },
+      { key: "confirmed", label: "On a bank statement", kind: "date" },
+    ],
+    rows: r.transfers.map((t) => ({
+      paidOn: t.paidOn,
+      run: t.runNumber ?? "",
+      payee: t.payee,
+      reference: t.reference ?? "",
+      expenses: t.expenses,
+      amount: t.amount,
+      confirmed: t.bankConfirmedOn,
+    })),
+    totals: { run: "Total", expenses: r.expenseCount, amount: r.total },
+  };
+}
+
+export function paidByPayeeTable(r: PaymentsMade): ReportTable {
+  return {
+    title: "By payee",
+    columns: [
+      { key: "payee", label: "Payee", kind: "text" },
+      { key: "transfers", label: "Transfers", kind: "count" },
+      { key: "expenses", label: "Expenses", kind: "count" },
+      { key: "amount", label: "Amount", kind: "money" },
+    ],
+    rows: r.byPayee,
+    totals: { payee: "Total", transfers: r.transfers.length, expenses: r.expenseCount, amount: r.total },
+  };
+}
+
+export function paidByMonthTable(r: PaymentsMade): ReportTable {
+  return {
+    title: "By month",
+    columns: [
+      { key: "label", label: "Month", kind: "text" },
+      { key: "transfers", label: "Transfers", kind: "count" },
+      { key: "amount", label: "Paid", kind: "money" },
+    ],
+    rows: r.byMonth.map((m) => ({ label: m.label, transfers: m.transfers, amount: m.amount })),
+    totals: { label: "Total", transfers: r.transfers.length, amount: r.total },
+  };
+}
+
 export function paymentsMadeTables(r: PaymentsMade): ReportTable[] {
-  return [
-    {
-      title: "Transfers",
-      columns: [
-        { key: "paidOn", label: "Paid", kind: "date" },
-        { key: "run", label: "Run", kind: "text" },
-        { key: "payee", label: "Payee", kind: "text" },
-        { key: "reference", label: "Reference", kind: "text" },
-        { key: "expenses", label: "Expenses", kind: "count" },
-        { key: "amount", label: "Amount", kind: "money" },
-        { key: "confirmed", label: "On a bank statement", kind: "date" },
-      ],
-      rows: r.transfers.map((t) => ({
-        paidOn: t.paidOn,
-        run: t.runNumber ?? "",
-        payee: t.payee,
-        reference: t.reference ?? "",
-        expenses: t.expenses,
-        amount: t.amount,
-        confirmed: t.bankConfirmedOn,
-      })),
-      totals: { run: "Total", expenses: r.expenseCount, amount: r.total },
-    },
-    {
-      title: "By payee",
-      columns: [
-        { key: "payee", label: "Payee", kind: "text" },
-        { key: "transfers", label: "Transfers", kind: "count" },
-        { key: "expenses", label: "Expenses", kind: "count" },
-        { key: "amount", label: "Amount", kind: "money" },
-      ],
-      rows: r.byPayee,
-      totals: { payee: "Total", transfers: r.transfers.length, expenses: r.expenseCount, amount: r.total },
-    },
-  ];
+  return [transfersTable(r), paidByPayeeTable(r), paidByMonthTable(r)];
+}
+
+/** Each expense waiting, longest first. On a page the entry opens the expense, and a wait past 30 days is marked. */
+export function waitingListTable(title: string, sinceLabel: string, w: Waiting): ReportTable {
+  return {
+    title,
+    columns: [
+      { key: "entry", label: "Entry", kind: "text", link: "href" },
+      { key: "vendor", label: "Vendor", kind: "text" },
+      { key: "payee", label: "Payee", kind: "text" },
+      { key: "since", label: sinceLabel, kind: "date" },
+      { key: "days", label: "Days waiting", kind: "count", tone: "tone" },
+      { key: "total", label: "Amount", kind: "money" },
+    ],
+    rows: w.rows.map((r) => ({
+      entry: r.entry ?? "",
+      vendor: r.vendor,
+      payee: r.payee,
+      since: r.since,
+      days: r.days,
+      total: r.total,
+      href: `/expenses/${r.id}`,
+      tone: r.days > AGE_BANDS[2].upTo ? "danger" : "",
+    })),
+    totals: { entry: "Total", total: w.amount },
+  };
+}
+
+export function waitingBandsTable(w: Waiting): ReportTable {
+  return {
+    title: "How long",
+    columns: [
+      { key: "label", label: "Waiting", kind: "text" },
+      { key: "count", label: "Expenses", kind: "count" },
+      { key: "amount", label: "Amount", kind: "money" },
+    ],
+    rows: w.bands,
+    totals: { label: "Total", count: w.count, amount: w.amount },
+  };
+}
+
+export function waitingByPayeeTable(w: Waiting): ReportTable {
+  return {
+    title: "By payee",
+    columns: [
+      { key: "payee", label: "Payee", kind: "text" },
+      { key: "count", label: "Expenses", kind: "count" },
+      { key: "amount", label: "Amount", kind: "money" },
+    ],
+    rows: w.byPayee,
+    totals: { payee: "Total", count: w.count, amount: w.amount },
+  };
 }
 
 export function waitingTables(title: string, sinceLabel: string, w: Waiting): ReportTable[] {
-  return [
-    {
-      title,
-      columns: [
-        { key: "entry", label: "Entry", kind: "text" },
-        { key: "vendor", label: "Vendor", kind: "text" },
-        { key: "payee", label: "Payee", kind: "text" },
-        { key: "since", label: sinceLabel, kind: "date" },
-        { key: "days", label: "Days waiting", kind: "count" },
-        { key: "total", label: "Amount", kind: "money" },
-      ],
-      rows: w.rows.map((r) => ({ entry: r.entry ?? "", vendor: r.vendor, payee: r.payee, since: r.since, days: r.days, total: r.total })),
-      totals: { entry: "Total", total: w.amount },
-    },
-    {
-      title: "How long",
-      columns: [
-        { key: "label", label: "Waiting", kind: "text" },
-        { key: "count", label: "Expenses", kind: "count" },
-        { key: "amount", label: "Amount", kind: "money" },
-      ],
-      rows: w.bands,
-      totals: { label: "Total", count: w.count, amount: w.amount },
-    },
-  ];
+  return [waitingListTable(title, sinceLabel, w), waitingBandsTable(w)];
+}
+
+export function timingTable(p: Pipeline): ReportTable {
+  const t = (label: string, x: Timing) => ({ step: label, count: x.count, median: x.median, average: x.average, slowest: x.slowest });
+  return {
+    title: "How long each step takes",
+    columns: [
+      { key: "step", label: "Step", kind: "text" },
+      { key: "count", label: "Expenses", kind: "count" },
+      { key: "median", label: "Median days", kind: "number" },
+      { key: "average", label: "Average days", kind: "number" },
+      { key: "slowest", label: "Slowest", kind: "count" },
+    ],
+    rows: [
+      t("Submitted to decided", p.submitToDecision),
+      t("Approved to paid", p.decisionToPayment),
+      t("Submitted to paid", p.submitToPayment),
+    ],
+  };
+}
+
+export function pipelineByMonthTable(p: Pipeline): ReportTable {
+  return {
+    title: "By month",
+    columns: [
+      { key: "label", label: "Month", kind: "text" },
+      { key: "decided", label: "Decided", kind: "count" },
+      { key: "submitToDecision", label: "Median days to decide", kind: "number" },
+      { key: "paid", label: "Paid", kind: "count" },
+      { key: "decisionToPayment", label: "Median days to pay", kind: "number" },
+    ],
+    rows: p.byMonth.map((m) => ({
+      label: m.label,
+      decided: m.decided,
+      submitToDecision: m.submitToDecision,
+      paid: m.paid,
+      decisionToPayment: m.decisionToPayment,
+    })),
+  };
 }
 
 export function pipelineTables(p: Pipeline): ReportTable[] {
-  const t = (label: string, x: Timing) => ({ step: label, count: x.count, median: x.median, average: x.average, slowest: x.slowest });
-  return [
-    {
-      title: "How long each step takes",
-      columns: [
-        { key: "step", label: "Step", kind: "text" },
-        { key: "count", label: "Expenses", kind: "count" },
-        { key: "median", label: "Median days", kind: "number" },
-        { key: "average", label: "Average days", kind: "number" },
-        { key: "slowest", label: "Slowest", kind: "count" },
-      ],
-      rows: [
-        t("Submitted to decided", p.submitToDecision),
-        t("Approved to paid", p.decisionToPayment),
-        t("Submitted to paid", p.submitToPayment),
-      ],
-    },
-    {
-      title: "By month",
-      columns: [
-        { key: "label", label: "Month", kind: "text" },
-        { key: "decided", label: "Decided", kind: "count" },
-        { key: "submitToDecision", label: "Median days to decide", kind: "number" },
-        { key: "paid", label: "Paid", kind: "count" },
-        { key: "decisionToPayment", label: "Median days to pay", kind: "number" },
-      ],
-      rows: p.byMonth,
-    },
-    ...waitingTables("Awaiting review", "Submitted", p.awaitingReview),
-  ];
+  return [timingTable(p), pipelineByMonthTable(p), ...waitingTables("Awaiting review", "Submitted", p.awaitingReview)];
 }

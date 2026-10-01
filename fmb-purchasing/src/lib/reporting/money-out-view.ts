@@ -128,6 +128,10 @@ export function moneyOutViewFrom(
 }
 
 export function moneyOutDocument(view: MoneyOutView, today: string): ReportDocument {
+  return { ...moneyOutTables(view, today), filterOptions: { vendors: view.vendorOptions } };
+}
+
+function moneyOutTables(view: MoneyOutView, today: string): ReportDocument {
   const selection = describeSelection({ vendors: view.vendors }, { vendors: view.vendorOptions });
   const narrowed = selection ? ` · ${selection}` : "";
   if (view.section === "waiting") {

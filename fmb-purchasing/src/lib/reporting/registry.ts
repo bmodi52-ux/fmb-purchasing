@@ -6,7 +6,7 @@ import { parsePeriod } from "@/lib/periods";
 import type { CurrentUser } from "@/lib/auth/session";
 import { userCan, type ActionKey, type PageKey } from "@/lib/permissions";
 import { DATE_BASIS_LABEL, type DateBasis } from "./basis.ts";
-import { describeSelection, standardFilters } from "./filters.ts";
+import { describeSelection, offered, standardFilters } from "./filters.ts";
 import type { Measure } from "./measures.ts";
 import { budgetTables, loadBudgetView } from "./budget-view.ts";
 import { gstTables } from "./gst-tables.ts";
@@ -47,6 +47,8 @@ export type ReportDefinition = {
   nav?: { label: string; permission?: { page: PageKey; action: ActionKey } };
   /** Which of the standard filters it takes; the filter bar shows these and no others. */
   filters: ReportFilterKey[];
+  /** The period it opens on, when that is not the current Hijri year. */
+  defaultPeriod?: string;
   /** The measures its figures are (measures.ts), spelt out in the key under its title. */
   measures: Measure[];
   build(params: Params, today: string): Promise<ReportDocument>;
@@ -72,6 +74,7 @@ export const REPORTS: ReportDefinition[] = [
         subtitle: view.summary,
         filenameBase: safeFilename(`reports-${view.query.section}-${view.query.period}`),
         tables: spendReportTables(view.report, view.period.label, view.previousRange.label),
+        filterOptions: view.options,
       };
     },
   },
@@ -124,6 +127,7 @@ export const REPORTS: ReportDefinition[] = [
         subtitle: `${period.label}${selection ? ` · ${selection}` : ""} · ${DATE_BASIS_LABEL.receipt} · submitted, approved and paid · amounts include GST`,
         filenameBase: safeFilename(`budgets-${period.code}`),
         tables: budgetTables(view),
+        filterOptions: { categories: view.categoryOptions },
       };
     },
   },
@@ -152,7 +156,10 @@ export const REPORTS: ReportDefinition[] = [
     title: "GST",
     description: "GST for the return, the Xero bills file, and account codes.",
     nav: { label: "GST", permission: { page: "accounting", action: "view" } },
-    filters: ["period"],
+    // Narrowing by vendor or category is for looking into the detail. The
+    // Accounting page, which shows the figures for the return, offers neither.
+    filters: ["period", "vendor", "category"],
+    defaultPeriod: "au-current",
     measures: ["accrued", "paid"],
     // The detail lists every line claimed on, so it takes the export grant
     // the Xero file does, not just the right to look at the page.
@@ -160,12 +167,23 @@ export const REPORTS: ReportDefinition[] = [
     async build(params, today) {
       const period = parsePeriod(one(params.period) ?? "au-current", today);
       const basis: DateBasis = one(params.basis) === "paid" ? "paid" : "receipt";
-      const { gstExpenses, gstLines, xeroLines } = await loadAccountingPeriod(createAdminClient(), period, basis);
+      const asked = standardFilters(params);
+      const { gstExpenses, gstLines, xeroLines, options } = await loadAccountingPeriod(createAdminClient(), period, basis, {
+        vendors: asked.vendors,
+        categories: asked.categories,
+      });
+      const selection = describeSelection(
+        { vendors: offered(asked.vendors, options.vendors), categories: offered(asked.categories, options.categories) },
+        options
+      );
       return {
         title: `GST — ${period.label}`,
-        subtitle: `${DATE_BASIS_LABEL[basis]} · ${basis === "paid" ? "paid" : "approved and paid"} · for checking against the return, with FMB's accountant`,
+        subtitle: selection
+          ? `${period.label} · ${selection} · ${DATE_BASIS_LABEL[basis]} · ${basis === "paid" ? "paid" : "approved and paid"} · narrowed, so not the figures for the return`
+          : `${DATE_BASIS_LABEL[basis]} · ${basis === "paid" ? "paid" : "approved and paid"} · for checking against the return, with FMB's accountant`,
         filenameBase: safeFilename(`gst-${period.code}-${basis}`),
         tables: gstTables(summariseGst(gstExpenses, gstLines), gstExpenses, xeroLines),
+        filterOptions: options,
       };
     },
   },

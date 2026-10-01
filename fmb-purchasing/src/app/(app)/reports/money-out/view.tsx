@@ -1,11 +1,21 @@
 import Link from "next/link";
 import type { CurrentUser } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatDate } from "@/lib/format";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import { MONEY_OUT_SECTIONS, loadMoneyOutView, type MoneyOutSection } from "@/lib/reporting/money-out-view";
-import type { Timing, Waiting } from "@/lib/reporting/money-out";
+import {
+  paidByMonthTable,
+  paidByPayeeTable,
+  pipelineByMonthTable,
+  timingTable,
+  transfersTable,
+  waitingBandsTable,
+  waitingByPayeeTable,
+  waitingListTable,
+  type Waiting,
+} from "@/lib/reporting/money-out";
 import { DownloadLinks } from "@/components/download-links";
+import { ReportTableView } from "@/components/report-table";
 import { ReportFilterBar } from "../report-filter-bar";
 import { ReportHeader } from "../report-header";
 
@@ -87,35 +97,14 @@ export async function MoneyOutReport({ user, params }: { user: CurrentUser; para
           ) : (
             <>
               <Panel title="Transfers" subtitle="Newest first">
-                <Table
-                  head={["Paid", "Run", "Payee", "Reference", "Expenses", "Amount", "On a statement"]}
-                  right={[4, 5]}
-                  rows={view.report.transfers.map((t) => [
-                    formatDate(t.paidOn),
-                    t.runNumber ?? "—",
-                    t.payee,
-                    t.reference ?? "—",
-                    String(t.expenses),
-                    money(t.amount),
-                    t.bankConfirmedOn ? formatDate(t.bankConfirmedOn) : "Not yet",
-                  ])}
-                  total={["Total", "", "", "", String(view.report.expenseCount), money(view.report.total), ""]}
-                />
+                <ReportTableView table={transfersTable(view.report)} />
               </Panel>
               <Panel title="By payee">
-                <Table
-                  head={["Payee", "Transfers", "Expenses", "Amount"]}
-                  right={[1, 2, 3]}
-                  rows={view.report.byPayee.map((p) => [p.payee, String(p.transfers), String(p.expenses), money(p.amount)])}
-                />
+                <ReportTableView table={paidByPayeeTable(view.report)} />
               </Panel>
               {view.report.byMonth.length > 1 && (
                 <Panel title="By month">
-                  <Table
-                    head={["Month", "Transfers", "Paid"]}
-                    right={[1, 2]}
-                    rows={view.report.byMonth.map((m) => [m.label, String(m.transfers), money(m.amount)])}
-                  />
+                  <ReportTableView table={paidByMonthTable(view.report)} />
                 </Panel>
               )}
             </>
@@ -150,29 +139,11 @@ export async function MoneyOutReport({ user, params }: { user: CurrentUser; para
             />
           </dl>
           <Panel title="How long each step takes" subtitle="Calendar days, for decisions and payments made in the period">
-            <Table
-              head={["Step", "Expenses", "Median", "Average", "Slowest"]}
-              right={[1, 2, 3, 4]}
-              rows={[
-                timingRow("Submitted to decided", view.report.submitToDecision),
-                timingRow("Approved to paid", view.report.decisionToPayment),
-                timingRow("Submitted to paid", view.report.submitToPayment),
-              ]}
-            />
+            <ReportTableView table={timingTable(view.report)} />
           </Panel>
           {view.report.byMonth.length > 1 && (
             <Panel title="By month" subtitle="Medians, in days">
-              <Table
-                head={["Month", "Decided", "To decide", "Paid", "To pay"]}
-                right={[1, 2, 3, 4]}
-                rows={view.report.byMonth.map((m) => [
-                  m.label,
-                  String(m.decided),
-                  m.submitToDecision === null ? "—" : String(m.submitToDecision),
-                  String(m.paid),
-                  m.decisionToPayment === null ? "—" : String(m.decisionToPayment),
-                ])}
-              />
+              <ReportTableView table={pipelineByMonthTable(view.report)} />
             </Panel>
           )}
           <WaitingSection waiting={view.report.awaitingReview} since="Submitted" noun="review" />
@@ -180,11 +151,6 @@ export async function MoneyOutReport({ user, params }: { user: CurrentUser; para
       )}
     </div>
   );
-}
-
-function timingRow(step: string, t: Timing): string[] {
-  const d = (n: number | null) => (n === null ? "—" : String(n));
-  return [step, String(t.count), d(t.median), d(t.average), d(t.slowest)];
 }
 
 /** What is waiting — for payment or for review — and for how long. */
@@ -200,54 +166,14 @@ function WaitingSection({ waiting, since, noun }: { waiting: Waiting; since: str
         </dl>
       )}
       <Panel title={`How long they have waited for ${noun}`}>
-        <Table
-          head={["Waiting", "Expenses", "Amount"]}
-          right={[1, 2]}
-          rows={waiting.bands.map((b) => [b.label, String(b.count), money(b.amount)])}
-          total={["Total", String(waiting.count), money(waiting.amount)]}
-        />
+        <ReportTableView table={waitingBandsTable(waiting)} />
       </Panel>
       <Panel title={`Awaiting ${noun}`} subtitle="Longest waiting first">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-                <th scope="col" className="py-2 pr-4 font-medium">Entry</th>
-                <th scope="col" className="py-2 pr-4 font-medium">Vendor</th>
-                <th scope="col" className="py-2 pr-4 font-medium">Payee</th>
-                <th scope="col" className="py-2 pr-4 font-medium">{since}</th>
-                <th scope="col" className="py-2 pr-4 text-right font-medium">Waiting</th>
-                <th scope="col" className="py-2 text-right font-medium">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {waiting.rows.map((r) => (
-                <tr key={r.id} className="border-b border-ink/5 last:border-0">
-                  <td className="py-1.5 pr-4 whitespace-nowrap">
-                    <Link href={`/expenses/${r.id}`} className="tabular-nums font-medium underline-offset-2 hover:underline">
-                      {r.entry ?? "View"}
-                    </Link>
-                  </td>
-                  <td className="py-1.5 pr-4">{r.vendor}</td>
-                  <td className="py-1.5 pr-4 text-ink/70">{r.payee}</td>
-                  <td className="py-1.5 pr-4 whitespace-nowrap tabular-nums text-ink/60">{formatDate(r.since)}</td>
-                  <td className={`py-1.5 pr-4 text-right tabular-nums ${r.days > 30 ? "text-danger" : "text-ink/70"}`}>
-                    {days(r.days)}
-                  </td>
-                  <td className="py-1.5 text-right tabular-nums">{money(r.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ReportTableView table={waitingListTable(`Awaiting ${noun}`, since, waiting)} />
       </Panel>
       {noun === "payment" && waiting.byPayee.length > 1 && (
         <Panel title="By payee">
-          <Table
-            head={["Payee", "Expenses", "Amount"]}
-            right={[1, 2]}
-            rows={waiting.byPayee.map((p) => [p.payee, String(p.count), money(p.amount)])}
-          />
+          <ReportTableView table={waitingByPayeeTable(waiting)} />
         </Panel>
       )}
     </>
@@ -276,44 +202,4 @@ function Panel({ title, subtitle, children }: { title: string; subtitle?: string
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <p className="card px-4 py-8 text-center text-sm text-ink/55">{children}</p>;
-}
-
-/** A plain table: `right` names the columns that hold figures. */
-function Table({ head, rows, right, total }: { head: string[]; rows: string[][]; right: number[]; total?: string[] }) {
-  const align = (i: number) => (right.includes(i) ? "text-right tabular-nums" : "");
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-            {head.map((h, i) => (
-              <th key={h} scope="col" className={`py-2 pr-4 font-medium ${align(i)}`}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, ri) => (
-            <tr key={ri} className="border-b border-ink/5 last:border-0">
-              {r.map((c, i) => (
-                <td key={i} className={`py-1.5 pr-4 ${align(i)}`}>
-                  {c}
-                </td>
-              ))}
-            </tr>
-          ))}
-          {total && (
-            <tr className="border-t border-ink/15 font-medium">
-              {total.map((c, i) => (
-                <td key={i} className={`py-2 pr-4 ${align(i)}`}>
-                  {c}
-                </td>
-              ))}
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
 }

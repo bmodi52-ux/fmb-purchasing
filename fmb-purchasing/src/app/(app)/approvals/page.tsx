@@ -17,6 +17,7 @@ import { budgetsForPeriod, loadBudgets } from "@/lib/budgets";
 import { loadLedger } from "@/lib/reporting/ledger";
 import { loadPriceFlags, loadSpendFlags } from "@/lib/price-alerts-data";
 import { receiptFlags } from "@/lib/receipt-flags";
+import { statusesOf } from "@/lib/reporting/measures";
 import { describePriceFlag, describeUnusualSpend, isSeriousPriceFlag } from "@/lib/price-alerts";
 
 type VendorFlagRow = {
@@ -50,7 +51,8 @@ export default async function ApprovalsPage() {
       .select(
         "id, expense_number, vendor_id, vendor_name_raw, invoice_number, receipt_date, report_date, subtotal, gst_amount, gst_printed, total, submitted_by, submitter_comment, payee_id, created_at, receipt_total, receipt_total_scanned, receipt_total_note"
       )
-      .eq("status", "submitted")
+      // Awaiting review, as every report means it (measures.ts).
+      .in("status", [...statusesOf("awaitingReview")])
       .order("created_at"),
     getUserPermissions(user),
   ]);

@@ -113,15 +113,29 @@ export function monthBucket(isoDate: string, calendar: MonthCalendar = "gregoria
   return { key, label: formatMonthLabel(key) };
 }
 
+/**
+ * A month's label is asked for once per expense, and asking the locale for
+ * it is the slowest thing these reports did: 2.8 seconds of a 200,000-line
+ * year list went on formatting the same hundred and twenty months twenty
+ * thousand times over. A month only ever has one label, so each is worked
+ * out once.
+ */
+const monthLabels = new Map<string, string>();
+
 export function formatMonthLabel(ym: string): string {
+  const known = monthLabels.get(ym);
+  if (known !== undefined) return known;
   const [y, m] = ym.split("-").map(Number);
   // Constructed in UTC and read back in UTC: a local-time Date built from a
   // month boundary can land in the previous month west of Greenwich.
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-AU", {
+  const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-AU", {
     month: "short",
     year: "2-digit",
     timeZone: "UTC",
   });
+  // Bounded: a malformed key from a bad address must not grow this for ever.
+  if (monthLabels.size < 2400) monthLabels.set(ym, label);
+  return label;
 }
 
 /* ------------------------------------------------------------------ */
@@ -185,11 +199,11 @@ export function filterOptionsFor(
  * reflects only the matching lines — otherwise filtering by category would
  * report the whole receipt, including everything that didn't match.
  */
-export function applyFilters(
-  expenses: ExpenseRecord[],
-  lines: LineRecord[],
+export function applyFilters<E extends ExpenseRecord, L extends LineRecord>(
+  expenses: E[],
+  lines: L[],
   filters: Filters
-): Slice {
+): { expenses: E[]; lines: L[] } {
   let keptExpenses = expenses;
 
   if (filters.month) {

@@ -4,7 +4,8 @@
  */
 
 import type { Bucket, Dimension, Totals } from "./aggregate.ts";
-import type { SpendReport } from "./spend-report.ts";
+import type { SpendReport, TransactionRow } from "./spend-report.ts";
+import { pageOfTable, type TableState } from "./table-view.ts";
 import type { ReportTable } from "./tables.ts";
 
 const DIMENSION_LABEL: Record<Dimension, { one: string; many: string; counted: string }> = {
@@ -75,6 +76,39 @@ function headlineTable(now: Totals, before: Totals | null, periodLabel: string, 
   };
 }
 
+/** Every line behind the figures. On a page the entry opens its expense. */
+export function transactionsTable(rows: TransactionRow[]): ReportTable {
+  return {
+    title: "Transactions",
+    columns: [
+      { key: "date", label: "Date", kind: "date" },
+      { key: "entry", label: "Entry", kind: "text", link: "href" },
+      { key: "vendor", label: "Vendor", kind: "text" },
+      { key: "item", label: "Item", kind: "text" },
+      { key: "category", label: "Category", kind: "text" },
+      { key: "status", label: "Status", kind: "text" },
+      { key: "amount", label: "Amount", kind: "money" },
+      { key: "gst", label: "GST", kind: "money" },
+    ],
+    rows: rows.map((r) => ({ ...r, entry: r.entry ?? "", href: `/expenses/${r.expenseId}` })),
+    totals: {
+      date: null,
+      entry: "Total",
+      amount: cents(rows.reduce((sum, r) => sum + r.amount, 0)),
+      gst: cents(rows.reduce((sum, r) => sum + r.gst, 0)),
+    },
+  };
+}
+
+/**
+ * One page of the transactions, sorted as the address asks — what the page
+ * is sent in place of every line. Null on any other section.
+ */
+export function transactionsPage(report: SpendReport, state: TableState) {
+  const s = report.section;
+  return s.key === "transactions" ? pageOfTable(transactionsTable(s.rows), state) : null;
+}
+
 /** The section on screen as tables — its main table first, since a CSV holds only that one — then the headline. */
 export function spendReportTables(report: SpendReport, periodLabel: string, previousLabel: string): ReportTable[] {
   const s = report.section;
@@ -116,26 +150,7 @@ export function spendReportTables(report: SpendReport, periodLabel: string, prev
       },
     });
   } else if (s.key === "transactions") {
-    main.push({
-      title: "Transactions",
-      columns: [
-        { key: "date", label: "Date", kind: "date" },
-        { key: "entry", label: "Entry", kind: "text" },
-        { key: "vendor", label: "Vendor", kind: "text" },
-        { key: "item", label: "Item", kind: "text" },
-        { key: "category", label: "Category", kind: "text" },
-        { key: "status", label: "Status", kind: "text" },
-        { key: "amount", label: "Amount", kind: "money" },
-        { key: "gst", label: "GST", kind: "money" },
-      ],
-      rows: s.rows.map((r) => ({ ...r, entry: r.entry ?? "" })),
-      totals: {
-        date: null,
-        entry: "Total",
-        amount: cents(s.rows.reduce((sum, r) => sum + r.amount, 0)),
-        gst: cents(s.rows.reduce((sum, r) => sum + r.gst, 0)),
-      },
-    });
+    main.push(transactionsTable(s.rows));
   } else {
     main.push({
       title: "Unit costs",

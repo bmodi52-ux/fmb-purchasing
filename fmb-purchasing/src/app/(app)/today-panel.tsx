@@ -3,6 +3,7 @@ import { can, getUserPermissions } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { todayIso } from "@/lib/periods-data";
 import { loadReviewQueue } from "./review-queue/data";
+import { statusesOf } from "@/lib/reporting/measures";
 import type { getCurrentUser } from "@/lib/auth/session";
 
 type User = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
@@ -32,8 +33,13 @@ export async function TodayPanel({ user }: { user: User }) {
 
   const [mine, waiting, toPay, queue, menuToday] = await Promise.all([
     admin.from("expenses").select("status, decided_at").eq("submitted_by", user.id).in("status", ["submitted", "declined"]),
-    canApprove ? admin.from("expenses").select("total").eq("status", "submitted") : Promise.resolve({ data: null }),
-    canPay ? admin.from("expenses").select("total").eq("status", "approved") : Promise.resolve({ data: null }),
+    // The same sets Money out reports as awaiting review and awaiting payment (measures.ts).
+    canApprove
+      ? admin.from("expenses").select("total").in("status", [...statusesOf("awaitingReview")])
+      : Promise.resolve({ data: null }),
+    canPay
+      ? admin.from("expenses").select("total").in("status", [...statusesOf("outstanding")])
+      : Promise.resolve({ data: null }),
     canQueue ? loadReviewQueue() : Promise.resolve(null),
     canMenus
       ? admin.from("menu_days").select("planned_thaalis, confirmed_thaalis").eq("service_date", today)

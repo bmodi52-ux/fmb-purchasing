@@ -79,16 +79,26 @@ are tested against a real Postgres. Two rules matter throughout:
 - GST is a property of **the line**, not a share of the total. Most of what this
   kitchen buys is GST-free.
 
-**Reports share one ledger and one registry.** Spending, Budgets and GST read
-`src/lib/reporting/ledger.ts`, which loads a period's expenses and lines once —
-one rule for which vendor a receipt is from and which day it counts on — and
-caches it a month at a time. Money out and Exceptions report how things stand
-now, so they read the tables directly (`money-out-data.ts`, `exceptions-data.ts`).
-Each report states which expenses it counts and by which date (`basis.ts`) and
-is an entry in `registry.ts`, which is what `/reports/export` downloads from as
-CSV, Excel or PDF. A home-page widget names a registry report and is computed by
-that report's own loader (`widgets.ts`, `widget-data.ts`), so a download or a
-widget is always a piece of its page. Adding a report is adding an entry there.
+**Reports share one ledger, one set of definitions and one registry.** Spending,
+Budgets and GST read `src/lib/reporting/ledger.ts`, which loads a period's
+expenses and lines once — one rule for which vendor a receipt is from and which
+day it counts on — and caches it a month at a time. Money out and Exceptions
+report how things stand now, so they read the tables directly. What "spend",
+"committed", "accrued", "paid" and "outstanding" mean is said once, in
+`measures.ts`, and every report takes its statuses from there.
+
+Each report is an entry in `registry.ts`: what it is for, where its link sits,
+which of the standard filters it takes (`filters.ts` — period, vendor, category,
+item, which expenses count) and how its tables are built. From that entry it gets
+its header and row of links, its filter bar, its CSV, Excel and PDF downloads
+(`/reports/export`), its home-page widgets, and — with nothing more written — a
+page of its tables at `/reports/<key>` that sorts and pages on the server. A
+report that wants charts writes its own page from the same shared pieces
+(`report-header.tsx`, `report-filter-bar.tsx`, `components/report-table.tsx`).
+
+To add a report: write a loader that returns its tables (a `ReportDocument`),
+add the entry to `registry.ts`, and add a test of its figures. `scale.test.ts`
+holds the server-side sums to staying quick at ten years' data.
 
 ## Migrations
 

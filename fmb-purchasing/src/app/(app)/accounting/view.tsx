@@ -110,10 +110,19 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
           <h2 className="section-title text-ink">GST for {period.label}</h2>
           {/* Every line behind 1B, with its tax type and any doubt about the claim. */}
           {canExport && (
-            <DownloadLinks
-              href={`/reports/export?report=gst&period=${encodeURIComponent(period.code)}&basis=${basis}`}
-              label="GST detail"
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              {/* The same detail as a page: every line, to sort, page through and narrow by vendor or category. */}
+              <Link
+                href={`/reports/gst?period=${encodeURIComponent(period.code)}&basis=${basis}`}
+                className="text-xs text-ink/60 underline underline-offset-2 hover:text-ink"
+              >
+                View the detail
+              </Link>
+              <DownloadLinks
+                href={`/reports/export?report=gst&period=${encodeURIComponent(period.code)}&basis=${basis}`}
+                label="GST detail"
+              />
+            </div>
           )}
         </div>
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
