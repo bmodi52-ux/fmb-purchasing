@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { computeSpendReport, forScreen, TRANSACTIONS_ON_SCREEN } from "./spend-report.ts";
+import { computeSpendReport, forScreen } from "./spend-report.ts";
+import { spendReportTables, transactionsPage } from "./spend-tables.ts";
 import {
   applyFilters,
   byCategory,
@@ -155,8 +156,8 @@ describe("Transactions", () => {
     assert.deepEqual(new Set(r.section.rows.map((x) => x.category)), new Set(["meat"]));
   });
 
-  test("the page gets the newest thousand, and is told how many there are", () => {
-    const many = Array.from({ length: TRANSACTIONS_ON_SCREEN + 5 }, (_, i) => line("e1", "meat", "mutton", 1 + i));
+  test("the page is sent one page of them, sorted on the server; the download keeps them all", () => {
+    const many = Array.from({ length: 1005 }, (_, i) => line("e1", "meat", "mutton", 1 + i));
     const r = computeSpendReport({
       current: applyFilters(expenses, many, NO_FILTERS),
       previous: null,
@@ -167,9 +168,21 @@ describe("Transactions", () => {
     });
     const screen = forScreen(r);
     assert.ok(screen.section.key === "transactions" && r.section.key === "transactions");
-    assert.equal(screen.section.rows.length, TRANSACTIONS_ON_SCREEN);
-    assert.equal(screen.section.total, TRANSACTIONS_ON_SCREEN + 5);
-    assert.equal(r.section.rows.length, TRANSACTIONS_ON_SCREEN + 5, "the download keeps them all");
+    // The report the page is sent carries no lines at all…
+    assert.equal(screen.section.rows.length, 0);
+    assert.equal(screen.section.total, 1005);
+    // …the page of them comes apart, fifty at a time, largest first when asked.
+    const first = transactionsPage(r, { sort: { key: "amount", dir: "desc" }, page: 1 })!;
+    assert.equal(first.table.rows.length, 50);
+    assert.equal(first.table.rows[0].amount, 1005);
+    assert.deepEqual([first.view.total, first.view.pages, first.view.from, first.view.to], [1005, 21, 1, 50]);
+    const last = transactionsPage(r, { sort: { key: "amount", dir: "desc" }, page: 21 })!;
+    assert.equal(last.table.rows.length, 5);
+    assert.equal(last.table.rows.at(-1)!.amount, 1);
+    // The totals row is of every line, whichever page is showing.
+    assert.equal(last.table.totals!.amount, first.table.totals!.amount);
+    assert.equal(spendReportTables(r, "FY", "FY-1")[0].rows.length, 1005, "the download keeps them all");
+    assert.equal(r.section.rows.length, 1005);
   });
 });
 

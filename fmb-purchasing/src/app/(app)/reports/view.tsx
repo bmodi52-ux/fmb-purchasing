@@ -2,7 +2,9 @@ import type { CurrentUser } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import { forScreen } from "@/lib/reporting/spend-report";
+import { transactionsPage } from "@/lib/reporting/spend-tables";
 import { loadSpendView } from "@/lib/reporting/spend-view";
+import { tableStateFrom } from "@/lib/reporting/table-view";
 import { loadSavedViews } from "@/lib/saved-report-views";
 import { findReport } from "@/lib/reporting/registry";
 import { ReportHeader } from "./report-header";
@@ -32,6 +34,8 @@ export async function SpendingReport({
     <ReportsView
       query={view.query}
       report={forScreen(view.report)}
+      // One page of the lines, sorted and cut here — not every line of the period.
+      transactions={transactionsPage(view.report, tableStateFrom(params))}
       summary={view.summary}
       today={todayIso()}
       earliest={earliest}

@@ -2,7 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { allRowsForIds } from "@/lib/supabase/all-rows";
 import type { GstExpense, GstLine } from "@/lib/gst-summary";
 import type { XeroBillLine } from "@/lib/xero-export";
+import { applyFilters, filterOptionsFor, type FilterOption } from "@/lib/reporting/aggregate";
 import { withStatusBasis, type DateBasis } from "@/lib/reporting/basis";
+import { offered } from "@/lib/reporting/filters";
 import { loadLedger, loadLedgerByPaymentDate } from "@/lib/reporting/ledger";
 import { accountingFromLedger } from "@/lib/reporting/accounting";
 import type { Lodgement } from "@/lib/gst-lodgement";
@@ -25,10 +27,34 @@ export type Basis = DateBasis;
 export async function loadAccountingPeriod(
   admin: SupabaseClient,
   range: { start: string; end: string },
-  basis: Basis
-): Promise<{ gstExpenses: GstExpense[]; gstLines: GstLine[]; xeroLines: XeroBillLine[] }> {
-  const ledger =
+  basis: Basis,
+  /**
+   * Narrow to these vendors and categories — for looking into the detail,
+   * never for the figures of a return, which are the whole period's.
+   */
+  narrowTo?: { vendors: string[]; categories: string[] }
+): Promise<{
+  gstExpenses: GstExpense[];
+  gstLines: GstLine[];
+  xeroLines: XeroBillLine[];
+  /** The vendors and categories in the period, before any narrowing. */
+  options: { vendors: FilterOption[]; categories: FilterOption[] };
+}> {
+  const whole =
     basis === "paid" ? await loadLedgerByPaymentDate(range) : withStatusBasis(await loadLedger(range), "accrued");
+  const { vendors: vendorOptions, categories: categoryOptions } = filterOptionsFor(whole.expenses, whole.lines);
+  const narrowed = narrowTo && narrowTo.vendors.length + narrowTo.categories.length > 0;
+  const ledger = narrowed
+    ? {
+        ...whole,
+        ...applyFilters(whole.expenses, whole.lines, {
+          month: null,
+          vendorIds: offered(narrowTo.vendors, vendorOptions),
+          categoryIds: offered(narrowTo.categories, categoryOptions),
+          itemIds: [],
+        }),
+      }
+    : whole;
 
   const ids = ledger.expenses.map((e) => e.id);
   const vendorIds = [...new Set(ledger.expenses.map((e) => e.vendorId).filter(Boolean) as string[])];
@@ -43,14 +69,17 @@ export async function loadAccountingPeriod(
     admin.from("locked_periods").select("start_date, end_date, locked_at").is("unlocked_at", null),
   ]);
 
-  return accountingFromLedger(ledger, {
-    withReceipt: new Set(attachments.map((a) => a.expense_id)),
-    vendors: new Map(vendors.map((v) => [v.id, v])),
-    locks: (locks ?? []) as { start_date: string; end_date: string; locked_at: string }[],
-    accountCodeByCategory: new Map(
-      (categories ?? []).map((c) => [c.id as string, (c.account_code as string | null) ?? null])
-    ),
-  });
+  return {
+    ...accountingFromLedger(ledger, {
+      withReceipt: new Set(attachments.map((a) => a.expense_id)),
+      vendors: new Map(vendors.map((v) => [v.id, v])),
+      locks: (locks ?? []) as { start_date: string; end_date: string; locked_at: string }[],
+      accountCodeByCategory: new Map(
+        (categories ?? []).map((c) => [c.id as string, (c.account_code as string | null) ?? null])
+      ),
+    }),
+    options: { vendors: vendorOptions, categories: categoryOptions },
+  };
 }
 
 /**

@@ -266,5 +266,6 @@ export function exceptionsDocument(view: ExceptionsView): ReportDocument {
     subtitle: `${period.label}${selection ? ` · ${selection}` : ""} · ${describeBasis(filters.status)} · ${report.flaggedExpenses} of ${report.expenseCount} expenses have something to check`,
     filenameBase: safeFilename(`exceptions-${period.code}`),
     tables: exceptionTables(report),
+    filterOptions: options,
   };
 }

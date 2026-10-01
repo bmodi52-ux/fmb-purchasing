@@ -214,6 +214,9 @@ export const EXCEPTION_CHECKS: {
   },
 ];
 
+/** A status as a page says it. */
+const STATUS_WORD: Record<string, string> = { submitted: "Awaiting review", approved: "Approved", paid: "Paid" };
+
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 const sum = (xs: number[]) => round2(xs.reduce((s, x) => s + x, 0));
 const inRange = (day: string, r: DateRange) => day >= r.start && day <= r.end;
@@ -375,19 +378,33 @@ export function exceptionTables(x: Exceptions): ReportTable[] {
       ],
       rows: x.groups.map((g) => ({ heading: g.heading, expenses: g.expenses, rows: g.rows.length, amount: g.amount })),
     },
-    ...found.map(
-      (g): ReportTable => ({
-        title: g.heading,
-        columns: [
-          { key: "entry", label: "Entry", kind: "text" },
-          { key: "date", label: "Date", kind: "date" },
-          { key: "vendor", label: "Vendor", kind: "text" },
-          { key: "status", label: "Status", kind: "text" },
-          { key: "detail", label: "What", kind: "text" },
-          { key: "amount", label: g.amountLabel, kind: "money" },
-        ],
-        rows: g.rows.map((r) => ({ entry: r.entry ?? "", date: r.date, vendor: r.vendor, status: r.status, detail: r.detail, amount: r.amount })),
-      })
-    ),
+    ...found.map(exceptionGroupTable),
   ];
+}
+
+/**
+ * One check's findings as a table. On a page the entry opens the expense; a
+ * check whose amount is a difference shows which way it goes.
+ */
+export function exceptionGroupTable(g: ExceptionGroup): ReportTable {
+  return {
+    title: g.heading,
+    columns: [
+      { key: "entry", label: "Entry", kind: "text", link: "href" },
+      { key: "date", label: "Date", kind: "date" },
+      { key: "vendor", label: "Vendor", kind: "text" },
+      { key: "status", label: "Status", kind: "text" },
+      { key: "detail", label: "What", kind: "text" },
+      { key: "amount", label: g.amountLabel, kind: "money", signed: g.signed },
+    ],
+    rows: g.rows.map((r) => ({
+      entry: r.entry ?? "",
+      date: r.date,
+      vendor: r.vendor,
+      status: STATUS_WORD[r.status] ?? r.status,
+      detail: r.detail,
+      amount: r.amount,
+      href: `/expenses/${r.expenseId}`,
+    })),
+  };
 }

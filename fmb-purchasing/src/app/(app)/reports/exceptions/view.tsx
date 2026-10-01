@@ -2,19 +2,19 @@ import Link from "next/link";
 import type { CurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatDate } from "@/lib/format";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import { describeBasis } from "@/lib/reporting/basis";
+import { exceptionGroupTable } from "@/lib/reporting/exceptions";
 import { loadExceptionsView } from "@/lib/reporting/exceptions-data";
 import { findReport } from "@/lib/reporting/registry";
 import { DownloadLinks } from "@/components/download-links";
+import { ReportTableView } from "@/components/report-table";
 import { ReportFilterBar } from "../report-filter-bar";
 import { ReportHeader } from "../report-header";
 
 type Params = Record<string, string | string[] | undefined>;
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
-const signed = (n: number) => (n > 0 ? `+${money(n)}` : money(n));
 
 /**
  * What in a period's spend is wrong, or may be, with the money attached
@@ -109,36 +109,8 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
               </span>
             </div>
             <p className="mt-0.5 max-w-2xl text-xs text-ink/55">{g.why}</p>
-            <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-                    <th scope="col" className="py-2 pr-4 font-medium">Entry</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Date</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Vendor</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">What</th>
-                    <th scope="col" className="py-2 text-right font-medium">{g.amountLabel}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.rows.map((r, i) => (
-                    <tr key={`${r.expenseId}-${i}`} className="border-b border-ink/5 align-top last:border-0">
-                      <td className="py-1.5 pr-4 whitespace-nowrap">
-                        <Link href={`/expenses/${r.expenseId}`} className="tabular-nums font-medium underline-offset-2 hover:underline">
-                          {r.entry ?? "View"}
-                        </Link>
-                        {r.status === "submitted" && <span className="ml-1.5 text-xs text-ink/45">not yet approved</span>}
-                      </td>
-                      <td className="py-1.5 pr-4 whitespace-nowrap tabular-nums text-ink/60">{formatDate(r.date)}</td>
-                      <td className="py-1.5 pr-4">{r.vendor}</td>
-                      <td className="py-1.5 pr-4 text-ink/75">{r.detail}</td>
-                      <td className="py-1.5 text-right tabular-nums whitespace-nowrap">
-                        {g.signed ? signed(r.amount) : money(r.amount)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-3">
+              <ReportTableView table={exceptionGroupTable(g)} />
             </div>
           </section>
         ))

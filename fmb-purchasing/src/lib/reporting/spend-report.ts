@@ -76,14 +76,16 @@ export type TransactionRow = {
   gst: number;
 };
 
-/** How many transactions the page lists; the download has them all. */
-export const TRANSACTIONS_ON_SCREEN = 1000;
-
-/** The report as the page is sent it: a long transaction list cut to what a page can hold. */
+/**
+ * The report as the page is sent it. The transactions are not in it: they can
+ * run to every line of a year, so the page is sent one page of them, sorted
+ * and cut on the server (spend-tables transactionsPage). The download reads
+ * the report itself and has them all.
+ */
 export function forScreen(report: SpendReport): SpendReport {
   const s = report.section;
-  if (s.key !== "transactions" || s.rows.length <= TRANSACTIONS_ON_SCREEN) return report;
-  return { ...report, section: { ...s, rows: s.rows.slice(0, TRANSACTIONS_ON_SCREEN) } };
+  if (s.key !== "transactions") return report;
+  return { ...report, section: { ...s, rows: [] } };
 }
 
 const STATUS_WORD: Record<string, string> = { submitted: "Awaiting review", approved: "Approved", paid: "Paid" };
@@ -109,7 +111,9 @@ export function transactionRows(slice: Slice): TransactionRow[] {
         },
       ];
     })
-    .sort((a, b) => b.date.localeCompare(a.date) || (b.entry ?? "").localeCompare(a.entry ?? ""));
+    // ISO days and entry numbers order as plain text; asking the locale to
+    // compare them costs several times as much across a year of lines.
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (a.entry ?? "") < (b.entry ?? "") ? 1 : (a.entry ?? "") > (b.entry ?? "") ? -1 : 0));
 }
 
 export type SpendReport = {

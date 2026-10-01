@@ -12,7 +12,20 @@ import { toCsv } from "@/lib/csv";
 
 export type ColumnKind = "text" | "money" | "count" | "number" | "percent" | "date";
 
-export type ReportColumn = { key: string; label: string; kind: ColumnKind };
+export type ReportColumn = {
+  key: string;
+  label: string;
+  kind: ColumnKind;
+  /**
+   * On a page, the cell links somewhere: the name of the row field that holds
+   * the address (an entry number to its expense, say). Downloads ignore it.
+   */
+  link?: string;
+  /** A difference that can go either way: shown with its sign on a page. */
+  signed?: boolean;
+  /** On a page, the name of a row field that is "danger" when the cell deserves the eye. */
+  tone?: string;
+};
 
 export type ReportCell = string | number | null;
 
@@ -33,6 +46,15 @@ export type ReportDocument = {
   /** Without an extension. */
   filenameBase: string;
   tables: ReportTable[];
+  /**
+   * What the filter menus offer for the period — the vendors, categories and
+   * items in it — for a page built from this document. Downloads ignore it.
+   */
+  filterOptions?: {
+    vendors?: { value: string; label: string }[];
+    categories?: { value: string; label: string }[];
+    items?: { value: string; label: string }[];
+  };
 };
 
 /**
