@@ -279,7 +279,7 @@ describe("widget specs", () => {
 
   test("a widget leads to its report, open where it was", () => {
     const ranked = readWidget({ kind: "ranked-table", config: { ...BASE, dimension: "vendor", vendorIds: ["v1"] } })!;
-    assert.equal(widgetHref(ranked, "/reports"), "/reports?period=h1447&breakdownBy=vendor&vendor=v1&section=breakdown");
+    assert.equal(widgetHref(ranked, "/reports/spending"), "/reports/spending?period=h1447&breakdownBy=vendor&vendor=v1&section=breakdown");
     assert.equal(filterCount(ranked), 1);
     // A view as of today carries no period.
     const waiting = { report: "money-out" as const, view: "waiting-figure" as const, query: { period: "h1447" } };

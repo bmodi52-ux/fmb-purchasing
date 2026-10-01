@@ -1,5 +1,8 @@
 import type { CurrentUser } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { loadFavouriteReports } from "@/lib/reporting/favourites";
 import { findReport } from "@/lib/reporting/registry";
+import { FavouriteStar } from "./favourite-star";
 import { MeasureKey } from "@/components/measure-key";
 import { ReportNav } from "./report-nav";
 
@@ -29,11 +32,16 @@ export async function ReportHeader({
   title?: string;
 }) {
   const definition = findReport(report)!;
+  const favourite = (await loadFavouriteReports(createAdminClient(), user.id)).includes(report);
   return (
     <>
       <ReportNav active={report} user={user} />
       <div>
-        <h1 className="page-title text-ink">{title ?? definition.title}</h1>
+        <div className="flex items-center gap-1.5">
+          <h1 className="page-title text-ink">{title ?? definition.title}</h1>
+          {/* A star keeps the report on the dashboard's list of favourites (0088). */}
+          <FavouriteStar reportKey={report} title={definition.nav?.label ?? definition.title} initial={favourite} />
+        </div>
         <p className="page-description mt-1 max-w-2xl">{description ?? definition.description}</p>
         {basis && <p className="mt-1 text-xs text-ink/55">{basis}</p>}
         <MeasureKey measures={definition.measures} />

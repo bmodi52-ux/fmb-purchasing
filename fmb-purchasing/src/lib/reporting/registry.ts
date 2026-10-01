@@ -10,7 +10,7 @@ import { describeSelection, offered, standardFilters } from "./filters.ts";
 import type { Measure } from "./measures.ts";
 import { budgetTables, loadBudgetView } from "./budget-view.ts";
 import { gstTables } from "./gst-tables.ts";
-import { SECTIONS } from "./query.ts";
+import { SECTIONS, SPENDING_PATH } from "./query.ts";
 import { spendReportTables } from "./spend-tables.ts";
 import { loadSpendView } from "./spend-view.ts";
 import { exceptionsDocument, loadExceptionsView } from "./exceptions-data.ts";
@@ -59,9 +59,9 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 export const REPORTS: ReportDefinition[] = [
   {
     key: "spend",
-    path: "/reports",
-    title: "Reports",
-    description: "Spending over any period — Hijri year, financial year, quarter, month or your own dates.",
+    path: SPENDING_PATH,
+    title: "Spending",
+    description: "What was spent over any period — Hijri year, financial year, quarter, month or your own dates — by category, vendor and item.",
     nav: { label: "Spending" },
     filters: ["period", "vendor", "category", "item", "counting"],
     measures: ["spend", "accrued", "paid"],
@@ -70,7 +70,7 @@ export const REPORTS: ReportDefinition[] = [
       const view = await loadSpendView(params, today);
       const section = SECTIONS.find((s) => s.key === view.query.section)?.label ?? "Overview";
       return {
-        title: `Reports — ${section}`,
+        title: `Spending — ${section}`,
         subtitle: view.summary,
         filenameBase: safeFilename(`reports-${view.query.section}-${view.query.period}`),
         tables: spendReportTables(view.report, view.period.label, view.previousRange.label),
@@ -199,17 +199,25 @@ export async function canSeeReport(user: CurrentUser, key: string): Promise<bool
   return report ? userCan(user, report.permission.page, report.permission.action) : false;
 }
 
+/** The dashboard's place in the row of links: first, at /reports. */
+export const DASHBOARD_KEY = "dashboard";
+
 /**
  * The links above every report: each report with a place in the row that
  * this person may open, in registry order.
  */
 export async function reportNavFor(user: CurrentUser): Promise<{ key: string; label: string; href: string }[]> {
   const listed = REPORTS.filter((r) => r.nav);
-  const allowed = await Promise.all(
-    listed.map((r) => {
+  const [dashboard, ...allowed] = await Promise.all([
+    userCan(user, "reports", "view"),
+    ...listed.map((r) => {
       const need = r.nav!.permission ?? r.permission;
       return userCan(user, need.page, need.action);
-    })
-  );
-  return listed.filter((_, i) => allowed[i]).map((r) => ({ key: r.key, label: r.nav!.label, href: r.path }));
+    }),
+  ]);
+  return [
+    // The way in to all of them. Not a report itself, so not in the registry.
+    ...(dashboard ? [{ key: DASHBOARD_KEY, label: "Dashboard", href: "/reports" }] : []),
+    ...listed.filter((_, i) => allowed[i]).map((r) => ({ key: r.key, label: r.nav!.label, href: r.path })),
+  ];
 }

@@ -75,7 +75,7 @@ export async function saveReportView(_prev: SavedViewState, formData: FormData):
       return { status: "error", message: "The view could not be saved. Try again." };
     }
     await writeTeams(viewId, teamIds);
-    revalidatePath("/reports");
+    revalidatePath("/reports", "layout");
     return { status: "saved", message: `Saved “${name}”.` };
   }
 
@@ -89,7 +89,7 @@ export async function saveReportView(_prev: SavedViewState, formData: FormData):
     return { status: "error", message: "The view could not be saved. Try again." };
   }
   await writeTeams(created.id as string, teamIds);
-  revalidatePath("/reports");
+  revalidatePath("/reports", "layout");
   return { status: "saved", message: `Saved “${name}”.` };
 }
 
@@ -99,7 +99,7 @@ export async function deleteReportView(formData: FormData): Promise<void> {
   if (!viewId) return;
   // Scoped by owner as well as id: the id alone must not be enough.
   await createAdminClient().from("saved_report_views").delete().eq("id", viewId).eq("owner_id", user.id);
-  revalidatePath("/reports");
+  revalidatePath("/reports", "layout");
 }
 
 /** A copy of a view someone can see, as their own and private to them. */
@@ -130,5 +130,5 @@ export async function copyReportView(formData: FormData): Promise<void> {
     await reportError({ source: "saved-report-views", error: error.message, userId: user.id });
     throw new Error("The view could not be copied. Try again.");
   }
-  revalidatePath("/reports");
+  revalidatePath("/reports", "layout");
 }

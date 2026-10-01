@@ -12,6 +12,9 @@
 
 import { parseStatusBasis, type StatusBasis } from "./basis.ts";
 
+/** Where the Spending report lives. /reports itself is the dashboard. */
+export const SPENDING_PATH = "/reports/spending";
+
 export type ReportSection = "overview" | "breakdown" | "compare" | "unit-costs" | "transactions";
 
 export const SECTIONS: { key: ReportSection; label: string }[] = [
@@ -132,5 +135,5 @@ export function buildHref(query: ReportQuery, patch: Partial<ReportQuery>): stri
   for (const c of next.categories) params.append("category", c);
   for (const i of next.items) params.append("item", i);
 
-  return `/reports?${params.toString()}`;
+  return `${SPENDING_PATH}?${params.toString()}`;
 }

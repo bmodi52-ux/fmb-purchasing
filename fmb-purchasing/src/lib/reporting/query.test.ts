@@ -35,7 +35,7 @@ describe("report queries", () => {
 
   test("defaults are left out of the URL", () => {
     const plain = queryFromSearchParams({}, "h1448");
-    assert.equal(buildHref(plain, {}), "/reports?period=h1448");
+    assert.equal(buildHref(plain, {}), "/reports/spending?period=h1448");
   });
 
   test("a single filter value arrives as a string and is read as a list", () => {

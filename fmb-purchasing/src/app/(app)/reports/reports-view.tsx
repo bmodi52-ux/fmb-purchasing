@@ -11,7 +11,7 @@ import { ReportTableView } from "@/components/report-table";
 import type { transactionsPage } from "@/lib/reporting/spend-tables";
 
 type TransactionsPage = NonNullable<ReturnType<typeof transactionsPage>>;
-import { SECTIONS, buildHref, type ReportQuery } from "@/lib/reporting/query";
+import { SECTIONS, SPENDING_PATH, buildHref, type ReportQuery } from "@/lib/reporting/query";
 import { PrintRegistryProvider, Printable } from "./printable";
 import { PrintButton } from "./print-button";
 import { DownloadLinks } from "@/components/download-links";
@@ -60,7 +60,7 @@ function DateCell({ date, calendar }: { date: string | null; calendar: "gregoria
  * which builds the file on the server from the same figures.
  */
 function exportHref(query: ReportQuery): string {
-  return buildHref(query, {}).replace("/reports?", "/reports/export?report=spend&");
+  return buildHref(query, {}).replace(`${SPENDING_PATH}?`, "/reports/export?report=spend&");
 }
 
 /**
@@ -133,7 +133,7 @@ export function ReportsView({
               <>
                 <DownloadLinks href={exportHref(query)} />
                 <PrintButton
-                  title={`Reports — ${sectionLabel}`}
+                  title={`Spending — ${sectionLabel}`}
                   subtitle={summary}
                   filenameBase={`reports-${query.section}-${query.period}`}
                 />
