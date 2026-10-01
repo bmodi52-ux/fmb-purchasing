@@ -1,1 +1,9 @@
 .claude/settings.local.json
+
+# The user manual and the script that builds it are working files kept outside
+# git, as is the backup taken before each update (scratchpad #14).
+/USER_MANUAL.md
+/USER_MANUAL.html
+/USER_MANUAL.pdf
+/USER_MANUAL.build.mjs
+/manual-backup-*/
