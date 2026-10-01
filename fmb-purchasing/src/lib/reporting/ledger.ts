@@ -3,6 +3,7 @@ import { NOT_SPEND_FILTER } from "@/lib/expense-status";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { allRows, allRowsForIds } from "@/lib/supabase/all-rows";
 import { LINE_OFFER } from "@/lib/supabase/relationships";
+import { statusesOf } from "./measures.ts";
 import {
   EXPENSE_COLUMNS,
   LINE_COLUMNS,
@@ -104,7 +105,7 @@ export async function loadLedgerByPaymentDate(range: DateRange): Promise<Ledger>
       admin
         .from("expenses")
         .select(EXPENSE_COLUMNS)
-        .eq("status", "paid")
+        .in("status", [...statusesOf("paid")])
         .gte("payment_date", range.start)
         .lte("payment_date", range.end)
         .order("id")

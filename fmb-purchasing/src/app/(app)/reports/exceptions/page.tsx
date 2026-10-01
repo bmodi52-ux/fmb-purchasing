@@ -65,7 +65,7 @@ export default async function ExceptionsPage({
             </>
           )}
         </p>
-        <p className="mt-1 text-xs text-ink/55">{describeBasis("committed")}</p>
+        <p className="mt-1 text-xs text-ink/55">{describeBasis("spend")}</p>
       </div>
 
       <div className="flex flex-wrap items-end justify-between gap-3 card p-3">

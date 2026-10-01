@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { parsePeriod, periodCode, yearContaining } from "@/lib/periods";
 import { PeriodPicker } from "@/components/period-picker";
 import type { Dimension } from "@/lib/reporting/aggregate";
-import { STATUS_BASES, type StatusBasis } from "@/lib/reporting/basis";
+import { STATUS_BASES, parseStatusBasis, type StatusBasis } from "@/lib/reporting/basis";
 import type { WidgetData } from "@/lib/reporting/widget-data";
 import {
   WIDGET_REPORT_LABEL,
@@ -55,7 +55,7 @@ export function AddWidgetDialog({
   const [titleTouched, setTitleTouched] = useState(!!editing);
   // New widgets follow the current Hijri year and roll over by themselves.
   const [periodChoice, setPeriodChoice] = useState(first(q.period) ?? "h-current");
-  const [status, setStatus] = useState<StatusBasis>((first(q.status) as StatusBasis) ?? "committed");
+  const [status, setStatus] = useState<StatusBasis>(parseStatusBasis(first(q.status)));
   const [vendorIds, setVendorIds] = useState<string[]>(list(q.vendor));
   const [categoryIds, setCategoryIds] = useState<string[]>(list(q.category));
   const [itemIds, setItemIds] = useState<string[]>(list(q.item));
@@ -106,7 +106,7 @@ export function AddWidgetDialog({
   const query: Record<string, string | string[]> = {};
   if (needs("period")) query.period = periodChoice;
   if (isSpend) {
-    if (status !== "committed") query.status = status;
+    if (status !== "spend") query.status = status;
     if (needs("breakdownBy")) query.breakdownBy = breakdownBy;
     if (needs("compareBy")) query.compareBy = compareBy;
     query.vendor = vendorIds;

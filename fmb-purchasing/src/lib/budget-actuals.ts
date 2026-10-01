@@ -10,6 +10,8 @@
  *     = total spend
  */
 
+import { counts } from "@/lib/reporting/measures";
+
 export type SpendLine = { expenseId: string; categoryId: string | null; lineTotal: number };
 
 export type LeafSpend = { spent: number; paid: number };
@@ -50,7 +52,7 @@ export function budgetActuals(
     } else {
       const leaf = byLeaf.get(id) ?? { spent: 0, paid: 0 };
       leaf.spent += line.lineTotal;
-      if (statusByExpense.get(line.expenseId) === "paid") leaf.paid += line.lineTotal;
+      if (counts("paid", statusByExpense.get(line.expenseId) ?? "")) leaf.paid += line.lineTotal;
       byLeaf.set(id, leaf);
     }
   }

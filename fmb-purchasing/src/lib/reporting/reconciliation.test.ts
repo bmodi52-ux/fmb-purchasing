@@ -309,7 +309,7 @@ describe("Reports reconciles with the expenses table", () => {
   test("counting only approved and paid drops exactly what is still waiting", async () => {
     const ledger = await ledgerFor("2026-07-01", "2026-09-30");
     const all = totals(applyFilters(ledger.expenses, ledger.lines, NO_FILTERS)).spend;
-    const approved = withStatusBasis(ledger, "approved");
+    const approved = withStatusBasis(ledger, "accrued");
     const waiting = await sumOf("select total from expenses where id = $1", [expense.undatedFirst]);
     assert.equal(cents(all - totals(applyFilters(approved.expenses, approved.lines, NO_FILTERS)).spend), waiting);
   });
@@ -324,7 +324,7 @@ describe("Accounting reconciles with Reports and with the Xero file", () => {
   };
 
   test("G10 + G11 is Reports' approved-and-paid spend, and 1B its GST", async () => {
-    const ledger = withStatusBasis(await ledgerFor("2026-07-01", "2026-09-30"), "approved");
+    const ledger = withStatusBasis(await ledgerFor("2026-07-01", "2026-09-30"), "accrued");
     const { gstExpenses, gstLines } = accountingFromLedger(ledger, extras);
     const gst = summariseGst(gstExpenses, gstLines);
     const slice = applyFilters(ledger.expenses, ledger.lines, NO_FILTERS);
@@ -335,7 +335,7 @@ describe("Accounting reconciles with Reports and with the Xero file", () => {
   });
 
   test("the GST Xero will work out from the bills file is 1B, discount and all", async () => {
-    const ledger = withStatusBasis(await ledgerFor("2026-07-01", "2026-09-30"), "approved");
+    const ledger = withStatusBasis(await ledgerFor("2026-07-01", "2026-09-30"), "accrued");
     const { gstExpenses, gstLines, xeroLines } = accountingFromLedger(ledger, extras);
     const xeroGst = cents(
       xeroLines.reduce((s, l) => s + (xeroTaxType(l).endsWith("INPUT") ? cents(l.lineTotal / 11) : 0), 0)

@@ -4,6 +4,7 @@ import { addDays } from "@/lib/periods";
 import { allRows, allRowsForIds } from "@/lib/supabase/all-rows";
 import { vendorLabel } from "@/lib/vendor-names";
 import type { DateRange } from "./ledger-rows.ts";
+import { statusesOf } from "./measures.ts";
 import type { MoneyExpense } from "./money-out.ts";
 
 /**
@@ -71,19 +72,19 @@ async function load(admin: SupabaseClient, where: (q: Query) => Query): Promise<
   }));
 }
 
-/** Paid, with the payment dated in the range. */
+/** Paid (measures.ts), with the payment dated in the range. */
 export function loadPaidIn(admin: SupabaseClient, range: DateRange) {
-  return load(admin, (q) => q.eq("status", "paid").gte("payment_date", range.start).lte("payment_date", range.end));
+  return load(admin, (q) => q.in("status", [...statusesOf("paid")]).gte("payment_date", range.start).lte("payment_date", range.end));
 }
 
-/** Approved and not yet paid — now. */
+/** Outstanding (measures.ts): approved and not yet paid — now. */
 export function loadAwaitingPayment(admin: SupabaseClient) {
-  return load(admin, (q) => q.eq("status", "approved"));
+  return load(admin, (q) => q.in("status", [...statusesOf("outstanding")]));
 }
 
-/** Submitted and not yet decided — now. */
+/** Awaiting review (measures.ts): submitted and not yet decided — now. */
 export function loadAwaitingReview(admin: SupabaseClient) {
-  return load(admin, (q) => q.eq("status", "submitted"));
+  return load(admin, (q) => q.in("status", [...statusesOf("awaitingReview")]));
 }
 
 /**
@@ -94,7 +95,7 @@ export function loadAwaitingReview(admin: SupabaseClient) {
 export async function loadDecidedIn(admin: SupabaseClient, range: DateRange): Promise<MoneyExpense[]> {
   const rows = await load(admin, (q) =>
     q
-      .in("status", ["approved", "paid", "declined"])
+      .in("status", [...statusesOf("accrued"), "declined"])
       .gte("decided_at", `${addDays(range.start, -1)}T00:00:00Z`)
       .lt("decided_at", `${addDays(range.end, 2)}T00:00:00Z`)
   );

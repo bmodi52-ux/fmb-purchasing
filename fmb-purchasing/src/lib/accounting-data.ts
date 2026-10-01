@@ -28,7 +28,7 @@ export async function loadAccountingPeriod(
   basis: Basis
 ): Promise<{ gstExpenses: GstExpense[]; gstLines: GstLine[]; xeroLines: XeroBillLine[] }> {
   const ledger =
-    basis === "paid" ? await loadLedgerByPaymentDate(range) : withStatusBasis(await loadLedger(range), "approved");
+    basis === "paid" ? await loadLedgerByPaymentDate(range) : withStatusBasis(await loadLedger(range), "accrued");
 
   const ids = ledger.expenses.map((e) => e.id);
   const vendorIds = [...new Set(ledger.expenses.map((e) => e.vendorId).filter(Boolean) as string[])];

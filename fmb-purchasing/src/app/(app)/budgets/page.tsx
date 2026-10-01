@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { MEASURES } from "@/lib/reporting/measures";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getUserPermissions, can, requirePermission } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -97,8 +98,8 @@ export default async function BudgetsPage({
 
       <div className="flex flex-wrap items-center gap-x-8 gap-y-2 card px-5 py-4">
         <Figure label="Budgeted" value={totals.remaining !== null ? money(totals.budgeted) : "Not set"} />
-        <Figure label="Paid" value={money(totals.paid)} />
-        <Figure label="Committed" value={money(totals.committed)} />
+        <Figure label={MEASURES.paid.label} value={money(totals.paid)} />
+        <Figure label={MEASURES.committed.label} value={money(totals.committed)} />
         <Figure
           label="Remaining"
           value={totals.remaining !== null ? money(totals.remaining) : "—"}
