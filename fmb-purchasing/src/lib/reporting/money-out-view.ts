@@ -1,3 +1,4 @@
+import { MEASURES } from "./measures.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { monthCalendarFor, parsePeriod, type Period } from "@/lib/periods";
 import {
@@ -28,7 +29,7 @@ export type MoneyOutSection = "paid" | "waiting" | "pipeline";
 
 export const MONEY_OUT_SECTIONS: { key: MoneyOutSection; label: string }[] = [
   { key: "paid", label: "Payments made" },
-  { key: "waiting", label: "Awaiting payment" },
+  { key: "waiting", label: MEASURES.outstanding.plain },
   { key: "pipeline", label: "Pipeline" },
 ];
 

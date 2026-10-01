@@ -1,3 +1,4 @@
+import { MEASURES } from "./measures.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { categoryLabelsById, leafCategories, sortCategories } from "@/lib/categories";
 import { budgetsForPeriod, loadBudgets, type CategoryPeriodBudget, type StoredBudget } from "@/lib/budgets";
@@ -129,8 +130,8 @@ export function budgetTables(view: BudgetView): ReportTable[] {
       columns: [
         { key: "label", label: "Category", kind: "text" },
         { key: "budget", label: "Budget", kind: "money" },
-        { key: "paid", label: "Paid", kind: "money" },
-        { key: "committed", label: "Committed", kind: "money" },
+        { key: "paid", label: MEASURES.paid.label, kind: "money" },
+        { key: "committed", label: MEASURES.committed.label, kind: "money" },
         { key: "spent", label: "Spent", kind: "money" },
         { key: "remaining", label: "Remaining", kind: "money" },
         { key: "used", label: "Used", kind: "percent" },

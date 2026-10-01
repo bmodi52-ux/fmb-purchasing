@@ -10,19 +10,26 @@
  */
 
 import type { ExpenseStatus } from "@/lib/expense-status";
+import { MEASURES, type Measure } from "./measures.ts";
 
-/** Which expenses count. Declined and withdrawn never do (expense-status.ts). */
-export type StatusBasis = "committed" | "approved" | "paid";
+/**
+ * Which expenses a report counts: one of three measures (measures.ts).
+ * Declined and withdrawn never count (expense-status.ts).
+ */
+export type StatusBasis = Extract<Measure, "spend" | "accrued" | "paid">;
+
+/**
+ * The same three under the names they had before measures.ts: "committed"
+ * meant everything live, which is "spend" — and is not what Budgets, or
+ * anyone, means by committed. Links, saved views and widgets saved with the
+ * old names still open.
+ */
+const FORMER_KEYS: Record<string, StatusBasis> = { committed: "spend", approved: "accrued" };
 
 export const STATUS_BASES: { key: StatusBasis; statuses: readonly ExpenseStatus[]; label: string; short: string }[] = [
-  {
-    key: "committed",
-    statuses: ["submitted", "approved", "paid"],
-    label: "submitted, approved and paid",
-    short: "Everything live",
-  },
-  { key: "approved", statuses: ["approved", "paid"], label: "approved and paid", short: "Approved and paid" },
-  { key: "paid", statuses: ["paid"], label: "paid", short: "Paid" },
+  { key: "spend", statuses: MEASURES.spend.statuses, label: "submitted, approved and paid", short: MEASURES.spend.plain },
+  { key: "accrued", statuses: MEASURES.accrued.statuses, label: "approved and paid", short: MEASURES.accrued.plain },
+  { key: "paid", statuses: MEASURES.paid.statuses, label: "paid", short: MEASURES.paid.plain },
 ];
 
 /** Which date puts an expense in a period. */
@@ -35,7 +42,8 @@ export const DATE_BASIS_LABEL: Record<DateBasis, string> = {
   paid: "By payment date",
 };
 
-export function parseStatusBasis(value: unknown, fallback: StatusBasis = "committed"): StatusBasis {
+export function parseStatusBasis(value: unknown, fallback: StatusBasis = "spend"): StatusBasis {
+  if (typeof value === "string" && FORMER_KEYS[value]) return FORMER_KEYS[value];
   return STATUS_BASES.some((b) => b.key === value) ? (value as StatusBasis) : fallback;
 }
 
@@ -59,7 +67,8 @@ export function withStatusBasis<
     unitCosts: { expense_id: string }[];
   },
 >(ledger: L, basis: StatusBasis): L {
-  if (basis === "committed") return ledger;
+  // The ledger holds spend and nothing else, so "spend" is all of it.
+  if (basis === "spend") return ledger;
   const wanted = new Set<string>(statusesFor(basis));
   const expenses = ledger.expenses.filter((e) => wanted.has(e.status));
   const ids = new Set(expenses.map((e) => e.id));

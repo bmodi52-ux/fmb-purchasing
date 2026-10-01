@@ -10,7 +10,7 @@ describe("report queries", () => {
     const q: ReportQuery = {
       period: "au2026",
       section: "compare",
-      status: "approved",
+      status: "accrued",
       vendors: ["v1"],
       categories: ["c1", "c2"],
       items: [],
@@ -45,13 +45,13 @@ describe("report queries", () => {
   test("nonsense is replaced by the default, not passed on", () => {
     const q = queryFromSearchParams({ section: "drop table", status: "everything", breakdownBy: "colour" }, "au2026");
     assert.equal(q.section, "overview");
-    assert.equal(q.status, "committed");
+    assert.equal(q.status, "spend");
     assert.equal(q.breakdownBy, "category");
   });
 
   test("a view saved before the status filter existed opens counting everything live", () => {
     const old = { period: "h1447", section: "breakdown", vendors: [], categories: ["c1"], items: [], breakdownBy: "category", compareBy: "item" };
-    assert.equal(queryFromSaved(old)?.status, "committed");
+    assert.equal(queryFromSaved(old)?.status, "spend");
     assert.equal(queryFromSaved(JSON.stringify(old))?.categories[0], "c1");
   });
 
@@ -63,10 +63,13 @@ describe("report queries", () => {
 
 describe("bases", () => {
   test("say which expenses count and by which date", () => {
-    assert.equal(describeBasis("approved"), "By receipt date · approved and paid");
+    assert.equal(describeBasis("accrued"), "By receipt date · approved and paid");
     assert.equal(describeBasis("paid", "paid"), "By payment date · paid");
     assert.equal(parseStatusBasis("paid"), "paid");
-    assert.equal(parseStatusBasis(undefined), "committed");
+    assert.equal(parseStatusBasis(undefined), "spend");
+    // The names these had before measures.ts still open, on the same expenses.
+    assert.equal(parseStatusBasis("committed"), "spend");
+    assert.equal(parseStatusBasis("approved"), "accrued");
   });
 
   test("a basis keeps an expense's lines and unit costs with it", () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { MEASURES } from "@/lib/reporting/measures";
 import { canPhase } from "@/lib/budgets";
 import type { BudgetRow } from "@/lib/reporting/budget-view";
 import { monthOf, type CalendarKind } from "@/lib/periods";
@@ -29,8 +30,8 @@ const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", curr
 const COLUMNS: FilterColumn<BudgetRow>[] = [
     { key: "label", label: "Category", value: (r) => r.label },
     { key: "budget", label: "Budget", value: (r) => r.budget },
-    { key: "paid", label: "Paid", value: (r) => r.paid },
-    { key: "committed", label: "Committed", value: (r) => r.committed },
+    { key: "paid", label: MEASURES.paid.label, value: (r) => r.paid },
+    { key: "committed", label: MEASURES.committed.label, value: (r) => r.committed },
     { key: "remaining", label: "Remaining", value: (r) => (r.budget === null ? null : r.budget - r.spent) },
   {
     key: "used",

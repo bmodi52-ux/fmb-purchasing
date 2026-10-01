@@ -125,7 +125,7 @@ export function buildHref(query: ReportQuery, patch: Partial<ReportQuery>): stri
 
   params.set("period", next.period);
   if (next.section !== "overview") params.set("section", next.section);
-  if ((next.status ?? "committed") !== "committed") params.set("status", next.status);
+  if ((next.status ?? "spend") !== "spend") params.set("status", next.status);
   if (next.breakdownBy !== "category") params.set("breakdownBy", next.breakdownBy);
   if (next.compareBy !== "item") params.set("compareBy", next.compareBy);
   for (const v of next.vendors) params.append("vendor", v);

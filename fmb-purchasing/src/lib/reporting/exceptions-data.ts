@@ -65,7 +65,7 @@ export async function loadExceptionsView(admin: SupabaseClient, params: Params, 
       .select(
         "id, expense_number, status, vendor_id, vendor_name_raw, invoice_number, report_date, total, gst_amount, gst_printed, receipt_total, receipt_total_scanned, receipt_total_note"
       )
-      .in("status", [...statusesFor("committed")])
+      .in("status", [...statusesFor("spend")])
       .gte("report_date", period.start)
       .lte("report_date", period.end)
       .order("id")
@@ -222,7 +222,7 @@ export function exceptionsDocument(view: ExceptionsView): ReportDocument {
   const { period, report } = view;
   return {
     title: `Exceptions — ${period.label}`,
-    subtitle: `${period.label} · ${describeBasis("committed")} · ${report.flaggedExpenses} of ${report.expenseCount} expenses have something to check`,
+    subtitle: `${period.label} · ${describeBasis("spend")} · ${report.flaggedExpenses} of ${report.expenseCount} expenses have something to check`,
     filenameBase: safeFilename(`exceptions-${period.code}`),
     tables: exceptionTables(report),
   };
