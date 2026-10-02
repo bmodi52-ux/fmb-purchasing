@@ -2,7 +2,7 @@
 
 import type { BreakdownSeries } from "@/lib/reporting/aggregate";
 import type { Ranked, TrendPoint } from "@/lib/reporting/dashboard";
-import { BarChart, ColumnChart, StackedColumnChart, formatCompact, formatMoney } from "./charts";
+import { BarChart, ColumnChart, StackedColumnChart, formatMoney } from "./charts";
 
 /**
  * The dashboard's charts: the same chart components the Spending report
@@ -11,19 +11,33 @@ import { BarChart, ColumnChart, StackedColumnChart, formatCompact, formatMoney }
  * worked out on the server and arrive ready.
  */
 
-export function TrendChart({ points, label }: { points: TrendPoint[]; label: string }) {
+export function TrendChart({
+  points,
+  label,
+  period,
+  against,
+}: {
+  points: TrendPoint[];
+  label: string;
+  /** The period drawn, and the one each column is marked against, by name: for the key under the chart. */
+  period: string;
+  against: string;
+}) {
   return (
     <ColumnChart
-      data={points.map((p) => ({ key: p.key, label: p.label, value: p.value, count: p.count }))}
+      data={points.map((p) => ({ key: p.key, label: p.label, value: p.value, count: p.count, compare: p.compare, underWay: p.underWay }))}
       valueFormat={formatMoney}
       height={220}
       label={label}
+      seriesLabel={period}
+      compareLabel={against}
     />
   );
 }
 
-export function RankedBars({ data }: { data: Ranked[] }) {
-  return <BarChart data={data.map((d) => ({ label: d.label, value: d.value, count: d.count }))} maxBars={10} valueFormat={formatCompact} />;
+/** `total` is the period's whole spend: these are its ten largest, and each one's share is of all of it. */
+export function RankedBars({ data, total }: { data: Ranked[]; total: number }) {
+  return <BarChart data={data.map((d) => ({ label: d.label, value: d.value, count: d.count }))} maxBars={10} total={total} />;
 }
 
 export function OverTimeChart({ months, series }: { months: { key: string; label: string }[]; series: BreakdownSeries[] }) {

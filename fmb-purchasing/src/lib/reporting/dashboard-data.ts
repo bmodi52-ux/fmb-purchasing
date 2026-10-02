@@ -125,7 +125,8 @@ export async function loadDashboardRange(period: Period, by: "category" | "item"
   const previous = withinRange(ledger, before);
   const slice = applyFilters(current.expenses, current.lines, NO_FILTERS);
   const now = totals(slice);
-  const then = totals(applyFilters(previous.expenses, previous.lines, NO_FILTERS));
+  const sliceBefore = applyFilters(previous.expenses, previous.lines, NO_FILTERS);
+  const then = totals(sliceBefore);
   const calendar = monthCalendarFor(period);
 
   return {
@@ -134,7 +135,8 @@ export async function loadDashboardRange(period: Period, by: "category" | "item"
     expenses: now.expenseCount,
     change: then.expenseCount ? percentChange(now.spend, then.spend) : null,
     against: before.label,
-    trend: spendTrend(slice, period, today, calendar),
+    // With nothing in the period before there is nothing to mark each column against.
+    trend: spendTrend(slice, period, today, calendar, then.expenseCount ? { slice: sliceBefore, range: before } : undefined),
     topCategories: topOf(byCategory(slice)),
     topItems: topOf(byItem(slice)),
     overTime: byMonthBreakdown(slice, by, 6, calendar),

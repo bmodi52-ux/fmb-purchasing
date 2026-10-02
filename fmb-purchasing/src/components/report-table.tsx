@@ -62,55 +62,68 @@ export function ReportTableView({
     router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
-  if (view.total === 0) return <p className="text-sm text-ink/55">{empty}</p>;
+  if (view.total === 0) return <p className="text-body text-ink/60">{empty}</p>;
 
   const numeric = (c: ReportColumn) => c.kind !== "text" && c.kind !== "date";
   const align = (c: ReportColumn) => (numeric(c) ? "text-right tabular-nums" : "");
   const ariaSort = (c: ReportColumn) =>
     view.sort?.key === c.key ? (view.sort.dir === "asc" ? "ascending" : "descending") : "none";
 
+  // A table of two or three columns is a list of names with a figure each.
+  // Stretched across a wide card the figure sits a hand's width from its
+  // name; held to a readable measure, the eye can follow a row.
+  const measure = table.columns.length <= 3 ? "max-w-xl" : table.columns.length <= 5 ? "max-w-4xl" : "";
+
   return (
-    <div className="flex flex-col gap-2">
+    <div className={`flex flex-col gap-3 ${measure}`}>
       <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
+        <table className="min-w-full text-body">
           <thead>
-            <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-              {table.columns.map((c) => (
-                <th key={c.key} scope="col" aria-sort={ariaSort(c)} className={`py-2 pr-4 font-medium ${align(c)}`}>
-                  <button
-                    type="button"
-                    onClick={() => change({ sort: nextSort(view.sort, c) })}
-                    title={`Sort by ${c.label}`}
-                    className="inline-flex items-center gap-1 font-medium hover:text-ink"
-                  >
-                    {c.label}
-                    <span aria-hidden="true" className={view.sort?.key === c.key ? "text-ink" : "text-ink/25"}>
-                      {view.sort?.key === c.key ? (view.sort.dir === "asc" ? "▲" : "▼") : "↕"}
-                    </span>
-                  </button>
-                </th>
-              ))}
+            <tr className="border-b border-ink/15 text-left text-support text-ink/70">
+              {table.columns.map((c) => {
+                const sorted = view.sort?.key === c.key;
+                return (
+                  <th key={c.key} scope="col" aria-sort={ariaSort(c)} className={`col-head pr-4 pb-2.5 font-semibold last:pr-0 ${align(c)}`}>
+                    <button
+                      type="button"
+                      onClick={() => change({ sort: nextSort(view.sort, c) })}
+                      title={`Sort by ${c.label}`}
+                      className={`inline-flex items-center gap-1 font-semibold hover:text-ink ${sorted ? "text-ink" : ""}`}
+                    >
+                      {c.label}
+                      {/* The mark of the column the table is sorted by stays;
+                          the others show when their heading is pointed at (#26). */}
+                      <span aria-hidden="true" className={sorted ? "text-ink" : "col-hint font-normal text-ink/40"}>
+                        {sorted ? (view.sort!.dir === "asc" ? "▲" : "▼") : "↕"}
+                      </span>
+                    </button>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} className="border-b border-ink/5 align-top last:border-0">
+              <tr key={i} className="border-b border-ink/[0.06] align-top last:border-0 hover:bg-gold/[0.07]">
                 {table.columns.map((c) => {
                   const text = formatCell(r[c.key], c);
                   const href = c.link ? r[c.link] : null;
-                  const tone = c.tone && r[c.tone] === "danger" ? "text-danger" : "";
+                  const danger = !!c.tone && r[c.tone] === "danger";
                   return (
                     <td
                       key={c.key}
-                      className={`py-1.5 pr-4 ${align(c)} ${c.kind === "date" ? "tabular-nums text-ink/60" : ""} ${
+                      className={`py-2.5 pr-4 last:pr-0 ${align(c)} ${c.kind === "date" ? "tabular-nums text-ink/70" : ""} ${
                         // A date, a figure or an entry number is read whole: never broken across lines.
                         c.kind !== "text" || c.link ? "whitespace-nowrap" : ""
-                      } ${tone}`}
+                      }`}
                     >
                       {typeof href === "string" && href ? (
-                        <Link href={href} className="tabular-nums font-medium underline-offset-2 hover:underline">
+                        <Link href={href} className="font-medium text-brand tabular-nums underline-offset-[3px] hover:underline">
                           {text || "View"}
                         </Link>
+                      ) : danger && text ? (
+                        // Too long, too late, over: marked so it is seen in a column of plain figures.
+                        <span className="badge badge-bad -my-0.5">{text}</span>
                       ) : (
                         text
                       )}
@@ -120,9 +133,9 @@ export function ReportTableView({
               </tr>
             ))}
             {table.totals && (
-              <tr className="border-t border-ink/15 font-medium">
+              <tr className="border-t border-ink/20 font-semibold">
                 {table.columns.map((c) => (
-                  <td key={c.key} className={`py-2 pr-4 ${align(c)}`}>
+                  <td key={c.key} className={`pt-2.5 pr-4 pb-1 last:pr-0 ${align(c)}`}>
                     {table.totals![c.key] == null || table.totals![c.key] === "" ? "" : formatCell(table.totals![c.key], c)}
                   </td>
                 ))}
@@ -133,29 +146,26 @@ export function ReportTableView({
       </div>
 
       {view.pages > 1 && (
-        <nav aria-label={`${table.title} pages`} className="flex flex-wrap items-center gap-3 text-xs text-ink/60">
+        <nav aria-label={`${table.title} pages`} className="flex flex-wrap items-center justify-between gap-3 text-support text-ink/70">
           <span className="tabular-nums">
             {view.from.toLocaleString("en-AU")}–{view.to.toLocaleString("en-AU")} of {view.total.toLocaleString("en-AU")}
           </span>
-          <button
-            type="button"
-            onClick={() => change({ page: view.page - 1 })}
-            disabled={view.page <= 1}
-            className="rounded-full border border-ink/15 px-3 py-1 hover:border-ink/30 hover:text-ink disabled:opacity-40"
-          >
-            Previous
-          </button>
-          <span className="tabular-nums">
-            Page {view.page} of {view.pages}
+          <span className="flex items-center gap-2">
+            <button type="button" onClick={() => change({ page: view.page - 1 })} disabled={view.page <= 1} className="btn btn-secondary btn-sm">
+              Previous
+            </button>
+            <span className="tabular-nums">
+              Page {view.page} of {view.pages}
+            </span>
+            <button
+              type="button"
+              onClick={() => change({ page: view.page + 1 })}
+              disabled={view.page >= view.pages}
+              className="btn btn-secondary btn-sm"
+            >
+              Next
+            </button>
           </span>
-          <button
-            type="button"
-            onClick={() => change({ page: view.page + 1 })}
-            disabled={view.page >= view.pages}
-            className="rounded-full border border-ink/15 px-3 py-1 hover:border-ink/30 hover:text-ink disabled:opacity-40"
-          >
-            Next
-          </button>
         </nav>
       )}
     </div>

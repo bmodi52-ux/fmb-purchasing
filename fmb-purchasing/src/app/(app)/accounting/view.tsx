@@ -10,6 +10,7 @@ import { loadAccountingPeriod, loadLodgedPeriods, type Basis } from "@/lib/accou
 import { LOCK_COLUMNS, lodgementFromRow, outstandingAdjustments, sinceLodged } from "@/lib/gst-lodgement";
 import { summariseGst } from "@/lib/gst-summary";
 import { DownloadLinks } from "@/components/download-links";
+import { ReportTile as Tile, ReportTiles } from "@/components/report-tile";
 import { SubmitButton } from "@/components/submit-button";
 import { lockPeriod, setCategoryAccountCode, unlockPeriod } from "./actions";
 import { XeroExportButton } from "./xero-export-button";
@@ -82,8 +83,8 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
           basis={basis === "paid" ? describeBasis("paid", "paid") : describeBasis("accrued", "receipt")}
         />
         <ReportFilterBar filters={["period"]} period={period.code} today={today} earliest={earliest}>
-          <div className="flex flex-col gap-1 text-xs">
-            <span className="text-ink/55">Count expenses by</span>
+          <div className="flex flex-col gap-1 text-support">
+            <span className="font-medium text-ink/70">Count expenses by</span>
             <div className="segmented">
               {(
                 [
@@ -95,7 +96,7 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
                   key={b}
                   href={basisHref(b)}
                   aria-current={basis === b ? "true" : undefined}
-                  className="segment"
+                  className="segment py-[0.4rem]"
                 >
                   {label}
                 </Link>
@@ -125,7 +126,7 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
             </div>
           )}
         </div>
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ReportTiles count={4}>
           <Tile label="G11 · Other purchases" value={money(gst.g11)} hint="GST included" />
           <Tile label="G10 · Capital purchases" value={money(gst.g10)} hint="GST included" />
           <Tile
@@ -138,7 +139,7 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
             }
           />
           <Tile label="GST-free purchases" value={money(gst.gstFreePurchases)} hint="Within G10 and G11" />
-        </dl>
+        </ReportTiles>
         {gst.apportionedLines > 0 && (
           <p className="text-xs text-ink/55">
             {gst.apportionedLines} older {gst.apportionedLines === 1 ? "line has" : "lines have"} GST shared out across the
@@ -372,12 +373,3 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
   );
 }
 
-function Tile({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="card p-4">
-      <dt className="text-xs text-ink/55">{label}</dt>
-      <dd className="mt-0.5 tabular-nums text-xl font-semibold text-ink">{value}</dd>
-      <dd className="text-xs text-ink/45">{hint}</dd>
-    </div>
-  );
-}

@@ -51,7 +51,6 @@ export function WidgetBody({ data }: { data: WidgetData }) {
         <BarChart
           data={data.ranked.map((b) => ({ label: b.label, value: b.spend, count: b.count }))}
           maxBars={8}
-          valueFormat={formatCompact}
         />
       );
 

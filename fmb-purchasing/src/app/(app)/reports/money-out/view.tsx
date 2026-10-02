@@ -16,6 +16,7 @@ import {
 } from "@/lib/reporting/money-out";
 import { DownloadLinks } from "@/components/download-links";
 import { ReportTableView } from "@/components/report-table";
+import { ReportTile as Tile, ReportTiles } from "@/components/report-tile";
 import { ReportFilterBar } from "../report-filter-bar";
 import { ReportHeader } from "../report-header";
 
@@ -82,7 +83,7 @@ export async function MoneyOutReport({ user, params }: { user: CurrentUser; para
 
       {view.section === "paid" && (
         <>
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ReportTiles count={4}>
             <Tile label="Paid" value={money(view.report.total)} hint={view.period.label} />
             <Tile label="Transfers" value={String(view.report.transfers.length)} hint="Payment runs, and expenses paid on their own" />
             <Tile label="Expenses paid" value={String(view.report.expenseCount)} />
@@ -91,7 +92,7 @@ export async function MoneyOutReport({ user, params }: { user: CurrentUser; para
               value={money(view.report.unconfirmed.amount)}
               hint={`${view.report.unconfirmed.count} ${view.report.unconfirmed.count === 1 ? "expense" : "expenses"}`}
             />
-          </dl>
+          </ReportTiles>
           {view.report.transfers.length === 0 ? (
             <Empty>Nothing was paid in {view.period.label}.</Empty>
           ) : (
@@ -116,7 +117,7 @@ export async function MoneyOutReport({ user, params }: { user: CurrentUser; para
 
       {view.section === "pipeline" && (
         <>
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ReportTiles count={4}>
             <Tile
               label="Awaiting review"
               value={money(view.report.awaitingReview.amount)}
@@ -137,7 +138,7 @@ export async function MoneyOutReport({ user, params }: { user: CurrentUser; para
               value={view.report.submitToPayment.median === null ? "—" : `${view.report.submitToPayment.median} days`}
               hint="Median, for payments in the period"
             />
-          </dl>
+          </ReportTiles>
           <Panel title="How long each step takes" subtitle="Calendar days, for decisions and payments made in the period">
             <ReportTableView table={timingTable(view.report)} />
           </Panel>
@@ -159,11 +160,11 @@ function WaitingSection({ waiting, since, noun }: { waiting: Waiting; since: str
   return (
     <>
       {noun === "payment" && (
-        <dl className="grid gap-3 sm:grid-cols-3">
+        <ReportTiles count={3}>
           <Tile label="Awaiting payment" value={money(waiting.amount)} />
           <Tile label="Expenses" value={String(waiting.count)} />
           <Tile label="Oldest" value={days(waiting.oldestDays)} hint="Since approval" />
-        </dl>
+        </ReportTiles>
       )}
       <Panel title={`How long they have waited for ${noun}`}>
         <ReportTableView table={waitingBandsTable(waiting)} />
@@ -180,26 +181,16 @@ function WaitingSection({ waiting, since, noun }: { waiting: Waiting; since: str
   );
 }
 
-function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="card p-4">
-      <dt className="text-xs text-ink/55">{label}</dt>
-      <dd className="mt-0.5 tabular-nums text-xl font-semibold text-ink">{value}</dd>
-      {hint && <dd className="text-xs text-ink/45">{hint}</dd>}
-    </div>
-  );
-}
-
 function Panel({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <section className="card p-4">
-      <h2 className="section-title text-ink">{title}</h2>
-      {subtitle && <p className="mt-0.5 text-xs text-ink/50">{subtitle}</p>}
-      <div className="mt-3">{children}</div>
+    <section className="card p-[1.1rem]">
+      <h2 className="text-base font-semibold text-ink">{title}</h2>
+      {subtitle && <p className="mt-0.5 text-support text-ink/70">{subtitle}</p>}
+      <div className="mt-3.5">{children}</div>
     </section>
   );
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="card px-4 py-8 text-center text-sm text-ink/55">{children}</p>;
+  return <p className="card px-4 py-6 text-center text-body text-ink/70">{children}</p>;
 }

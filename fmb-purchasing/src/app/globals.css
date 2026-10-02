@@ -41,6 +41,16 @@ html[data-sandbox] {
   --font-serif: var(--font-marcellus);
   --font-mono: var(--font-plex-mono);
   --font-arabic: var(--font-amiri);
+
+  /* Two sizes under the body's, named so reports stop reaching for text-xs:
+     at this base size that is 11px, and a page of figures set mostly in 11px
+     grey is a page nobody can read at arm's length. `text-support` (12.5px)
+     is the smallest anything in a report is set; `text-body` (14px) is a
+     table row. */
+  --text-support: 0.8333rem;
+  --text-support--line-height: 1.45;
+  --text-body: 0.9333rem;
+  --text-body--line-height: 1.45;
 }
 
 /* Base size drives every rem in Tailwind — text *and* spacing — so it scales
@@ -299,6 +309,39 @@ h1, h2, h3, h4 {
     border-bottom-color: var(--color-gold-deep);
     font-weight: 500;
     color: var(--color-ink);
+  }
+
+  /* The row of reports, above every report. A step up from a page's own
+     tabs: larger, and marked in the brand colour — it says which report you
+     are in, where a tab says which part of it. */
+  .tabs-report .tab {
+    padding: 0.7rem 0.9rem;
+    font-size: 0.9333rem;
+    color: rgb(43 33 28 / 0.7);
+  }
+  .tabs-report .tab[aria-current="page"] {
+    border-bottom-color: var(--color-brand);
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+
+  /* A choice that has been made and can be taken back: a vendor or category
+     a report is narrowed to. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    max-width: 100%;
+    border-radius: 9999px;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.8333rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    background-color: color-mix(in srgb, var(--color-brand) 9%, transparent);
+    color: var(--color-brand);
+  }
+  .chip:hover {
+    background-color: color-mix(in srgb, var(--color-brand) 16%, transparent);
   }
 
   /* Two or three ways of looking at the same thing. */
