@@ -165,17 +165,6 @@ describe("spendTrend", () => {
     assert.deepEqual(points.slice(0, 2).map((p) => [p.key, p.value, p.compare]), [["2026-09-01", 50, 5], ["2026-09-07", 0, 8]]);
   });
 
-  test("months within a year are named without it; across more than a year they keep it", () => {
-    const none = { expenses: [], lines: [] };
-    assert.deepEqual(
-      spendTrend(none, { start: "2026-07-01", end: "2027-06-30" }, "2026-09-30").points.map((p) => p.label),
-      ["Jul", "Aug", "Sep"]
-    );
-    const long = spendTrend(none, { start: "2025-07-01", end: "2026-09-30" }, "2026-10-02").points;
-    assert.equal(long.length, 15);
-    assert.equal(long[0].label, "Jul 2025");
-  });
-
   test("with no period before given, nothing is marked", () => {
     const { points } = spendTrend({ expenses: [], lines: [] }, { start: "2026-07-01", end: "2027-06-30" }, "2026-10-02");
     assert.ok(points.every((p) => p.compare === null));

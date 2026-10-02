@@ -86,7 +86,7 @@ export function transactionsTable(rows: TransactionRow[]): ReportTable {
       { key: "vendor", label: "Vendor", kind: "text" },
       { key: "item", label: "Item", kind: "text" },
       { key: "category", label: "Category", kind: "text" },
-      { key: "status", label: "Status", kind: "text" },
+      { key: "status", label: "Status", kind: "text", badge: "stage" },
       { key: "amount", label: "Amount", kind: "money" },
       { key: "gst", label: "GST", kind: "money" },
     ],

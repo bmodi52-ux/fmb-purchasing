@@ -115,7 +115,7 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
               {/* The same detail as a page: every line, to sort, page through and narrow by vendor or category. */}
               <Link
                 href={`/reports/gst?period=${encodeURIComponent(period.code)}&basis=${basis}`}
-                className="text-xs text-ink/60 underline underline-offset-2 hover:text-ink"
+                className="text-support text-brand underline underline-offset-[3px]"
               >
                 View the detail
               </Link>
@@ -141,7 +141,7 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
           <Tile label="GST-free purchases" value={money(gst.gstFreePurchases)} hint="Within G10 and G11" />
         </ReportTiles>
         {gst.apportionedLines > 0 && (
-          <p className="text-xs text-ink/55">
+          <p className="text-support text-ink/70">
             {gst.apportionedLines} older {gst.apportionedLines === 1 ? "line has" : "lines have"} GST shared out across the
             receipt rather than read per line, so the capital and other split is estimated for those.
           </p>
@@ -149,13 +149,13 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
 
         {gst.concerns.length > 0 && (
           <div className="rounded-lg border border-danger/25 bg-danger/5 p-4">
-            <p className="text-sm font-medium text-danger">
+            <p className="text-body font-semibold text-danger">
               GST that may not be claimable ({gst.concerns.length} {gst.concerns.length === 1 ? "expense" : "expenses"})
             </p>
-            <ul className="mt-2 flex flex-col gap-1 text-sm">
+            <ul className="mt-2 flex flex-col gap-1 text-body">
               {gst.concerns.map(({ expense, reasons }) => (
                 <li key={expense.id}>
-                  <Link href={`/expenses/${expense.id}`} className="tabular-nums text-xs font-medium underline-offset-2 hover:underline">
+                  <Link href={`/expenses/${expense.id}`} className="font-medium text-brand tabular-nums underline-offset-[3px] hover:underline">
                     {expense.expenseNumber ?? "Expense"}
                   </Link>{" "}
                   {expense.vendorName} · GST {money(expense.gst)} — {reasons.join("; ")}
@@ -166,7 +166,7 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
         )}
 
         {thisLodgement?.basis && (
-          <div className="rounded-lg border border-ink/10 bg-ink/[0.02] p-4 text-sm">
+          <div className="rounded-lg border border-ink/10 bg-ink/[0.02] p-4 text-body">
             <p className="font-medium text-ink">
               As lodged, {formatDateTime(thisLodgement.lockedAt)} —{" "}
               {thisLodgement.basis === "paid" ? "by payment date" : "by receipt date"}
@@ -175,20 +175,20 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
               G11 {money(thisLodgement.g11 ?? 0)} · G10 {money(thisLodgement.g10 ?? 0)} · 1B {money(thisLodgement.oneB ?? 0)}
             </p>
             {thisLodgement.basis !== basis ? (
-              <p className="mt-1 text-xs text-ink/55">
+              <p className="mt-1 text-support text-ink/70">
                 Lodged by {thisLodgement.basis === "paid" ? "payment" : "receipt"} date: switch to that to see what has
                 changed since.
               </p>
             ) : since.length > 0 ? (
               <>
-                <p className="mt-2 text-xs text-ink/60">
+                <p className="mt-2 text-support text-ink/70">
                   Dated in this period but not in what was lodged — adjustments for the next return, where they are
                   listed to add:
                 </p>
                 <ul className="mt-1 flex flex-col gap-1">
                   {since.map((e) => (
                     <li key={e.id}>
-                      <Link href={`/expenses/${e.id}`} className="tabular-nums text-xs font-medium underline-offset-2 hover:underline">
+                      <Link href={`/expenses/${e.id}`} className="font-medium text-brand tabular-nums underline-offset-[3px] hover:underline">
                         {e.expenseNumber ?? "Expense"}
                       </Link>{" "}
                       {e.vendorName} · {money(e.total)} · GST {money(e.gst)}
@@ -197,15 +197,15 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
                 </ul>
               </>
             ) : (
-              <p className="mt-1 text-xs text-ink/55">Nothing has changed since it was lodged.</p>
+              <p className="mt-1 text-support text-ink/70">Nothing has changed since it was lodged.</p>
             )}
           </div>
         )}
 
         {owed && owed.expenses.length > 0 && (
-          <div className="rounded-lg border border-gold/40 bg-gold/5 p-4 text-sm">
+          <div className="rounded-lg border border-gold/40 bg-gold/5 p-4 text-body">
             <p className="font-medium text-ink">Adjustments from lodged periods, for this return</p>
-            <p className="mt-1 text-xs text-ink/60">
+            <p className="mt-1 text-support text-ink/70">
               Dated in a period already lodged, but not in what was lodged for it. They belong in this return as
               adjustments; locking this period records them as taken.
             </p>
@@ -215,11 +215,11 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
             <ul className="mt-2 flex flex-col gap-1">
               {owed.expenses.map((e) => (
                 <li key={e.id}>
-                  <Link href={`/expenses/${e.id}`} className="tabular-nums text-xs font-medium underline-offset-2 hover:underline">
+                  <Link href={`/expenses/${e.id}`} className="font-medium text-brand tabular-nums underline-offset-[3px] hover:underline">
                     {e.expenseNumber ?? "Expense"}
                   </Link>{" "}
                   {e.vendorName} · {money(e.total)} · GST {money(e.gst)}
-                  <span className="text-xs text-ink/50"> · from {owed.fromPeriod.get(e.id)}</span>
+                  <span className="text-support text-ink/70"> · from {owed.fromPeriod.get(e.id)}</span>
                 </li>
               ))}
             </ul>
@@ -230,11 +230,11 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
             still found by approval date. */}
         {gst.adjustments.length > 0 && !thisLodgement?.basis && (
           <div className="rounded-lg border border-gold/40 bg-gold/5 p-4">
-            <p className="text-sm font-medium text-ink">Adjustments: approved after their period was lodged</p>
-            <ul className="mt-2 flex flex-col gap-1 text-sm">
+            <p className="text-body font-semibold text-ink">Adjustments: approved after their period was lodged</p>
+            <ul className="mt-2 flex flex-col gap-1 text-body">
               {gst.adjustments.map((e) => (
                 <li key={e.id}>
-                  <Link href={`/expenses/${e.id}`} className="tabular-nums text-xs font-medium underline-offset-2 hover:underline">
+                  <Link href={`/expenses/${e.id}`} className="font-medium text-brand tabular-nums underline-offset-[3px] hover:underline">
                     {e.expenseNumber ?? "Expense"}
                   </Link>{" "}
                   {e.vendorName} · {money(e.total)} · GST {money(e.gst)}
@@ -248,14 +248,14 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
       <section className="flex flex-col gap-3">
         <div>
           <h2 className="section-title text-ink">Xero</h2>
-          <p className="mt-0.5 max-w-2xl text-xs text-ink/60">
+          <p className="mt-0.5 max-w-3xl text-support text-ink/70">
             A bills file for Xero&apos;s purchases import: one draft bill per expense in this period, one line per line
             item, with each category&apos;s account code and a tax type from the line&apos;s own GST and capital flags. A
             live connection to Xero is planned once how purchases reach Xero today is confirmed.
           </p>
         </div>
         {xeroHistory.sent.length > 0 && (
-          <p className="max-w-2xl text-xs text-ink/70">
+          <p className="max-w-3xl text-support text-ink/70">
             {xeroHistory.sent.length} of the {bills.length} bills in this period went in an earlier file
             {lastSent ? `, the latest downloaded ${formatDateTime(lastSent)}` : ""}. Importing them again would add them
             to Xero twice.
@@ -281,8 +281,8 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
         />
         {recentExports.length > 0 && (
           <div className="max-w-2xl">
-            <p className="text-xs text-ink/55">Files downloaded for this period</p>
-            <ul className="mt-1 flex flex-col gap-0.5 text-xs text-ink/70">
+            <p className="text-support text-ink/70">Files downloaded for this period</p>
+            <ul className="mt-1 flex flex-col gap-0.5 text-support text-ink/70">
               {recentExports.map((x) => (
                 <li key={x.exportedAt}>
                   {formatDateTime(x.exportedAt)} · {x.by} · {x.periodLabel},{" "}
@@ -298,10 +298,10 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
       <section className="flex flex-col gap-3">
         <div>
           <h2 className="section-title text-ink">Account codes</h2>
-          <p className="mt-0.5 text-xs text-ink/60">The account in FMB&apos;s chart of accounts each category&apos;s spend goes to. Saved when you leave the field.</p>
+          <p className="mt-0.5 text-support text-ink/70">The account in FMB&apos;s chart of accounts each category&apos;s spend goes to. Saved when you leave the field.</p>
         </div>
         <div className="overflow-x-auto card">
-          <table className="min-w-full text-sm">
+          <table className="min-w-full text-body">
             <tbody>
               {leaves.map((c) => (
                 <tr key={c.id} className="border-b border-ink/5 last:border-0">
@@ -329,20 +329,20 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
       <section className="flex flex-col gap-3">
         <div>
           <h2 className="section-title text-ink">Lodged periods</h2>
-          <p className="mt-0.5 max-w-2xl text-xs text-ink/60">
+          <p className="mt-0.5 max-w-3xl text-support text-ink/70">
             Lock a period once its GST return is lodged. Decisions and payments dated inside it can no longer be undone,
             and its lines can&apos;t be reclassified. A late receipt dated inside it can still be submitted and paid — it
             shows here as an adjustment for the next return.
           </p>
         </div>
         {!alreadyLocked && (
-          <form action={lockPeriod} className="flex flex-wrap items-end gap-2 card p-3 text-sm">
+          <form action={lockPeriod} className="flex flex-wrap items-end gap-2 card p-3 text-body">
             <input type="hidden" name="period" value={period.code} />
             {/* Lodged on the basis on screen, and its figures kept (0085). */}
             <input type="hidden" name="basis" value={basis} />
-            <label className="flex flex-col gap-1 text-xs">
-              <span className="text-ink/55">Note (optional)</span>
-              <input name="note" placeholder="Lodged 28 July" className="input w-56 text-sm" />
+            <label className="flex flex-col gap-1 text-support">
+              <span className="font-medium text-ink/70">Note (optional)</span>
+              <input name="note" placeholder="Lodged 28 July" className="input w-56 text-body" />
             </label>
             <SubmitButton pendingLabel="Locking…" className="btn btn-danger">
               Lock {period.label}
@@ -350,18 +350,18 @@ export async function AccountingReport({ user, params }: { user: CurrentUser; pa
           </form>
         )}
         {(locks ?? []).length > 0 && (
-          <ul className="flex flex-col divide-y divide-ink/5 card text-sm">
+          <ul className="flex flex-col divide-y divide-ink/[0.06] card text-body">
             {(locks ?? []).map((l) => (
               <li key={l.id} className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <span className={l.unlocked_at ? "text-ink/45 line-through" : "text-ink"}>
                   {l.label}
                   {l.note ? ` · ${l.note}` : ""}
-                  <span className="ml-2 text-xs text-ink/50">locked {formatDateTime(l.locked_at as string)}</span>
+                  <span className="ml-2 text-support text-ink/70">locked {formatDateTime(l.locked_at as string)}</span>
                 </span>
                 {!l.unlocked_at && (
                   <form action={unlockPeriod}>
                     <input type="hidden" name="lock_id" value={l.id} />
-                    <SubmitButton className="text-xs text-ink/55 underline hover:text-ink">Unlock</SubmitButton>
+                    <SubmitButton className="text-support text-brand underline underline-offset-[3px]">Unlock</SubmitButton>
                   </form>
                 )}
               </li>

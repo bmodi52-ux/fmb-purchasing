@@ -2,6 +2,7 @@ import { comparisonPeriod, monthCalendarFor, parsePeriod, type Period } from "@/
 import { applyFilters, filterOptionsFor, type FilterOption, type Filters, type Slice } from "./aggregate.ts";
 import { describeBasis, withStatusBasis } from "./basis.ts";
 import { loadLedger } from "./ledger.ts";
+import { monthAxis } from "./month-axis.ts";
 import { spanOf, withinRange, type Ledger } from "./ledger-rows.ts";
 import { queryFromSearchParams, type ReportQuery } from "./query.ts";
 import { computeSpendReport, type SpendReport } from "./spend-report.ts";
@@ -79,6 +80,7 @@ export function spendViewFromLedger(params: Params, today: string, loaded: Ledge
     previousLabel: previousRange.label,
     calendar: monthCalendarFor(period),
     receiptLines: currentLedger.lines,
+    months: monthAxis(period, today, monthCalendarFor(period)),
   });
 
   const basisLabel = describeBasis(query.status);

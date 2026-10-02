@@ -34,6 +34,7 @@ export function ReportFilterBar({
   options = {},
   selected = {},
   counting,
+  lead,
   children,
 }: {
   filters: FilterKey[];
@@ -44,6 +45,8 @@ export function ReportFilterBar({
   options?: { vendors?: FilterOption[]; categories?: FilterOption[]; items?: FilterOption[] };
   selected?: { vendors?: string[]; categories?: string[]; items?: string[] };
   counting?: StatusBasis;
+  /** Which part of the report is showing, before any filter: its sections, as one control. */
+  lead?: React.ReactNode;
   /** Controls of the report's own, after the standard ones. */
   children?: React.ReactNode;
 }) {
@@ -88,6 +91,7 @@ export function ReportFilterBar({
   return (
     <div className="flex flex-col gap-2.5 card px-4 py-3">
       <div className="flex flex-wrap items-end gap-x-3 gap-y-3">
+        {lead}
         {has("period") && period !== undefined && (
           <PeriodMenu value={period} today={today} earliest={earliest} onChange={(code) => go({ period: code })} />
         )}

@@ -172,17 +172,22 @@ describe("widgets saved before the registry, computed through Reports", () => {
     const data = oldWidget("spend-over-time", BASE);
     assert.ok(data.kind === "spend-over-time");
     // Only e1 (May) and e2 (July) belong to 1447 — e-old (1446) must not add
-    // a bucket. A Hijri year's widget groups by Hijri month, as Reports does.
+    // to a bucket. A Hijri year's widget groups by Hijri month, as Reports does.
     assert.deepEqual(
-      data.monthly.map((m) => m.key),
+      data.monthly.filter((m) => m.spend !== 0).map((m) => m.key),
       [hijriMonthOf("2026-05-05").key, hijriMonthOf("2026-07-20").key]
     );
+    // And, as Reports does, it lists every month of the year so far, starting
+    // with its first — the ones nothing was spent in included.
+    assert.equal(data.monthly[0].key, hijriMonthOf("2026-03-19").key);
+    assert.ok(data.monthly.length > 2);
   });
 
   test("a widget on a financial year keeps Gregorian months", () => {
     const data = oldWidget("spend-over-time", { ...BASE, fy: undefined, period: "au2026" });
     assert.ok(data.kind === "spend-over-time");
-    assert.deepEqual(data.monthly.map((m) => m.key), ["2026-07"]);
+    assert.deepEqual(data.monthly.filter((m) => m.spend !== 0).map((m) => m.key), ["2026-07"]);
+    assert.ok(data.monthly.every((m) => /^\d{4}-\d{2}$/.test(m.key)));
   });
 
   test("a single saved month becomes that calendar month", () => {

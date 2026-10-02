@@ -143,16 +143,11 @@ export function spendTrend(
     openUntil = grain === "month" ? monthSpans({ start: today, end: addDays(today, 31) }, calendar)[0].end : addDays(mondayOf(today), 6);
   }
 
-  // Within one year the months need no year after their names: the period is
-  // named above the chart, and "Rabi al-Awwal 1448" twelve times over is cut
-  // short where "Rabi al-Awwal" fits.
-  const bare = grain === "month" && spans.length <= 12;
-
   return {
     grain,
     points: spans.map((s, i) => ({
       key: s.key,
-      label: bare ? s.label.replace(/ \d{4}$/, "") : s.label,
+      label: s.label,
       value: cents(totals[i].value),
       count: totals[i].count,
       compare: before[i] ? cents(before[i]!.value) : null,

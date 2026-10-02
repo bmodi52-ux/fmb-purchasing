@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { orgDay } from "@/lib/format";
-import { daysBetween, paymentsMade, paymentsMadeTables, pipeline, waiting, type MoneyExpense } from "./money-out.ts";
+import { daysBetween, paymentsMade, paymentsMadeTables, pipeline, waiting, waitingListTable, type MoneyExpense } from "./money-out.ts";
 
 let n = 0;
 function expense(over: Partial<MoneyExpense> = {}): MoneyExpense {
@@ -131,6 +131,26 @@ describe("waiting", () => {
         [1, 16],
       ]
     );
+  });
+
+  test("on a page a wait is marked by its length: amber past a week, red past a fortnight", () => {
+    const w = waiting(
+      [0, 7, 8, 14, 15, 40].map((ago) => {
+        const day = new Date(Date.UTC(2026, 7, 1) - ago * 86_400_000).toISOString().slice(0, 10);
+        return expense({ status: "approved", decidedOn: day, total: 1 });
+      }),
+      (e) => e.decidedOn,
+      "2026-08-01"
+    );
+    const marks = waitingListTable("Awaiting payment", "Approved", w).rows.map((r) => [r.days, r.tone]);
+    assert.deepEqual(marks, [
+      [40, "danger"],
+      [15, "danger"],
+      [14, "warn"],
+      [8, "warn"],
+      [7, ""],
+      [0, ""],
+    ]);
   });
 
   test("nothing waiting has no oldest", () => {

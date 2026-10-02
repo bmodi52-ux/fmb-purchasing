@@ -6,9 +6,11 @@ import { formatDateTime } from "@/lib/format";
 import { parsePeriod, previousPeriod } from "@/lib/periods";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
 import { DownloadLinks } from "@/components/download-links";
+import { ReportTableView } from "@/components/report-table";
+import { ReportTile } from "@/components/report-tile";
 import { SubmitButton } from "@/components/submit-button";
 import { DATE_BASIS_LABEL } from "@/lib/reporting/basis";
-import { loadBudgetView } from "@/lib/reporting/budget-view";
+import { budgetTables, loadBudgetView } from "@/lib/reporting/budget-view";
 import { standardFilters } from "@/lib/reporting/filters";
 import { MEASURES } from "@/lib/reporting/measures";
 import { findReport } from "@/lib/reporting/registry";
@@ -21,6 +23,13 @@ type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
+
+/** How many tiles across, by how many there are. */
+const TILE_COLUMNS: Record<number, string> = {
+  4: "xl:grid-cols-4",
+  5: "lg:grid-cols-3 2xl:grid-cols-5",
+  6: "lg:grid-cols-3 2xl:grid-cols-6",
+};
 
 const CHANGE_WORDS: Record<string, string> = {
   set: "Set",
@@ -71,6 +80,8 @@ export async function BudgetsReport({ user, params }: { user: CurrentUser; param
   const canCopy = canEdit && !narrowed && !anyExactForPeriod && budgets.some((b) => b.start === previous.start && b.end === previous.end);
 
   const uncategorisedSpend = view.uncategorised;
+  // The month-by-month table is the download's (budget-view budgetTables), so the page and the file are one table.
+  const monthsTable = budgetTables(view).find((t) => t.title === "By month") ?? null;
   const onParentSpend = onParentCategories.reduce((s, p) => s + p.amount, 0);
 
   const changers = [...new Set((changeRows ?? []).map((r) => r.changed_by).filter(Boolean) as string[])];
@@ -86,6 +97,7 @@ export async function BudgetsReport({ user, params }: { user: CurrentUser; param
           report="budgets"
           user={user}
           basis={`${DATE_BASIS_LABEL.receipt} · submitted, approved and paid`}
+          actions={<DownloadLinks href={`/reports/export?${exported}`} />}
         />
         <ReportFilterBar
           filters={findReport("budgets")!.filters}
@@ -94,29 +106,34 @@ export async function BudgetsReport({ user, params }: { user: CurrentUser; param
           earliest={earliest}
           options={{ categories: view.categoryOptions }}
           selected={{ categories: view.categories }}
-        >
-          <div className="ml-auto pb-1">
-            <DownloadLinks href={`/reports/export?${exported}`} />
-          </div>
-        </ReportFilterBar>
+        />
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-8 gap-y-2 card px-5 py-4">
-        <Figure label="Budgeted" value={totals.remaining !== null ? money(totals.budgeted) : "Not set"} />
-        <Figure label={MEASURES.paid.label} value={money(totals.paid)} />
-        <Figure label={MEASURES.committed.label} value={money(totals.committed)} />
-        <Figure
+      {/* The same tiles as every report: four as a rule, and up to six when
+          spend sits where no budget can hold it — laid out so that none is
+          left alone on a row. */}
+      <div className={`grid gap-3 sm:grid-cols-2 ${TILE_COLUMNS[4 + (onParentSpend !== 0 ? 1 : 0) + (uncategorisedSpend !== 0 ? 1 : 0)]}`}>
+        <ReportTile
+          label="Budgeted"
+          value={totals.remaining !== null ? money(totals.budgeted) : "Not set"}
+          tone={totals.remaining !== null ? "normal" : "muted"}
+          hint={totals.remaining !== null ? period.label : `No budgets for ${period.label}`}
+        />
+        <ReportTile label={MEASURES.paid.label} value={money(totals.paid)} />
+        <ReportTile label={MEASURES.committed.label} value={money(totals.committed)} />
+        <ReportTile
           label="Remaining"
           value={totals.remaining !== null ? money(totals.remaining) : "—"}
-          tone={totals.remaining !== null && totals.remaining < 0 ? "over" : "normal"}
+          tone={totals.remaining === null ? "muted" : totals.remaining < 0 ? "danger" : "normal"}
+          dot={totals.remaining !== null && totals.remaining < 0 ? "alert" : undefined}
           hint={totals.remaining !== null && rows.some((r) => r.budget === null && r.spent !== 0) ? "Of the categories with a budget" : undefined}
         />
-        {onParentSpend !== 0 && <Figure label="On a parent category" value={money(onParentSpend)} tone="muted" />}
-        {uncategorisedSpend !== 0 && <Figure label="Not in any category" value={money(uncategorisedSpend)} tone="muted" />}
+        {onParentSpend !== 0 && <ReportTile label="On a parent category" value={money(onParentSpend)} tone="muted" hint="Under no budget" />}
+        {uncategorisedSpend !== 0 && <ReportTile label="Not in any category" value={money(uncategorisedSpend)} tone="muted" hint="Under no budget" />}
       </div>
 
       {(onParentSpend !== 0 || uncategorisedSpend !== 0) && (
-        <div className="-mt-3 flex max-w-2xl flex-col gap-1.5 text-xs leading-relaxed text-ink/55">
+        <div className="-mt-3 flex max-w-3xl flex-col gap-1.5 text-support text-ink/70">
           {onParentSpend !== 0 && (
             <p>
               {money(onParentSpend)} was filed against{" "}
@@ -137,7 +154,7 @@ export async function BudgetsReport({ user, params }: { user: CurrentUser; param
               delivery and rounding carry none by design, and neither does a line nobody has
               classified yet. It is real money and counts in Reports; it simply cannot be budgeted
               against. Anything classifiable is listed on{" "}
-              <a href="/review-queue" className="underline">Needs attention</a>.
+              <a href="/review-queue" className="text-brand underline underline-offset-[3px]">Needs attention</a>.
             </p>
           )}
         </div>
@@ -154,49 +171,16 @@ export async function BudgetsReport({ user, params }: { user: CurrentUser; param
 
       <BudgetsTable rows={rows} canEdit={canEdit} period={period} />
 
-      {view.months.length > 1 && (
-        <section className="flex flex-col gap-2">
-          <div>
-            <h2 className="section-title text-ink">By month</h2>
-            <p className="mt-0.5 max-w-2xl text-xs text-ink/60">
-              The budgeted categories a month at a time. Each month&rsquo;s budget follows its phasing where
-              one is set — Ramadan&rsquo;s share is not a twelfth of the year&rsquo;s — and is spread by day
-              where not.
-            </p>
-          </div>
-          <div className="overflow-x-auto card">
-            <table className="min-w-full text-sm">
-              <thead className="border-b border-ink/10 text-left text-xs text-ink/55">
-                <tr>
-                  <th scope="col" className="px-4 py-2.5 font-medium">Month</th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Budget</th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Spent</th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Left over</th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Budget to date</th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Spent to date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {view.months.map((m) => {
-                  const over = m.spent > m.budget;
-                  const overToDate = m.cumulativeSpent > m.cumulativeBudget;
-                  return (
-                    <tr key={m.key} className="border-b border-ink/5 last:border-0">
-                      <th scope="row" className="px-4 py-2 text-left font-normal">{m.label}</th>
-                      <td className="px-4 py-2 text-right tabular-nums">{money(m.budget)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{money(m.spent)}</td>
-                      <td className={`px-4 py-2 text-right tabular-nums ${over ? "text-danger" : "text-ink/60"}`}>
-                        {money(m.budget - m.spent)}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-ink/60">{money(m.cumulativeBudget)}</td>
-                      <td className={`px-4 py-2 text-right tabular-nums ${overToDate ? "text-danger" : "text-ink/60"}`}>
-                        {money(m.cumulativeSpent)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {view.months.length > 1 && monthsTable && (
+        <section className="card p-[1.1rem]">
+          <h2 className="text-base font-semibold text-ink">By month</h2>
+          <p className="mt-0.5 max-w-3xl text-support text-ink/70">
+            The budgeted categories a month at a time. Each month&rsquo;s budget follows its phasing where one is set —
+            Ramadan&rsquo;s share is not a twelfth of the year&rsquo;s — and is spread by day where not. A month over its
+            budget, and a year so far over its budget so far, are marked.
+          </p>
+          <div className="mt-3.5">
+            <ReportTableView table={monthsTable} />
           </div>
         </section>
       )}
@@ -204,9 +188,9 @@ export async function BudgetsReport({ user, params }: { user: CurrentUser; param
       {(changeRows ?? []).length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="section-title text-ink">Recent budget changes</h2>
-          <ol className="flex flex-col divide-y divide-ink/5 card text-sm">
+          <ol className="flex flex-col divide-y divide-ink/[0.06] card text-body">
             {(changeRows ?? []).map((c) => (
-              <li key={c.id} className="flex flex-col gap-0.5 px-4 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+              <li key={c.id} className="flex flex-col gap-0.5 px-[1.1rem] py-2.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
                 <span className="text-ink">
                   {labels.get(c.category_id as string) ?? "A removed category"} · {c.label}:{" "}
                   {CHANGE_WORDS[c.kind as string] ?? c.kind}
@@ -218,7 +202,7 @@ export async function BudgetsReport({ user, params }: { user: CurrentUser; param
                     {c.to_amount != null ? money(Number(c.to_amount)) : "none"}
                   </span>
                 </span>
-                <span className="shrink-0 text-xs text-ink/50">
+                <span className="shrink-0 text-support text-ink/70">
                   {c.changed_by ? (nameById.get(c.changed_by as string) ?? "A removed account") : "—"} ·{" "}
                   {formatDateTime(c.changed_at as string)}
                 </span>
@@ -227,28 +211,6 @@ export async function BudgetsReport({ user, params }: { user: CurrentUser; param
           </ol>
         </section>
       )}
-    </div>
-  );
-}
-
-/** One figure in the totals strip. Muted for spend no budget row holds. */
-function Figure({
-  label,
-  value,
-  tone = "normal",
-  hint,
-}: {
-  label: string;
-  value: string;
-  tone?: "normal" | "over" | "muted";
-  hint?: string;
-}) {
-  const colour = tone === "over" ? "text-danger" : tone === "muted" ? "text-ink/60" : "text-ink";
-  return (
-    <div>
-      <p className="text-xs text-ink/55">{label}</p>
-      <p className={`mt-0.5 text-xl font-semibold tabular-figures ${colour}`}>{value}</p>
-      {hint && <p className="text-xs text-ink/45">{hint}</p>}
     </div>
   );
 }

@@ -34,6 +34,7 @@ import {
   type Slice,
   type Totals,
 } from "./aggregate.ts";
+import { breakdownOn, comparisonOn, monthlyOn, type Month } from "./month-axis.ts";
 import type { PaidCostRow } from "./ledger-rows.ts";
 import type { ReportQuery } from "./query.ts";
 import { averageUnitCosts, perUnitRows, type AverageUnitCost, type PerUnitRow } from "./unit-costs.ts";
@@ -72,6 +73,8 @@ export type TransactionRow = {
   item: string;
   category: string;
   status: string;
+  /** The status as the expense holds it — "submitted", "approved", "paid" — for the page's badge. */
+  stage: string;
   amount: number;
   gst: number;
 };
@@ -106,6 +109,7 @@ export function transactionRows(slice: Slice): TransactionRow[] {
           item: l.itemName,
           category: l.categoryName,
           status: STATUS_WORD[e.status] ?? e.status,
+          stage: e.status,
           amount: l.lineTotal,
           gst: l.gst,
         },
@@ -142,6 +146,7 @@ export function computeSpendReport({
   previousLabel,
   calendar = "gregorian",
   receiptLines = [],
+  months,
 }: {
   current: Slice;
   previous: Slice | null;
@@ -154,6 +159,12 @@ export function computeSpendReport({
   calendar?: MonthCalendar;
   /** Every line of the period, filtered or not — to say what a filter left out. */
   receiptLines?: (LineRecord & { kind: string })[];
+  /**
+   * The period's months (month-axis monthAxis). Given them, everything by
+   * month lists every one — a month with nothing spent is a row and a column
+   * like any other — on the page and in its downloads alike.
+   */
+  months?: Month[];
 }): SpendReport {
   // Only items still in the slice: a category or item filter has to narrow
   // the unit costs too, or they would contradict everything above them.
@@ -163,9 +174,9 @@ export function computeSpendReport({
   return {
     now: totals(current),
     before: previous ? totals(previous) : null,
-    monthly: byMonth(current, calendar),
+    monthly: months ? monthlyOn(months, byMonth(current, calendar)) : byMonth(current, calendar),
     insights: insights(current, previous, periodLabel, previousLabel),
-    section: section(current, unitCosts, query, keepItem, calendar),
+    section: section(current, unitCosts, query, keepItem, calendar, months),
     calendar,
     discountsLeftOut:
       query.categories.length > 0 || query.items.length > 0 ? discountsLeftOut(current, receiptLines) : 0,
@@ -177,7 +188,8 @@ function section(
   unitCosts: PaidCostRow[],
   query: ReportQuery,
   keepItem: (itemId: string) => boolean,
-  calendar: MonthCalendar
+  calendar: MonthCalendar,
+  months?: Month[]
 ): SpendSection {
   switch (query.section) {
     case "overview":
@@ -187,7 +199,8 @@ function section(
       const dimension = query.breakdownBy;
       const ranked =
         dimension === "category" ? byCategory(current) : dimension === "vendor" ? byVendor(current) : byItem(current);
-      return { key: "breakdown", dimension, ranked, overTime: byMonthBreakdown(current, dimension, 6, calendar) };
+      const overTime = byMonthBreakdown(current, dimension, 6, calendar);
+      return { key: "breakdown", dimension, ranked, overTime: months ? breakdownOn(months, overTime) : overTime };
     }
 
     case "compare": {
@@ -195,7 +208,8 @@ function section(
       // Subjects come from the filter menus, so there is one place to pick
       // things rather than a parallel selector that could disagree with them.
       const chosen = dimension === "item" ? query.items : dimension === "category" ? query.categories : query.vendors;
-      const comparison = compare(current, dimension, chosen, MAX_COMPARE_SUBJECTS, calendar);
+      const compared = compare(current, dimension, chosen, MAX_COMPARE_SUBJECTS, calendar);
+      const comparison = months ? comparisonOn(months, compared) : compared;
       const unitCostByItem =
         dimension === "item"
           ? Object.fromEntries(

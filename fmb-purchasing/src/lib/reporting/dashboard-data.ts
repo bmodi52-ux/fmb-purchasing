@@ -15,6 +15,7 @@ import {
 import { loadBudgetView } from "./budget-view.ts";
 import { budgetUse, overdueOf, spendTrend, topOf, type BudgetUse, type Overdue, type Ranked, type TrendGrain, type TrendPoint } from "./dashboard.ts";
 import { loadLedger } from "./ledger.ts";
+import { breakdownOn, monthAxis } from "./month-axis.ts";
 import { spanOf, withinRange, type DateRange, type Ledger } from "./ledger-rows.ts";
 import { loadAwaitingPayment } from "./money-out-data.ts";
 import { waiting, type Waiting } from "./money-out.ts";
@@ -139,7 +140,8 @@ export async function loadDashboardRange(period: Period, by: "category" | "item"
     trend: spendTrend(slice, period, today, calendar, then.expenseCount ? { slice: sliceBefore, range: before } : undefined),
     topCategories: topOf(byCategory(slice)),
     topItems: topOf(byItem(slice)),
-    overTime: byMonthBreakdown(slice, by, 6, calendar),
+    // The same months as the chart of spend above it, empty ones included.
+    overTime: breakdownOn(monthAxis(period, today, calendar), byMonthBreakdown(slice, by, 6, calendar)),
     by,
   };
 }

@@ -231,6 +231,12 @@ function Plot({
 }) {
   const every = labelEvery(names.length);
   const columns = { gridTemplateColumns: `repeat(${names.length}, minmax(0, 1fr))` };
+  // Up to a year of months need no year after their names: the period is
+  // named above the chart, and "Rabi al-Awwal 1448" twelve times over is cut
+  // short where "Rabi al-Awwal" fits. The full name is still what the pointer
+  // is told, and what the table beside the chart says.
+  const yearless = names.length <= 12 && names.every((n) => /\s\d{2,4}$/.test(n.label));
+  const short = (name: string) => (yearless ? name.replace(/\s\d{2,4}$/, "") : name);
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2">
       <div aria-hidden="true" className="relative text-support text-ink/60 tabular-nums" style={{ height }}>
@@ -265,7 +271,7 @@ function Plot({
       <div className="mt-2 grid text-center text-support text-ink/70" style={columns}>
         {names.map((n, i) => (
           <span key={n.key} className="min-w-0 truncate px-0.5" title={n.label}>
-            {i % every === 0 ? n.label : ""}
+            {i % every === 0 ? short(n.label) : ""}
           </span>
         ))}
       </div>
