@@ -96,6 +96,13 @@ page of its tables at `/reports/<key>` that sorts and pages on the server. A
 report that wants charts writes its own page from the same shared pieces
 (`report-header.tsx`, `report-filter-bar.tsx`, `components/report-table.tsx`).
 
+`/reports` itself is a dashboard (`dashboard.ts`): this month and this year,
+what is overdue to be paid, budget used, and a chosen period's trend and
+rankings. It counts nothing of its own — every figure is one a report already
+computes, and links to that report. Spending lives at `/reports/spending`; an
+older `/reports?section=…` link is sent on to it. A person's starred reports
+(`report_favourites`, 0088) are listed first.
+
 To add a report: write a loader that returns its tables (a `ReportDocument`),
 add the entry to `registry.ts`, and add a test of its figures. `scale.test.ts`
 holds the server-side sums to staying quick at ten years' data.

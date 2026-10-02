@@ -60,6 +60,7 @@ export const LEDGERED_MIGRATIONS = [
   "0085_lodged_period_figures.sql",
   "0086_price_report_date.sql",
   "0087_xero_export_log.sql",
+  "0088_report_favourites.sql",
 ] as const;
 
 export type MigrationStatus =
