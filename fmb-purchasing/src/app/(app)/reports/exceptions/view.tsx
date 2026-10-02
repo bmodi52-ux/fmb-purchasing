@@ -9,6 +9,7 @@ import { loadExceptionsView } from "@/lib/reporting/exceptions-data";
 import { findReport } from "@/lib/reporting/registry";
 import { DownloadLinks } from "@/components/download-links";
 import { ReportTableView } from "@/components/report-table";
+import { ReportTile as Tile, ReportTiles } from "@/components/report-tile";
 import { ReportFilterBar } from "../report-filter-bar";
 import { ReportHeader } from "../report-header";
 
@@ -79,13 +80,13 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
         </div>
       </ReportFilterBar>
       {filters.categories.length > 0 && (
-        <p className="-mt-3 text-xs text-ink/55">
+        <p className="-mt-3 text-support text-ink/70">
           Narrowed to receipts with a line in the chosen categories. Checks on a line list only those lines; checks on a
           whole receipt — its total, its GST, its date — list the receipt.
         </p>
       )}
 
-      <dl className="grid gap-3 sm:grid-cols-3">
+      <ReportTiles count={3}>
         <Tile
           label="Expenses with something to check"
           value={`${report.flaggedExpenses} of ${report.expenseCount}`}
@@ -93,7 +94,7 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
         />
         <Tile label="Their spend" value={money(report.flaggedSpend)} hint={`${share}% of ${money(report.spend)}`} />
         <Tile label="Checks with nothing to report" value={`${clear.length} of ${report.groups.length}`} />
-      </dl>
+      </ReportTiles>
 
       {found.length === 0 ? (
         <p className="rounded-xl border border-palm/30 bg-palm/5 px-4 py-8 text-center text-sm text-ink/70">
@@ -101,15 +102,15 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
         </p>
       ) : (
         found.map((g) => (
-          <section key={g.kind} className="card p-4">
+          <section key={g.kind} className="card p-[1.1rem]">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4">
-              <h2 className="section-title text-ink">{g.heading}</h2>
-              <span className="tabular-nums text-sm text-ink/60">
+              <h2 className="text-base font-semibold text-ink">{g.heading}</h2>
+              <span className="text-body font-medium text-ink tabular-nums">
                 {g.rows.length} · {money(g.amount)}
               </span>
             </div>
-            <p className="mt-0.5 max-w-2xl text-xs text-ink/55">{g.why}</p>
-            <div className="mt-3">
+            <p className="mt-0.5 max-w-2xl text-support text-ink/70">{g.why}</p>
+            <div className="mt-3.5">
               <ReportTableView table={exceptionGroupTable(g)} />
             </div>
           </section>
@@ -117,9 +118,9 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
       )}
 
       {found.length > 0 && clear.length > 0 && (
-        <section className="card p-4">
-          <h2 className="section-title text-ink">Nothing to report</h2>
-          <ul className="mt-2 flex flex-col gap-1 text-sm text-ink/65">
+        <section className="card p-[1.1rem]">
+          <h2 className="text-base font-semibold text-ink">Nothing to report</h2>
+          <ul className="mt-2 flex flex-col gap-1 text-body text-ink/70">
             {clear.map((g) => (
               <li key={g.kind}>{g.heading}</li>
             ))}
@@ -128,7 +129,7 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
       )}
 
       {canGst && (
-        <p className="text-xs text-ink/55">
+        <p className="text-support text-ink/70">
           GST claims that may lack a tax invoice, or were charged by a vendor not registered for GST, are on the{" "}
           <Link href="/accounting" className="underline underline-offset-2">
             GST page
@@ -136,16 +137,6 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
           .
         </p>
       )}
-    </div>
-  );
-}
-
-function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="card p-4">
-      <dt className="text-xs text-ink/55">{label}</dt>
-      <dd className="mt-0.5 tabular-nums text-xl font-semibold text-ink">{value}</dd>
-      {hint && <dd className="text-xs text-ink/45">{hint}</dd>}
     </div>
   );
 }

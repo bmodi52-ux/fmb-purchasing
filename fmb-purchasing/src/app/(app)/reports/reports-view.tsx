@@ -286,7 +286,7 @@ function OverviewSection({
     <>
       {found.length > 0 && (
         <Printable id="overview-insights" label="What stands out">
-          <section className="card p-4">
+          <section className="card p-[1.1rem]">
             <h2 className="text-xs tracking-wide text-ink/45 uppercase">What stands out</h2>
             <ul className="mt-2.5 flex flex-col gap-1.5">
               {found.map((insight) => (
@@ -451,7 +451,6 @@ function DimensionSection({
           <BarChart
             data={ranked.map((b) => ({ label: b.label, value: b.spend, count: b.count }))}
             maxBars={12}
-            valueFormat={formatCompact}
           />
         </Panel>
       </Printable>
@@ -875,11 +874,11 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="card p-4">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+    <section className="card p-[1.1rem]">
+      <div className="mb-3.5 flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <div className="min-w-0">
-          <h2 className="section-title text-ink capitalize">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs text-ink/50">{subtitle}</p>}
+          <h2 className="text-base font-semibold text-ink">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-support text-ink/70">{subtitle}</p>}
         </div>
         {action && <div className="flex shrink-0 items-center gap-3">{action}</div>}
       </div>

@@ -94,7 +94,11 @@ its header and row of links, its filter bar, its CSV, Excel and PDF downloads
 (`/reports/export`), its home-page widgets, and — with nothing more written — a
 page of its tables at `/reports/<key>` that sorts and pages on the server. A
 report that wants charts writes its own page from the same shared pieces
-(`report-header.tsx`, `report-filter-bar.tsx`, `components/report-table.tsx`).
+(`report-header.tsx`, `report-filter-bar.tsx`, `components/report-table.tsx`,
+`components/report-tile.tsx` for a headline figure, `reports/charts.tsx` for
+charts). Those pieces are also where the reports' look is decided — the text
+sizes (`text-support`, `text-body` in `globals.css`), the tile, the table, the
+chart colours — so a page that uses them matches the others without trying.
 
 `/reports` itself is a dashboard (`dashboard.ts`): this month and this year,
 what is overdue to be paid, budget used, and a chosen period's trend and

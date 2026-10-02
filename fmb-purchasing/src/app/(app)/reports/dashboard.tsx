@@ -12,6 +12,7 @@ import { DASHBOARD_KEY, findReport, reportNavFor } from "@/lib/reporting/registr
 import { loadSavedViews, sortViews } from "@/lib/saved-report-views";
 import { MeasureKey } from "@/components/measure-key";
 import { PeriodPicker } from "@/components/period-picker";
+import { ReportTile } from "@/components/report-tile";
 import { OverTimeChart, RankedBars, TrendChart } from "./dashboard-charts";
 import { FavouriteStar } from "./favourite-star";
 import { ReportNav } from "./report-nav";
@@ -68,12 +69,8 @@ export async function ReportsDashboard({ user, params }: { user: CurrentUser; pa
     <div className="flex flex-col gap-6">
       <ReportNav active={DASHBOARD_KEY} user={user} />
       <div>
-        <h1 className="page-title text-ink">Reports</h1>
-        <p className="page-description mt-1 max-w-2xl">
-          How the spending stands today, what any period looks like, and the reports you keep to hand.
-        </p>
-        <p className="mt-1 text-xs text-ink/55">By receipt date · submitted, approved and paid</p>
-        <MeasureKey measures={["spend", "outstanding", "paid"]} />
+        <h1 className="page-title">Reports</h1>
+        <MeasureKey measures={["spend", "outstanding", "paid"]} basis="By receipt date · submitted, approved and paid" />
       </div>
 
       <Suspense fallback={<KpiFallback withBudget={canBudgets} />}>
@@ -86,7 +83,7 @@ export async function ReportsDashboard({ user, params }: { user: CurrentUser; pa
             <h2 id="period-heading" className="section-title text-ink">
               Over a period
             </h2>
-            <p className="mt-0.5 text-xs text-ink/55">{period.label}</p>
+            <p className="mt-0.5 text-support text-ink/70">{period.label}</p>
           </div>
           <nav aria-label="Date range" className="flex flex-wrap gap-1.5">
             {RANGE_PRESETS.map((p) => (
@@ -94,10 +91,10 @@ export async function ReportsDashboard({ user, params }: { user: CurrentUser; pa
                 key={p.key}
                 href={presetHref(p.key)}
                 aria-current={preset === p.key ? "true" : undefined}
-                className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
+                className={`rounded-full px-3.5 py-2 text-support transition-colors ${
                   preset === p.key
                     ? "bg-gold/25 text-ink ring-1 ring-gold/50"
-                    : "border border-ink/15 text-ink/60 hover:border-ink/30 hover:text-ink"
+                    : "border border-ink/15 text-ink/70 hover:border-ink/30 hover:text-ink"
                 }`}
               >
                 {p.label}
@@ -107,7 +104,7 @@ export async function ReportsDashboard({ user, params }: { user: CurrentUser; pa
         </div>
         {preset === "custom" && (
           <div className="card p-3">
-            <Suspense fallback={<p className="text-sm text-ink/50">Loading the period picker…</p>}>
+            <Suspense fallback={<p className="text-body text-ink/60">Loading the period picker…</p>}>
               <CustomPeriod code={period.code} today={today} earliest={earliest} />
             </Suspense>
           </div>
@@ -145,31 +142,31 @@ async function KpiRow({ now, canBudgets }: { now: Promise<DashboardNow>; canBudg
 
   return (
     <section aria-label="Today" className={`grid gap-3 sm:grid-cols-2 ${canBudgets ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
-      <Kpi label="Spend this month" value={money(month.spend)} href={spendingHref(month.code)} action="Open in Spending">
-        <Change figure={month} />
+      <ReportTile label="Spend this month" value={money(month.spend)} href={spendingHref(month.code)}>
         <span>
           {plural(month.expenses, "expense")} · {month.label}
         </span>
-      </Kpi>
+        <Change figure={month} />
+      </ReportTile>
 
-      <Kpi label="Spend this year" value={money(year.spend)} href={spendingHref(year.code)} action="Open in Spending">
-        <Change figure={year} />
+      <ReportTile label="Spend this year" value={money(year.spend)} href={spendingHref(year.code)}>
         <span>{year.label}</span>
+        <Change figure={year} />
         <span>
           {financialYear.label}: {money(financialYear.spend)}
         </span>
-      </Kpi>
+      </ReportTile>
 
-      <Kpi
+      <ReportTile
         label="Overdue payables"
         value={money(overdue.amount)}
         tone={overdue.count > 0 ? "danger" : "normal"}
+        dot={overdue.count > 0 ? "alert" : "good"}
         href="/reports/money-out?section=waiting"
-        action="Open Awaiting payment"
       >
         {overdue.count > 0 ? (
           <span>
-            {plural(overdue.count, "expense")} approved more than {plural(overdue.afterDays, "day")} ago · oldest{" "}
+            <strong>{plural(overdue.count, "expense")}</strong> approved more than {plural(overdue.afterDays, "day")} ago · oldest{" "}
             {plural(overdue.oldestDays ?? 0, "day")}
           </span>
         ) : (
@@ -178,74 +175,27 @@ async function KpiRow({ now, canBudgets }: { now: Promise<DashboardNow>; canBudg
         <span>
           {awaiting.count > 0 ? `${money(awaiting.amount)} awaiting payment in all (${awaiting.count})` : "Nothing is awaiting payment."}
         </span>
-      </Kpi>
+      </ReportTile>
 
       {budget && (
-        <Kpi
+        <ReportTile
           label="Budget used"
           value={budget.used === null ? "No budget" : `${Math.round(budget.used * 100)}%`}
-          tone={budget.used !== null && budget.used > 1 ? "danger" : "normal"}
+          tone={budget.used === null ? "muted" : budget.used > 1 ? "danger" : "normal"}
+          meter={budget.used ?? undefined}
           href={`/budgets?period=${encodeURIComponent(budget.code)}`}
-          action={budget.used === null ? "Set budgets" : "Open Budgets"}
         >
           {budget.used === null ? (
             <span>No budgets are set for {budget.yearLabel}.</span>
           ) : (
-            <>
-              <span
-                className="my-1 block h-1.5 overflow-hidden rounded-full bg-ink/10"
-                role="img"
-                aria-label={`${Math.round(budget.used * 100)}% of the budget used`}
-              >
-                <span
-                  className={`block h-full rounded-full ${budget.used > 1 ? "bg-danger" : "bg-gold"}`}
-                  style={{ width: `${Math.min(100, Math.round(budget.used * 100))}%` }}
-                />
-              </span>
-              <span>
-                {money(budget.spent)} of {money(budget.budgeted)} · {budget.yearLabel}
-              </span>
-              <span>
-                {(budget.remaining ?? 0) < 0 ? `${money(-(budget.remaining ?? 0))} over` : `${money(budget.remaining ?? 0)} left`}
-              </span>
-            </>
+            <span>
+              <strong>{(budget.remaining ?? 0) < 0 ? `${money(-(budget.remaining ?? 0))} over` : `${money(budget.remaining ?? 0)} left`}</strong> of{" "}
+              {money(budget.budgeted)} · {budget.yearLabel}
+            </span>
           )}
-        </Kpi>
+        </ReportTile>
       )}
     </section>
-  );
-}
-
-/** One headline figure, the whole card a link to the report it comes from. */
-function Kpi({
-  label,
-  value,
-  href,
-  action,
-  tone = "normal",
-  children,
-}: {
-  label: string;
-  value: string;
-  href: string;
-  action: string;
-  tone?: "normal" | "danger";
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group flex min-h-[9.5rem] flex-col card p-4 transition-colors hover:border-ink/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-    >
-      <p className="text-xs text-ink/55">{label}</p>
-      <p className={`mt-1.5 text-2xl leading-none font-semibold tabular-nums ${tone === "danger" ? "text-danger" : "text-ink"}`}>
-        {value}
-      </p>
-      <div className="mt-2 flex flex-col gap-0.5 text-xs leading-snug text-ink/60">{children}</div>
-      <span className="mt-auto pt-3 text-xs text-ink/45 underline-offset-2 group-hover:text-ink group-hover:underline">
-        {action} <span aria-hidden="true">→</span>
-      </span>
-    </Link>
   );
 }
 
@@ -254,14 +204,14 @@ function Kpi({
  * spending more is not in itself bad, so direction is an arrow and a name.
  */
 function Change({ figure }: { figure: Pick<SpendFigure, "change" | "against"> }) {
-  if (figure.change === null) return <span className="text-ink/45">Nothing in {figure.against} to compare with</span>;
+  if (figure.change === null) return <span>Nothing in {figure.against} to compare with</span>;
   const up = figure.change > 0;
   return (
     <span>
-      <span aria-hidden="true">{up ? "↑" : figure.change < 0 ? "↓" : "→"}</span> {Math.abs(Math.round(figure.change * 100))}%{" "}
-      <span className="text-ink/45">
-        {up ? "more than" : figure.change < 0 ? "less than" : "the same as"} {figure.against}
-      </span>
+      <strong>
+        <span aria-hidden="true">{up ? "↑" : figure.change < 0 ? "↓" : "→"}</span> {Math.abs(Math.round(figure.change * 100))}%
+      </strong>{" "}
+      {up ? "more than" : figure.change < 0 ? "less than" : "the same as"} {figure.against}
     </span>
   );
 }
@@ -294,7 +244,7 @@ async function PeriodCharts({
 
   if (range.expenses === 0) {
     return (
-      <p className="card px-4 py-10 text-center text-sm text-ink/55">
+      <p className="card px-4 py-8 text-center text-body text-ink/70">
         Nothing recorded for {period.label}. Choose another range above, or{" "}
         <Link href="/submit" className="underline underline-offset-2">
           submit an expense
@@ -314,7 +264,7 @@ async function PeriodCharts({
       >
         <TrendChart points={range.trend.points} label={`Spend over ${period.label}, ${GRAIN_WORD[range.trend.grain]}`} />
         {range.change !== null && (
-          <p className="mt-2 text-xs text-ink/60">
+          <p className="mt-3 text-support text-ink/70 [&_strong]:font-semibold [&_strong]:text-ink">
             <Change figure={range} />
           </p>
         )}
@@ -325,7 +275,7 @@ async function PeriodCharts({
         subtitle="By spend"
         link={{ href: spendingHref({ section: "breakdown", breakdownBy: "category" }), label: "All categories" }}
       >
-        {range.topCategories.length ? <RankedBars data={range.topCategories} /> : <Empty>No lines have a category in this period.</Empty>}
+        {range.topCategories.length ? <RankedBars data={range.topCategories} total={range.spend} /> : <Empty>No lines have a category in this period.</Empty>}
       </ChartCard>
 
       <ChartCard
@@ -333,7 +283,7 @@ async function PeriodCharts({
         subtitle="By spend"
         link={{ href: spendingHref({ section: "breakdown", breakdownBy: "item" }), label: "All items" }}
       >
-        {range.topItems.length ? <RankedBars data={range.topItems} /> : <Empty>No lines are matched to an item in this period.</Empty>}
+        {range.topItems.length ? <RankedBars data={range.topItems} total={range.spend} /> : <Empty>No lines are matched to an item in this period.</Empty>}
       </ChartCard>
 
       <ChartCard
@@ -378,28 +328,28 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`card p-4 ${className}`}>
+    <section className={`card p-[1.1rem] ${className}`}>
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-ink">{title}</h3>
-          {subtitle && <p className="mt-0.5 text-xs text-ink/55">{subtitle}</p>}
+          <h3 className="text-base font-semibold text-ink">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-support text-ink/70">{subtitle}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {control}
           {link && (
-            <Link href={link.href} className="text-xs text-ink/55 underline underline-offset-2 hover:text-ink">
+            <Link href={link.href} className="text-support whitespace-nowrap text-brand underline underline-offset-[3px]">
               {link.label}
             </Link>
           )}
         </div>
       </div>
-      <div className="mt-3">{children}</div>
+      <div className="mt-3.5">{children}</div>
     </section>
   );
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="py-6 text-center text-sm text-ink/50">{children}</p>;
+  return <p className="py-4 text-body text-ink/70">{children}</p>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -422,21 +372,21 @@ async function AwaitingCard({ now }: { now: Promise<DashboardNow> }) {
         <ul className="flex flex-col gap-2.5">
           {awaiting.bands.map((band) => (
             <li key={band.label}>
-              <div className="flex items-baseline justify-between gap-3 text-xs">
-                <span className="text-ink/75">{band.label}</span>
-                <span className="tabular-nums text-ink/60">
+              <div className="flex items-baseline justify-between gap-3 text-body">
+                <span>{band.label}</span>
+                <span className="font-medium tabular-nums">
                   {band.count > 0 ? `${money(band.amount)} · ${band.count}` : "—"}
                 </span>
               </div>
               <div className="mt-1 h-2 overflow-hidden rounded-full bg-ink/[0.06]" aria-hidden="true">
-                <div className="h-full rounded-full bg-gold" style={{ width: `${largest > 0 ? (band.amount / largest) * 100 : 0}%` }} />
+                <div className="h-full rounded-full bg-brand" style={{ width: `${largest > 0 ? (band.amount / largest) * 100 : 0}%` }} />
               </div>
             </li>
           ))}
         </ul>
       )}
       {awaiting.count > 0 && (
-        <p className="mt-3 text-xs text-ink/50">
+        <p className="mt-3.5 text-support text-ink/70">
           Overdue is anything waiting more than {plural(overdue.afterDays, "day")} — when a payment reminder is escalated.
         </p>
       )}
@@ -465,8 +415,8 @@ async function ReportsCard({ user }: { user: CurrentUser }) {
             <li key={r.key} className="flex items-start gap-1 py-2 first:pt-0 last:pb-0">
               <FavouriteStar reportKey={r.key} title={r.label} initial={starred.has(r.key)} />
               <Link href={r.href} className="group min-w-0 flex-1 pt-1">
-                <span className="block text-sm font-medium text-ink underline-offset-2 group-hover:underline">{r.label}</span>
-                <span className="mt-0.5 line-clamp-2 text-xs leading-snug text-ink/55" title={definition.description}>
+                <span className="block text-body font-semibold text-ink underline-offset-[3px] group-hover:underline">{r.label}</span>
+                <span className="mt-0.5 line-clamp-2 text-support text-ink/70" title={definition.description}>
                   {definition.description}
                 </span>
               </Link>
@@ -505,8 +455,8 @@ async function SavedViewsCard({ user }: { user: CurrentUser }) {
           {shown.map((v) => (
             <li key={v.id} className="py-2 first:pt-0 last:pb-0">
               <Link href={buildHref(v.query, {})} className="group block">
-                <span className="text-sm font-medium text-ink underline-offset-2 group-hover:underline">{v.name}</span>
-                <span className="mt-0.5 block text-xs text-ink/55">
+                <span className="text-body font-medium text-ink underline-offset-[3px] group-hover:underline">{v.name}</span>
+                <span className="mt-0.5 block text-support text-ink/70">
                   {SECTIONS.find((s) => s.key === v.query.section)?.label ?? "Overview"}
                   {v.ownerId === user.id ? " · yours" : " · shared with you"}
                 </span>
@@ -534,11 +484,7 @@ function KpiFallback({ withBudget }: { withBudget: boolean }) {
   return (
     <div role="status" aria-live="polite" className={`grid gap-3 sm:grid-cols-2 ${withBudget ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
       {labels.map((label) => (
-        <div key={label} className="flex min-h-[9.5rem] flex-col card p-4">
-          <p className="text-xs text-ink/55">{label}</p>
-          <p className="mt-1.5 text-2xl leading-none font-semibold text-ink/20">—</p>
-          <p className="mt-2 text-xs text-ink/45">Loading…</p>
-        </div>
+        <ReportTile key={label} label={label} value="—" tone="muted" hint="Loading…" />
       ))}
     </div>
   );
@@ -546,9 +492,9 @@ function KpiFallback({ withBudget }: { withBudget: boolean }) {
 
 function CardFallback({ title, className = "", tall = false }: { title: string; className?: string; tall?: boolean }) {
   return (
-    <section role="status" aria-live="polite" className={`card p-4 ${className}`}>
-      <h3 className="text-sm font-semibold text-ink">{title}</h3>
-      <p className={`flex items-center justify-center text-sm text-ink/45 ${tall ? "h-[16.5rem]" : "h-40"}`}>Loading…</p>
+    <section role="status" aria-live="polite" className={`card p-[1.1rem] ${className}`}>
+      <h3 className="text-base font-semibold text-ink">{title}</h3>
+      <p className={`flex items-center text-body text-ink/60 ${tall ? "h-[17rem]" : "h-24"}`}>Loading…</p>
     </section>
   );
 }

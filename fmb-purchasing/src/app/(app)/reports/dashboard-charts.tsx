@@ -2,7 +2,7 @@
 
 import type { BreakdownSeries } from "@/lib/reporting/aggregate";
 import type { Ranked, TrendPoint } from "@/lib/reporting/dashboard";
-import { BarChart, ColumnChart, StackedColumnChart, formatCompact, formatMoney } from "./charts";
+import { BarChart, ColumnChart, StackedColumnChart, formatMoney } from "./charts";
 
 /**
  * The dashboard's charts: the same chart components the Spending report
@@ -22,8 +22,9 @@ export function TrendChart({ points, label }: { points: TrendPoint[]; label: str
   );
 }
 
-export function RankedBars({ data }: { data: Ranked[] }) {
-  return <BarChart data={data.map((d) => ({ label: d.label, value: d.value, count: d.count }))} maxBars={10} valueFormat={formatCompact} />;
+/** `total` is the period's whole spend: these are its ten largest, and each one's share is of all of it. */
+export function RankedBars({ data, total }: { data: Ranked[]; total: number }) {
+  return <BarChart data={data.map((d) => ({ label: d.label, value: d.value, count: d.count }))} maxBars={10} total={total} />;
 }
 
 export function OverTimeChart({ months, series }: { months: { key: string; label: string }[]; series: BreakdownSeries[] }) {

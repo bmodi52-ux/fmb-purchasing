@@ -1,31 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { ReportTile } from "@/components/report-tile";
+import { labelEvery, niceScale, sharePercent, shortMoney, splitName, wholeMoney } from "@/lib/reporting/chart-scale";
 
 /**
- * Chart marks for the Reports dashboard, built to the dataviz spec:
- * marks ≤24px with a 4px rounded data-end, 2px surface gaps and rings,
- * hairline recessive gridlines, and text that never wears the data colour.
+ * Chart marks for the reports, the dashboard and the widgets on Home.
  *
- * Palette provenance (validated, not eyeballed — `validate_palette.js`
- * against this app's own cream surface `#FBF6EC`):
+ * A chart is drawn to be read without touching it: its scale is labelled, a
+ * column says what it comes to, a ranking gives each name in full with its
+ * amount and its share. Pointing at something adds detail (the cents, the
+ * number of expenses); it is never the only way to a figure.
  *
- *   Categorical passes every hard gate: worst adjacent CVD ΔE 9.1, worst
- *   adjacent normal-vision ΔE 19.6. Four slots sit under 3:1 contrast, which
- *   is a WARN that obliges *relief* — so every chart using these hues ships a
- *   legend with values or an accompanying table, never colour alone.
+ * Colour:
  *
- *   Sequential is FMB's own gold-deep at 3.69:1 on cream. Safe to brand
- *   because a magnitude chart carries one hue, so no adjacent-pair check
- *   applies. The brighter brand gold #D89C24 measures 2.24:1 and is not used
- *   for marks.
+ *   One series is the brand colour — teal on the live site, the crest's
+ *   maroon on the sandbox (globals.css) — so a chart belongs to the page it
+ *   is on. Both are well over 4.5:1 on a white card. Gold is kept for what
+ *   is selected and what a figure is compared with.
+ *
+ *   A chart split into parts uses the categorical palette below, which was
+ *   validated rather than eyeballed (`validate_palette.js`): worst adjacent
+ *   CVD ΔE 9.1, worst adjacent normal-vision ΔE 19.6. Four slots sit under
+ *   3:1 contrast, which obliges relief — so every chart using these hues has
+ *   a legend with amounts, never colour alone. The folded tail, "Other", is
+ *   grey: it is not a thing, and should not look like one.
+ *
+ *   Text never wears a data colour.
  */
 const CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
-const GOLD = "#A97614";
-/** Cream — the card surface, used for the gaps and rings that separate marks. */
-const SURFACE = "#FBF6EC";
+const BRAND = "var(--color-brand)";
+const OTHER = "rgb(43 33 28 / 0.22)";
+/** The card a chart sits on, for the rings that separate one mark from the next. */
+const SURFACE = "#FFFFFF";
 const GRID = "rgba(43,33,28,0.08)";
 const INK = "#2B211C";
+/** A period that is not over yet: the same colour, broken, so it is not read as a fall. */
+const UNDER_WAY = `repeating-linear-gradient(135deg, ${BRAND} 0 4px, color-mix(in srgb, ${BRAND} 55%, white) 4px 8px)`;
+
+/** aggregate.ts folds the series past the palette's ceiling into one, under this key. */
+const OTHER_KEY = "__other__";
 
 /**
  * The hue for a categorical slot, for callers that need to draw their own
@@ -42,33 +56,25 @@ export function formatMoney(n: number): string {
 
 /** Compact for axis ticks and dense labels, where full precision is noise. */
 export function formatCompact(n: number): string {
-  const sign = n < 0 ? "-" : "";
-  const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
-  return `${sign}$${Math.round(abs)}`;
+  return shortMoney(n);
 }
 
-/** Top-rounded, square at the baseline — a column grows out of its axis. */
-function columnPath(x: number, y: number, w: number, h: number, r = 4): string {
-  const radius = Math.min(r, w / 2, h);
-  if (h <= 0) return "";
-  return [
-    `M ${x} ${y + h}`,
-    `L ${x} ${y + radius}`,
-    `Q ${x} ${y} ${x + radius} ${y}`,
-    `L ${x + w - radius} ${y}`,
-    `Q ${x + w} ${y} ${x + w} ${y + radius}`,
-    `L ${x + w} ${y + h}`,
-    "Z",
-  ].join(" ");
+/** A name with the heading it sits under said quietly after it: "Chicken · Meat & Poultry". */
+function Name({ label }: { label: string }) {
+  const [name, under] = splitName(label);
+  return (
+    <>
+      {name}
+      {under && <span className="text-support text-ink/55"> · {under}</span>}
+    </>
+  );
 }
 
 /* ------------------------------------------------------------------ */
 /* Figures                                                             */
 /* ------------------------------------------------------------------ */
 
-/** The one number the dashboard leads with. Exactly one per view. */
+/** The one number a report leads with. Exactly one per view. */
 export function HeroFigure({
   label,
   value,
@@ -80,18 +86,18 @@ export function HeroFigure({
 }) {
   return (
     <div>
-      <p className="text-sm text-ink/60">{label}</p>
+      <p className="text-support font-medium text-ink/70">{label}</p>
       {/* Proportional figures, not tabular: at display size tabular digits
           make a number like 121 look gappy. */}
-      <p className="mt-0.5 text-[clamp(2.25rem,1.6rem+2.4vw,3rem)] leading-none font-semibold tracking-tight text-ink">
+      <p className="mt-1 text-[clamp(2.25rem,1.6rem+2.4vw,3rem)] leading-none font-semibold tracking-tight text-ink">
         {value}
       </p>
-      {caption && <p className="mt-1.5 text-sm text-ink/55">{caption}</p>}
+      {caption && <p className="mt-1.5 text-body text-ink/70">{caption}</p>}
     </div>
   );
 }
 
-/** 12-point trend line behind a stat tile. Context, not a readable chart. */
+/** 12-point trend line under a stat tile. Context, not a readable chart. */
 function Sparkline({ points }: { points: number[] }) {
   if (points.length < 2) return null;
   const w = 96;
@@ -114,7 +120,7 @@ function Sparkline({ points }: { points: number[] }) {
       className="h-5 w-full"
       aria-hidden="true"
     >
-      <path d={d} fill="none" stroke={GOLD} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" opacity={0.4} vectorEffect="non-scaling-stroke" />
+      <path d={d} fill="none" stroke={BRAND} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
@@ -143,37 +149,30 @@ export function StatTile({
   hint?: string;
 }) {
   const showDelta = delta != null && Number.isFinite(delta);
+  const hasTrend = !!trend && trend.length > 1;
   return (
-    // Stacked rather than value-beside-sparkline: three of these share a row,
-    // and at that width a 96px sparkline sitting next to the number pushed
-    // itself over the delta text underneath.
-    <div className="flex flex-col card p-4">
-      <p className="text-xs text-ink/55">{label}</p>
-      <p className="mt-1.5 text-2xl leading-none font-semibold text-ink">{value}</p>
-
+    <ReportTile label={label} value={value}>
       {showDelta ? (
-        <p className="mt-2 text-xs text-ink/60">
-          <span aria-hidden="true">{delta > 0 ? "↑" : delta < 0 ? "↓" : "→"}</span>{" "}
-          {Math.abs(Math.round(delta * 100))}%{" "}
-          <span className="text-ink/45">
-            {delta > 0 ? "more than" : delta < 0 ? "less than" : "vs"} {deltaLabel}
-          </span>
-        </p>
+        <span>
+          <strong>
+            <span aria-hidden="true">{delta > 0 ? "↑" : delta < 0 ? "↓" : "→"}</span> {Math.abs(Math.round(delta * 100))}%
+          </strong>{" "}
+          {delta > 0 ? "more than" : delta < 0 ? "less than" : "vs"} {deltaLabel}
+        </span>
       ) : (
-        hint && <p className="mt-2 text-xs leading-snug text-ink/45">{hint}</p>
+        hint && <span>{hint}</span>
       )}
-
-      {trend && trend.length > 1 && (
-        <div className="mt-auto pt-3">
+      {hasTrend && (
+        <span className="mt-auto block pt-2">
           <Sparkline points={trend} />
-        </div>
+        </span>
       )}
-    </div>
+    </ReportTile>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Columns — magnitude over a time axis                                */
+/* The frame of a column chart                                          */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -199,7 +198,117 @@ function chartSummary(
   );
 }
 
-export type ColumnDatum = { key: string; label: string; value: number; count?: number };
+/** Room above the scale for the figure on top of the tallest column. */
+const HEADROOM = 22;
+
+/**
+ * What every column chart is drawn in: the scale down the left with its
+ * figures, a hairline for each, the columns, and their names underneath.
+ *
+ * Laid out by the browser, not inside an SVG viewBox. A viewBox scales its
+ * drawing to fit, which on a wide card left the chart a 600-unit island in
+ * the middle and on a phone shrank its text to 5px; boxes in a grid are as
+ * wide as their card and their text is the size it says.
+ */
+function Plot({
+  height,
+  top,
+  ticks,
+  tickFormat,
+  names,
+  label,
+  tooltip,
+  children,
+}: {
+  height: number;
+  top: number;
+  ticks: number[];
+  tickFormat: (n: number) => string;
+  names: { key: string; label: string }[];
+  label: string;
+  tooltip: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const every = labelEvery(names.length);
+  const columns = { gridTemplateColumns: `repeat(${names.length}, minmax(0, 1fr))` };
+  return (
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+      <div aria-hidden="true" className="relative text-support text-ink/60 tabular-nums" style={{ height }}>
+        {/* Holds the column as wide as its widest figure; the figures themselves are placed on their lines. */}
+        <span className="invisible block">{tickFormat(top)}</span>
+        <div className="absolute inset-x-0 bottom-0" style={{ top: HEADROOM }}>
+          {ticks.map((t) => (
+            <span key={t} className="absolute right-0 translate-y-1/2 leading-none" style={{ bottom: `${(t / top) * 100}%` }}>
+              {tickFormat(t)}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative" style={{ height }} role="img" aria-label={label}>
+        <div className="absolute inset-x-0 bottom-0" style={{ top: HEADROOM }}>
+          {ticks.map((t) => (
+            <span
+              key={t}
+              className={`absolute inset-x-0 border-t ${t === 0 ? "border-ink/30" : "border-ink/[0.08]"}`}
+              style={{ bottom: `${(t / top) * 100}%` }}
+            />
+          ))}
+          <div className="absolute inset-0 grid" style={columns}>
+            {children}
+          </div>
+        </div>
+        {tooltip}
+      </div>
+
+      <div />
+      <div className="mt-2 grid text-center text-support text-ink/70" style={columns}>
+        {names.map((n, i) => (
+          <span key={n.key} className="min-w-0 truncate px-0.5" title={n.label}>
+            {i % every === 0 ? n.label : ""}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The reading that follows the pointer: above the column it is over. */
+function PlotTip({ index, of, children }: { index: number; of: number; children: React.ReactNode }) {
+  return (
+    <div
+      className="pointer-events-none absolute top-0 z-10 rounded-md border border-ink/10 bg-white px-2.5 py-1.5 text-support whitespace-nowrap shadow-md"
+      style={{
+        // Kept inside the card at either end, where a centred box would be cut off.
+        left: `clamp(4.5rem, ${((index + 0.5) / of) * 100}%, calc(100% - 4.5rem))`,
+        transform: "translateX(-50%)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Whether there is room to print a figure over each column: always for a few, never for many. */
+function valueLabelClass(columns: number): string | null {
+  if (columns <= 6) return "";
+  // Seven to twelve fit once the chart itself (not the screen) is wide enough.
+  if (columns <= 12) return "hidden @xl:block";
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Columns — magnitude over a time axis                                */
+/* ------------------------------------------------------------------ */
+
+export type ColumnDatum = {
+  key: string;
+  label: string;
+  value: number;
+  count?: number;
+  /** The period this column stands for is not over: drawn broken, so a part-month is not read as a fall. */
+  underWay?: boolean;
+};
 
 /**
  * Vertical columns for discrete time buckets. Single hue: the job here is
@@ -207,106 +316,79 @@ export type ColumnDatum = { key: string; label: string; value: number; count?: n
  */
 export function ColumnChart({
   data,
-  height = 200,
-  valueFormat = formatCompact,
+  height = 220,
+  valueFormat = formatMoney,
+  tickFormat = shortMoney,
   emptyLabel = "No spend in this period.",
   label,
 }: {
   data: ColumnDatum[];
   height?: number;
+  /** The figure in full, for the reading under the pointer. */
   valueFormat?: (n: number) => string;
+  /** The figure shortened, for the scale and the top of each column. */
+  tickFormat?: (n: number) => string;
   emptyLabel?: string;
   /** Overrides the generated description when the caller knows better. */
   label?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
 
-  if (data.length === 0) return <p className="text-sm text-ink/50">{emptyLabel}</p>;
+  if (data.length === 0) return <p className="text-body text-ink/60">{emptyLabel}</p>;
 
-  const width = 600;
-  // No bottom band for labels: they are rendered as HTML underneath, because
-  // text inside the viewBox is scaled by the same factor as the chart — at
-  // phone width a 10px SVG label lands at about 5px and is unreadable.
-  const pad = { top: 16, right: 8, bottom: 4, left: 8 };
-  const plotW = width - pad.left - pad.right;
-  const plotH = height - pad.top - pad.bottom;
-
-  // Headroom, so the tallest column doesn't sit flush against the top rule.
-  const max = Math.max(...data.map((d) => d.value), 1) * 1.1;
-  const band = plotW / data.length;
-  // Capped at 24px and never filling the band — the leftover is the air the
-  // spec asks for, and it holds the 2px separation at any column count.
-  const barW = Math.min(24, Math.max(6, band - 10));
+  const { top, ticks } = niceScale(Math.max(...data.map((d) => d.value)));
+  const valueLabel = valueLabelClass(data.length);
 
   return (
-    <div className="relative">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="w-full"
-        style={{ height }}
-        role="img"
-        aria-label={label ?? chartSummary("Column chart of spend", data, valueFormat)}
+    <div className="@container">
+      <Plot
+        height={height}
+        top={top}
+        ticks={ticks}
+        tickFormat={tickFormat}
+        names={data}
+        label={label ?? chartSummary("Column chart of spend", data, valueFormat)}
+        tooltip={
+          hover != null && (
+            <PlotTip index={hover} of={data.length}>
+              <p className="font-semibold text-ink">{valueFormat(data[hover].value)}</p>
+              <p className="text-ink/70">
+                {data[hover].label}
+                {data[hover].count != null && ` · ${data[hover].count} ${data[hover].count === 1 ? "expense" : "expenses"}`}
+                {data[hover].underWay && " · still under way"}
+              </p>
+            </PlotTip>
+          )
+        }
       >
-        <g transform={`translate(${pad.left},${pad.top})`}>
-          {[0, 0.5, 1].map((t) => (
-            <line key={t} x1={0} x2={plotW} y1={plotH * t} y2={plotH * t} stroke={GRID} strokeWidth={1} />
-          ))}
-
-          {data.map((d, i) => {
-            const h = (d.value / max) * plotH;
-            const x = i * band + (band - barW) / 2;
-            const y = plotH - h;
-            return (
-              <g key={d.key}>
-                <path d={columnPath(x, y, barW, h)} fill={GOLD} opacity={hover === i ? 1 : 0.85} />
-                {/* Hit area spans the whole band and the full height, so the
-                    pointer only has to be near the column, not on it. */}
-                <rect
-                  x={i * band}
-                  y={0}
-                  width={band}
-                  height={plotH}
-                  fill="transparent"
-                  onPointerEnter={() => setHover(i)}
-                  // A tap fires leave the moment the finger lifts, which showed
-                  // the value for a frame. On touch it stays until the next tap.
-                  onPointerLeave={(e) => e.pointerType !== "touch" && setHover(null)}
-                />
-              </g>
-            );
-          })}
-
-        </g>
-      </svg>
-
-      <div className="mt-1 flex">
-        {data.map((d) => (
-          <span
+        {data.map((d, i) => (
+          <div
             key={d.key}
-            className="min-w-0 flex-1 truncate text-center text-[11px] text-ink/50"
-            style={{ flexBasis: `${100 / data.length}%` }}
+            // The whole band answers to the pointer, so it only has to be near the column, not on it.
+            className={`relative flex h-full items-end justify-center ${hover === i ? "bg-ink/[0.035]" : ""}`}
+            onPointerEnter={() => setHover(i)}
+            // A tap fires leave the moment the finger lifts, which showed
+            // the value for a frame. On touch it stays until the next tap.
+            onPointerLeave={(e) => e.pointerType !== "touch" && setHover(null)}
           >
-            {d.label}
-          </span>
+            {d.value > 0 && (
+              <div
+                // Up to 44px and never the whole band: the air between columns is what lets them be counted.
+                className="relative w-[min(2.75rem,62%)] rounded-t-[4px]"
+                style={{ height: `${Math.max((d.value / top) * 100, 0.8)}%`, background: d.underWay ? UNDER_WAY : BRAND }}
+              >
+                {valueLabel !== null && (
+                  <span
+                    className={`absolute bottom-full left-1/2 -translate-x-1/2 pb-1 text-support leading-none font-semibold whitespace-nowrap text-ink tabular-nums ${valueLabel}`}
+                  >
+                    {tickFormat(d.value)}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         ))}
-      </div>
-
-      {hover != null && (
-        <div
-          className="pointer-events-none absolute top-0 z-10 rounded-md border border-ink/10 bg-white px-2.5 py-1.5 text-xs shadow-md"
-          style={{
-            left: `${(((hover + 0.5) * band + pad.left) / width) * 100}%`,
-            transform: "translateX(-50%)",
-          }}
-        >
-          <p className="font-medium text-ink">{valueFormat(data[hover].value)}</p>
-          <p className="text-ink/50">
-            {data[hover].label}
-            {data[hover].count != null &&
-              ` · ${data[hover].count} ${data[hover].count === 1 ? "expense" : "expenses"}`}
-          </p>
-        </div>
-      )}
+      </Plot>
     </div>
   );
 }
@@ -317,19 +399,23 @@ export function ColumnChart({
 
 export type StackedColumnSeries = { key: string; label: string; values: number[] };
 
+const seriesColour = (s: { key: string }, i: number) => (s.key === OTHER_KEY ? OTHER : CATEGORICAL[i % CATEGORICAL.length]);
+
 /**
  * Spend per month, split into named parts.
  *
  * Categorical here, because the parts *are* the subject — this is the chart
  * that answers "which items drove that month". Segments are separated by a
- * 2px surface gap, and the legend carries totals, which is the relief the
- * palette's contrast WARN requires.
+ * 2px gap, and the legend is a small table of each part's amount and share,
+ * which is the relief the palette's contrast WARN requires. It sits beside
+ * the chart where the chart is wide enough, and under it where it is not.
  */
 export function StackedColumnChart({
   months,
   series,
   height = 220,
   valueFormat = formatMoney,
+  tickFormat = shortMoney,
   emptyLabel = "No spend in this period.",
   label,
 }: {
@@ -337,149 +423,98 @@ export function StackedColumnChart({
   series: StackedColumnSeries[];
   height?: number;
   valueFormat?: (n: number) => string;
+  tickFormat?: (n: number) => string;
   emptyLabel?: string;
   label?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
 
-  if (months.length === 0 || series.length === 0)
-    return <p className="text-sm text-ink/50">{emptyLabel}</p>;
+  if (months.length === 0 || series.length === 0) return <p className="text-body text-ink/60">{emptyLabel}</p>;
 
-  const width = 600;
-  const pad = { top: 16, right: 8, bottom: 4, left: 8 };
-  const plotW = width - pad.left - pad.right;
-  const plotH = height - pad.top - pad.bottom;
-
-  const columnTotals = months.map((_, i) => series.reduce((s, ser) => s + (ser.values[i] ?? 0), 0));
-  const max = Math.max(...columnTotals, 1) * 1.1;
-  const band = plotW / months.length;
-  const barW = Math.min(28, Math.max(8, band - 12));
-  // In user units; the viewBox is unscaled vertically so this is the real gap.
-  const GAP = 2;
+  const part = (s: StackedColumnSeries, i: number) => Math.max(0, s.values[i] ?? 0);
+  const columnTotals = months.map((_, i) => series.reduce((sum, s) => sum + part(s, i), 0));
+  const seriesTotals = series.map((s) => months.reduce((sum, _, i) => sum + part(s, i), 0));
+  const grand = seriesTotals.reduce((a, b) => a + b, 0);
+  const { top, ticks } = niceScale(Math.max(...columnTotals));
 
   return (
-    <div className="relative">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="w-full"
-        style={{ height }}
-        role="img"
-        aria-label={
-          label ??
-          // Described by month total rather than by series: the stack answers
-          // "how much, when" first, and the legend beside it already names the
-          // series with their own totals.
-          chartSummary(
-            `Stacked column chart of spend by ${series.length} ${series.length === 1 ? "item" : "items"}`,
-            months.map((m, i) => ({ label: m.label, value: columnTotals[i] ?? 0 })),
-            valueFormat
-          )
-        }
-      >
-        <g transform={`translate(${pad.left},${pad.top})`}>
-          {[0, 0.5, 1].map((t) => (
-            <line key={t} x1={0} x2={plotW} y1={plotH * t} y2={plotH * t} stroke={GRID} strokeWidth={1} />
-          ))}
-
-          {months.map((m, i) => {
-            const x = i * band + (band - barW) / 2;
-            let cursor = plotH;
-            // Bottom-up so the first (largest) series sits at the base and
-            // keeps its position as months change.
-            const segments = series.map((ser, si) => {
-              const raw = ((ser.values[i] ?? 0) / max) * plotH;
-              if (raw <= 0) return null;
-              // Reserve the gap out of the segment, never out of the value.
-              const h = Math.max(raw - GAP, 1);
-              const y = cursor - raw;
-              cursor -= raw;
-              const isTop = series.slice(si + 1).every((s) => (s.values[i] ?? 0) <= 0);
-              return (
-                <path
-                  key={ser.key}
-                  d={
-                    isTop
-                      ? columnPath(x, y, barW, h)
-                      : `M ${x} ${y} L ${x + barW} ${y} L ${x + barW} ${y + h} L ${x} ${y + h} Z`
-                  }
-                  fill={CATEGORICAL[si % CATEGORICAL.length]}
-                  opacity={hover === i ? 1 : 0.9}
-                />
-              );
-            });
-
-            return (
-              <g key={m.key}>
-                {segments}
-                <rect
-                  x={i * band}
-                  y={0}
-                  width={band}
-                  height={plotH}
-                  fill="transparent"
-                  onPointerEnter={() => setHover(i)}
-                  // A tap fires leave the moment the finger lifts, which showed
-                  // the value for a frame. On touch it stays until the next tap.
-                  onPointerLeave={(e) => e.pointerType !== "touch" && setHover(null)}
-                />
-              </g>
-            );
-          })}
-        </g>
-      </svg>
-
-      <div className="mt-1 flex">
-        {months.map((m) => (
-          <span
-            key={m.key}
-            className="min-w-0 flex-1 truncate text-center text-[11px] text-ink/50"
-            style={{ flexBasis: `${100 / months.length}%` }}
-          >
-            {m.label}
-          </span>
-        ))}
-      </div>
-
-      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
-        {series.map((s, i) => (
-          <span key={s.key} className="flex items-center gap-1.5 text-ink/70">
-            <span
-              className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ background: CATEGORICAL[i % CATEGORICAL.length] }}
-            />
-            {s.label}
-            <span className="tabular-nums text-ink/45 tabular-nums">
-              {formatCompact(s.values.reduce((a, b) => a + b, 0))}
-            </span>
-          </span>
-        ))}
-      </div>
-
-      {hover != null && (
-        <div
-          className="pointer-events-none absolute top-0 z-10 rounded-md border border-ink/10 bg-white px-2.5 py-1.5 text-xs shadow-md"
-          style={{
-            left: `${(((hover + 0.5) * band + pad.left) / width) * 100}%`,
-            transform: "translateX(-50%)",
-          }}
+    <div className="@container">
+      <div className="grid gap-x-8 gap-y-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(14rem,1fr)] @3xl:items-center">
+        <Plot
+          height={height}
+          top={top}
+          ticks={ticks}
+          tickFormat={tickFormat}
+          names={months}
+          label={
+            label ??
+            // Described by month total rather than by series: the stack answers
+            // "how much, when" first, and the legend beside it already names the
+            // series with their own totals.
+            chartSummary(
+              `Stacked column chart of spend by ${series.length} ${series.length === 1 ? "part" : "parts"}`,
+              months.map((m, i) => ({ label: m.label, value: columnTotals[i] ?? 0 })),
+              valueFormat
+            )
+          }
+          tooltip={
+            hover != null && (
+              <PlotTip index={hover} of={months.length}>
+                <p className="mb-1 font-semibold text-ink">
+                  {months[hover].label} — {valueFormat(columnTotals[hover])}
+                </p>
+                {series.map((s, i) =>
+                  part(s, hover) > 0 ? (
+                    <p key={s.key} className="flex items-center gap-1.5 text-ink/70">
+                      <span className="inline-block h-2 w-2 shrink-0 rounded-sm" style={{ background: seriesColour(s, i) }} />
+                      <span className="text-ink tabular-nums">{valueFormat(part(s, hover))}</span>
+                      <span>{splitName(s.label)[0]}</span>
+                    </p>
+                  ) : null
+                )}
+              </PlotTip>
+            )
+          }
         >
-          <p className="mb-1 font-medium text-ink">
-            {months[hover].label} — {valueFormat(columnTotals[hover])}
-          </p>
-          {series.map((s, i) =>
-            (s.values[hover] ?? 0) > 0 ? (
-              <p key={s.key} className="flex items-center gap-1.5 text-ink/70">
-                <span
-                  className="inline-block h-2 w-2 shrink-0 rounded-sm"
-                  style={{ background: CATEGORICAL[i % CATEGORICAL.length] }}
-                />
-                <span className="tabular-nums tabular-nums">{valueFormat(s.values[hover])}</span>
-                <span className="text-ink/45">{s.label}</span>
-              </p>
-            ) : null
-          )}
+          {months.map((m, i) => (
+            <div
+              key={m.key}
+              className={`relative flex h-full items-end justify-center ${hover === i ? "bg-ink/[0.035]" : ""}`}
+              onPointerEnter={() => setHover(i)}
+              onPointerLeave={(e) => e.pointerType !== "touch" && setHover(null)}
+            >
+              {columnTotals[i] > 0 && (
+                <div
+                  // Bottom-up, so the first (largest) series sits at the base and keeps its place as months change.
+                  className="flex w-[min(2.75rem,62%)] flex-col-reverse gap-[2px] overflow-hidden rounded-t-[4px]"
+                  style={{ height: `${Math.max((columnTotals[i] / top) * 100, 0.8)}%` }}
+                >
+                  {series.map((s, si) =>
+                    part(s, i) > 0 ? (
+                      <span key={s.key} className="block min-h-px" style={{ flex: `${part(s, i)} 1 0`, background: seriesColour(s, si) }} />
+                    ) : null
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </Plot>
+
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 gap-y-2 text-body">
+          {series.map((s, i) => (
+            <Fragment key={s.key}>
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className="inline-block h-2.5 w-2.5 shrink-0 translate-y-px rounded-sm" style={{ background: seriesColour(s, i) }} />
+                <span className="min-w-0 break-words">
+                  <Name label={s.label} />
+                </span>
+              </span>
+              <span className="text-right font-medium tabular-nums">{wholeMoney(seriesTotals[i])}</span>
+              <span className="min-w-[2.2rem] text-right text-support text-ink/70 tabular-nums">{sharePercent(seriesTotals[i], grand)}</span>
+            </Fragment>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -513,12 +548,12 @@ export function SmallMultiple({
   const [hover, setHover] = useState<number | null>(null);
   const color = CATEGORICAL[slot % CATEGORICAL.length];
 
-  if (months.length === 0) return <p className="text-xs text-ink/50">No months in range.</p>;
+  if (months.length === 0) return <p className="text-support text-ink/60">No months in range.</p>;
 
   return (
     <div className="relative">
       <div
-        className="flex items-end gap-[3px] border-b border-ink/10"
+        className="flex items-end gap-[3px] border-b border-ink/30"
         style={{ height }}
         onPointerLeave={(e) => e.pointerType !== "touch" && setHover(null)}
       >
@@ -550,15 +585,15 @@ export function SmallMultiple({
 
       {/* Only the ends are labelled: at four cards wide there is no room for
           twelve month names, and the tooltip carries the rest. */}
-      <div className="mt-1 flex justify-between text-[11px] text-ink/45">
+      <div className="mt-1.5 flex justify-between text-support text-ink/60">
         <span>{months[0].label}</span>
         {months.length > 1 && <span>{months[months.length - 1].label}</span>}
       </div>
 
       {hover != null && (
-        <div className="pointer-events-none absolute -top-1 left-1/2 z-20 -translate-x-1/2 -translate-y-full rounded-md border border-ink/10 bg-white px-2 py-1 text-[11px] whitespace-nowrap shadow-md">
-          <span className="font-medium text-ink">{formatMoney(values[hover] ?? 0)}</span>
-          <span className="text-ink/50"> · {months[hover].label}</span>
+        <div className="pointer-events-none absolute -top-1 left-1/2 z-20 -translate-x-1/2 -translate-y-full rounded-md border border-ink/10 bg-white px-2 py-1 text-support whitespace-nowrap shadow-md">
+          <span className="font-semibold text-ink">{formatMoney(values[hover] ?? 0)}</span>
+          <span className="text-ink/70"> · {months[hover].label}</span>
         </div>
       )}
     </div>
@@ -572,74 +607,68 @@ export function SmallMultiple({
 export type BarDatum = { label: string; value: number; count?: number };
 
 /**
- * Horizontal bars for ranking. Long category and vendor names go horizontal
- * so the labels read straight rather than turned on their side.
+ * A ranking: each name in full, a bar for its size, its amount to the
+ * dollar and its share. Names are long — "Chicken · Meat & Poultry",
+ * "BANKSTOWN LEBANESE FRUIT & MIXED BUSINESS" — so they wrap onto a second
+ * line rather than being cut short, and nothing has to be pointed at to be
+ * read.
  */
 export function BarChart({
   data,
   maxBars = 8,
-  valueFormat = formatCompact,
+  valueFormat = wholeMoney,
   emptyLabel = "No data.",
+  total,
 }: {
   data: BarDatum[];
   maxBars?: number;
   valueFormat?: (n: number) => string;
   emptyLabel?: string;
+  /** What each row is a share of. Left out, it is everything in `data` — right when `data` is the whole list, not its top few. */
+  total?: number;
 }) {
-  // The row whose full name is showing: set by a tap, since a touch screen has
-  // no hover to reveal it.
-  const [active, setActive] = useState<string | null>(null);
   const sorted = [...data].sort((a, b) => b.value - a.value);
   const shown = sorted.length > maxBars ? sorted.slice(0, maxBars - 1) : sorted;
   const rest = sorted.length > maxBars ? sorted.slice(maxBars - 1) : [];
   // Never invent a colour for a long tail — fold it into one honest row.
-  const rows =
+  const rows: (BarDatum & { other?: boolean })[] =
     rest.length > 0
-      ? [...shown, { label: `Other (${rest.length})`, value: rest.reduce((s, d) => s + d.value, 0) }]
+      ? [...shown, { label: `Other (${rest.length})`, value: rest.reduce((s, d) => s + d.value, 0), other: true }]
       : shown;
   const max = Math.max(1, ...rows.map((r) => r.value));
+  const whole = total ?? data.reduce((s, d) => s + Math.max(0, d.value), 0);
 
-  if (rows.length === 0) return <p className="text-sm text-ink/50">{emptyLabel}</p>;
+  if (rows.length === 0) return <p className="text-body text-ink/60">{emptyLabel}</p>;
 
   return (
-    <div className="flex flex-col gap-2">
-      {rows.map((r) => (
-        <div
-          key={r.label}
-          className="group relative flex items-center gap-3"
-          onClick={() => setActive((current) => (current === r.label ? null : r.label))}
-          onPointerLeave={(e) => e.pointerType !== "touch" && setActive(null)}
-        >
-          {/* Names are long — "Meat & Poultry › Mutton", "BANKSTOWN LEBANESE
-              FRUIT & MIXED BUSINES" — so the label truncates and the whole
-              row carries a hover with the full text. The value stays visible
-              either way; it is never hover-only. */}
-          <span className="w-24 shrink-0 truncate text-xs text-ink/70 sm:w-32">{r.label}</span>
-          <div className="h-4 flex-1">
-            <div
-              className="h-4 rounded-r-[4px] transition-opacity group-hover:opacity-100"
-              style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%`, background: GOLD, opacity: 0.85 }}
-            />
-          </div>
-          <span className="w-16 shrink-0 text-right tabular-nums text-xs text-ink/70 tabular-nums">
-            {valueFormat(r.value)}
-          </span>
-
-          <span
-            role="tooltip"
-            className={`pointer-events-none absolute -top-1 left-0 z-10 -translate-y-full rounded-md border border-ink/10 bg-white px-2.5 py-1.5 text-xs whitespace-nowrap shadow-md ${
-              active === r.label ? "block" : "hidden group-hover:block"
-            }`}
+    <div className="@container">
+      <div className="flex flex-col gap-2.5 text-body">
+        {rows.map((r) => (
+          // In a narrow card the name has a line to itself, over its bar and
+          // figures; given the width, all four sit in one row. Either way the
+          // amount and share columns are a fixed width, so they line up down
+          // the list.
+          <div
+            key={r.label}
+            className="grid grid-cols-[minmax(0,1fr)_5.5rem_2.4rem] items-center gap-x-3 gap-y-1 @md:grid-cols-[minmax(0,1.25fr)_minmax(2.5rem,1fr)_5.5rem_2.4rem]"
           >
-            <span className="font-medium text-ink">{r.label}</span>
-            <span className="text-ink/55">
-              {" — "}
-              {valueFormat(r.value)}
-              {r.count != null && ` · ${r.count} ${r.count === 1 ? "line" : "lines"}`}
+            <span
+              className="col-span-3 min-w-0 leading-snug break-words @md:col-span-1"
+              title={r.count != null ? `${r.count} ${r.count === 1 ? "line" : "lines"}` : undefined}
+            >
+              <Name label={r.label} />
             </span>
-          </span>
-        </div>
-      ))}
+            <span className="h-2 rounded-full bg-ink/[0.07]" aria-hidden="true">
+              <span
+                className="block h-full rounded-full"
+                style={{ width: `${r.value > 0 ? Math.max((r.value / max) * 100, 1.5) : 0}%`, background: r.other ? OTHER : BRAND }}
+              />
+            </span>
+            <span className="text-right font-medium tabular-nums">{valueFormat(r.value)}</span>
+            <span className="text-right text-support text-ink/70 tabular-nums">{sharePercent(r.value, whole)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -651,7 +680,25 @@ export function BarChart({
 export type LinePoint = { x: string; y: number };
 export type LineSeriesData = { name: string; points: LinePoint[] };
 
-/** Multi-series line/area chart with a crosshair tooltip and legend. */
+/**
+ * How wide an element is on screen. A line chart has to be an SVG, and an
+ * SVG drawn to a fixed width is scaled to fit its box — so it is drawn to
+ * the width it actually has, and its text is the size it says.
+ */
+function useWidth<T extends HTMLElement>(initial: number) {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(initial);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(240, Math.round(entry.contentRect.width))));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
+
+/** Multi-series line/area chart with a labelled scale, a crosshair tooltip and a legend. */
 export function LineChart({
   series,
   area = false,
@@ -667,10 +714,7 @@ export function LineChart({
   valueFormat?: (v: number) => string;
   label?: string;
 }) {
-  const width = 600;
-  const padding = { top: 10, right: 10, bottom: xLabel ? 22 : 6, left: 10 };
-  const plotW = width - padding.left - padding.right;
-  const plotH = height - padding.top - padding.bottom;
+  const [ref, width] = useWidth<HTMLDivElement>(600);
 
   // Never cycle the palette: a ninth hue is indistinguishable from an
   // existing one under CVD. Past the token ceiling the tail is dropped and
@@ -680,10 +724,14 @@ export function LineChart({
 
   const allX = [...new Set(drawn.flatMap((s) => s.points.map((p) => p.x)))].sort();
   const allY = drawn.flatMap((s) => s.points.map((p) => p.y));
-  // Headroom so the peak isn't welded to the top edge, and a floor so a
-  // flat series doesn't divide by a zero range.
-  const maxY = Math.max(1, ...allY) * 1.15;
-  const colors = drawn.length === 1 ? [GOLD] : CATEGORICAL;
+  const { top: maxY, ticks } = niceScale(Math.max(0, ...allY));
+  const colors = drawn.length === 1 ? [BRAND] : CATEGORICAL;
+
+  // Room on the left for the scale's figures, by the longest of them.
+  const tickWidth = Math.max(...ticks.map((t) => valueFormat(t).length)) * 7 + 10;
+  const padding = { top: 18, right: 12, bottom: xLabel ? 24 : 8, left: tickWidth };
+  const plotW = Math.max(60, width - padding.left - padding.right);
+  const plotH = height - padding.top - padding.bottom;
 
   const xScale = (x: string) => {
     const i = allX.indexOf(x);
@@ -693,7 +741,7 @@ export function LineChart({
 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
-  if (allX.length === 0) return <p className="text-sm text-ink/50">No data.</p>;
+  if (allX.length === 0) return <p className="text-body text-ink/60">No data.</p>;
 
   function handleMove(e: React.PointerEvent<SVGRectElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -710,19 +758,21 @@ export function LineChart({
     setHoverIdx(nearest);
   }
 
-  const showXTicks = !!xLabel && allX.length <= 14;
+  // As many dates along the bottom as there is room for, at about 64px each.
+  const xEvery = xLabel ? labelEvery(allX.length, Math.max(2, Math.floor(plotW / 64))) : 0;
 
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full"
-        style={{ height }}
+        width={width}
+        height={height}
+        className="block max-w-full"
         role="img"
         aria-label={
           label ??
           chartSummary(
-            `Line chart, ${series.length} ${series.length === 1 ? "series" : "series"}`,
+            `Line chart, ${series.length} series`,
             series.map((s) => ({
               label: s.name,
               value: s.points.reduce((sum, p) => sum + p.y, 0),
@@ -732,8 +782,13 @@ export function LineChart({
         }
       >
         <g transform={`translate(${padding.left},${padding.top})`}>
-          {[0, 0.5, 1].map((t) => (
-            <line key={t} x1={0} x2={plotW} y1={plotH * (1 - t)} y2={plotH * (1 - t)} stroke={GRID} strokeWidth={1} />
+          {ticks.map((t) => (
+            <g key={t}>
+              <line x1={0} x2={plotW} y1={yScale(t)} y2={yScale(t)} stroke={t === 0 ? "rgba(43,33,28,0.3)" : GRID} strokeWidth={1} />
+              <text x={-8} y={yScale(t) + 4} fontSize={12} textAnchor="end" fill={INK} opacity={0.6}>
+                {valueFormat(t)}
+              </text>
+            </g>
           ))}
 
           {drawn.map((s, si) => {
@@ -756,7 +811,7 @@ export function LineChart({
                 {/* One direct label per series, at the end — never a number
                     on every point. */}
                 {drawn.length === 1 && (
-                  <text x={xScale(last.x) - 4} y={yScale(last.y) - 10} fontSize={11} textAnchor="end" fill={INK} opacity={0.7}>
+                  <text x={xScale(last.x) - 4} y={yScale(last.y) - 10} fontSize={12} fontWeight={600} textAnchor="end" fill={INK}>
                     {valueFormat(last.y)}
                   </text>
                 )}
@@ -775,12 +830,23 @@ export function LineChart({
             />
           )}
 
-          {showXTicks &&
-            allX.map((x) => (
-              <text key={x} x={xScale(x)} y={plotH + 16} fontSize={10} textAnchor="middle" fill={INK} opacity={0.5}>
-                {xLabel!(x)}
-              </text>
-            ))}
+          {xEvery > 0 &&
+            allX.map((x, i) =>
+              i % xEvery === 0 ? (
+                <text
+                  key={x}
+                  x={xScale(x)}
+                  y={plotH + 18}
+                  fontSize={12}
+                  // The ends are set from their own edge, so the first and last dates are not cut off.
+                  textAnchor={allX.length > 1 && i === 0 ? "start" : allX.length > 1 && i === allX.length - 1 ? "end" : "middle"}
+                  fill={INK}
+                  opacity={0.7}
+                >
+                  {xLabel!(x)}
+                </text>
+              ) : null
+            )}
 
           <rect
             x={0}
@@ -798,33 +864,34 @@ export function LineChart({
       </svg>
 
       {drawn.length > 1 && (
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/60">
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-support text-ink/70">
           {drawn.map((s, i) => (
             <span key={s.name} className="flex items-center gap-1.5">
               <span className="inline-block h-0.5 w-3" style={{ background: colors[i % colors.length] }} />
               {s.name}
             </span>
           ))}
-          {hidden > 0 && <span className="text-ink/40">+{hidden} more not shown</span>}
+          {hidden > 0 && <span className="text-ink/55">+{hidden} more not shown</span>}
         </div>
       )}
 
       {hoverIdx != null && (
         <div
-          className="pointer-events-none absolute top-0 z-10 rounded-md border border-ink/10 bg-white px-2.5 py-1.5 text-xs shadow-md"
+          className="pointer-events-none absolute top-0 z-10 rounded-md border border-ink/10 bg-white px-2.5 py-1.5 text-support whitespace-nowrap shadow-md"
           style={{
-            left: `${((xScale(allX[hoverIdx]) + padding.left) / width) * 100}%`,
+            left: `clamp(4rem, ${xScale(allX[hoverIdx]) + padding.left}px, calc(100% - 4rem))`,
             transform: "translateX(-50%)",
           }}
         >
-          <p className="mb-1 text-ink/50">{xLabel ? xLabel(allX[hoverIdx]) : allX[hoverIdx]}</p>
+          <p className="mb-1 text-ink/70">{xLabel ? xLabel(allX[hoverIdx]) : allX[hoverIdx]}</p>
           {drawn.map((s, i) => {
             const pt = s.points.find((p) => p.x === allX[hoverIdx]);
             if (!pt) return null;
             return (
-              <p key={s.name} className="flex items-center gap-1.5 tabular-nums text-ink">
+              <p key={s.name} className="flex items-center gap-1.5 text-ink tabular-nums">
                 <span className="inline-block h-0.5 w-2.5 shrink-0" style={{ background: colors[i % colors.length] }} />
                 {valueFormat(pt.y)}
+                {drawn.length > 1 && <span className="text-ink/70">{s.name}</span>}
               </p>
             );
           })}
@@ -860,22 +927,22 @@ export type StackDatum = {
 export function StackedBar({ data }: { data: StackDatum[] }) {
   const present = data.filter((d) => d.value > 0);
   const total = present.reduce((s, d) => s + d.value, 0);
-  if (total === 0) return <p className="text-sm text-ink/50">No data.</p>;
+  if (total === 0) return <p className="text-body text-ink/60">No data.</p>;
 
   // A single class is not a part-to-whole; a full-width bar at 100% is the
   // one-bar bar chart the spec warns about. Say it in words instead.
   if (present.length === 1) {
     return (
-      <p className="text-sm text-ink/70">
-        All of it is <span className="font-medium text-ink">{present[0].label.toLowerCase()}</span>
-        {present[0].detail && <span className="text-ink/50"> — {present[0].detail}</span>}.
+      <p className="text-body text-ink/70">
+        All of it is <span className="font-semibold text-ink">{present[0].label.toLowerCase()}</span>
+        {present[0].detail && <span> — {present[0].detail}</span>}.
       </p>
     );
   }
 
   return (
-    <div className="flex flex-col gap-2.5">
-      <div className="flex h-5 w-full gap-[2px]">
+    <div className="flex flex-col gap-3">
+      <div className="flex h-3.5 w-full gap-[2px] overflow-hidden rounded-full">
         {present.map((d) => (
           <div
             key={d.label}
@@ -883,19 +950,19 @@ export function StackedBar({ data }: { data: StackDatum[] }) {
               width: `${(d.value / total) * 100}%`,
               background: CATEGORICAL[d.slot % CATEGORICAL.length],
             }}
-            className="h-full first:rounded-l-[4px] last:rounded-r-[4px]"
+            className="h-full"
           />
         ))}
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-body">
         {present.map((d) => (
-          <span key={d.label} className="flex items-center gap-1.5 text-ink/70">
+          <span key={d.label} className="flex items-center gap-2">
             <span
               className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
               style={{ background: CATEGORICAL[d.slot % CATEGORICAL.length] }}
             />
             {d.label}
-            <span className="tabular-nums text-ink/45 tabular-nums">{d.detail ?? d.value}</span>
+            <span className="font-medium tabular-nums">{d.detail ?? d.value}</span>
           </span>
         ))}
       </div>
