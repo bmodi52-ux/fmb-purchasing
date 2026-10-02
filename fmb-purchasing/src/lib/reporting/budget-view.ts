@@ -198,9 +198,9 @@ export function budgetTables(view: BudgetView): ReportTable[] {
               { key: "label", label: "Month", kind: "text" as const },
               { key: "budget", label: "Budget", kind: "money" as const },
               { key: "spent", label: "Spent", kind: "money" as const },
-              { key: "difference", label: "Left over", kind: "money" as const },
+              { key: "difference", label: "Left over", kind: "money" as const, tone: "overMonth" },
               { key: "cumulativeBudget", label: "Budget to date", kind: "money" as const },
-              { key: "cumulativeSpent", label: "Spent to date", kind: "money" as const },
+              { key: "cumulativeSpent", label: "Spent to date", kind: "money" as const, tone: "overToDate" },
             ],
             rows: view.months.map((m) => ({
               label: m.label,
@@ -209,6 +209,9 @@ export function budgetTables(view: BudgetView): ReportTable[] {
               difference: Math.round((m.budget - m.spent) * 100) / 100,
               cumulativeBudget: m.cumulativeBudget,
               cumulativeSpent: m.cumulativeSpent,
+              // For the page: over in the month, and over for the year so far.
+              overMonth: m.spent > m.budget ? "danger" : "",
+              overToDate: m.cumulativeSpent > m.cumulativeBudget ? "danger" : "",
             })),
           },
         ]

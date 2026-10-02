@@ -49,21 +49,19 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
         report="exceptions"
         user={user}
         basis={describeBasis(filters.status)}
+        // What the report is for is said where reports are chosen; here, only where to go to act on it.
         description={
-          <>
-            {findReport("exceptions")!.description}
-            {canQueue && (
-              <>
-                {" "}
-                To work through them, use{" "}
-                <Link href="/review-queue" className="underline underline-offset-2">
-                  Needs attention
-                </Link>
-                .
-              </>
-            )}
-          </>
+          canQueue ? (
+            <>
+              A list to read before a period&rsquo;s figures are relied on. To work through what it finds, use{" "}
+              <Link href="/review-queue" className="text-brand underline underline-offset-[3px]">
+                Needs attention
+              </Link>
+              .
+            </>
+          ) : undefined
         }
+        actions={<DownloadLinks href={`/reports/export?${exported}`} />}
       />
 
       <ReportFilterBar
@@ -74,11 +72,7 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
         options={options}
         selected={{ vendors: filters.vendors, categories: filters.categories }}
         counting={filters.status}
-      >
-        <div className="ml-auto pb-1">
-          <DownloadLinks href={`/reports/export?${exported}`} />
-        </div>
-      </ReportFilterBar>
+      />
       {filters.categories.length > 0 && (
         <p className="-mt-3 text-support text-ink/70">
           Narrowed to receipts with a line in the chosen categories. Checks on a line list only those lines; checks on a
@@ -97,7 +91,8 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
       </ReportTiles>
 
       {found.length === 0 ? (
-        <p className="rounded-xl border border-palm/30 bg-palm/5 px-4 py-8 text-center text-sm text-ink/70">
+        <p className="flex items-center gap-2 card px-[1.1rem] py-4 text-body text-ink/70">
+          <Tick />
           Nothing to check in {period.label}.
         </p>
       ) : (
@@ -120,9 +115,13 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
       {found.length > 0 && clear.length > 0 && (
         <section className="card p-[1.1rem]">
           <h2 className="text-base font-semibold text-ink">Nothing to report</h2>
-          <ul className="mt-2 flex flex-col gap-1 text-body text-ink/70">
+          <p className="mt-0.5 text-support text-ink/70">Checks that found nothing in {period.label}</p>
+          <ul className="mt-3 grid gap-x-6 gap-y-2 text-body text-ink sm:grid-cols-2">
             {clear.map((g) => (
-              <li key={g.kind}>{g.heading}</li>
+              <li key={g.kind} className="flex items-center gap-2">
+                <Tick />
+                {g.heading}
+              </li>
             ))}
           </ul>
         </section>
@@ -131,12 +130,21 @@ export async function ExceptionsReport({ user, params }: { user: CurrentUser; pa
       {canGst && (
         <p className="text-support text-ink/70">
           GST claims that may lack a tax invoice, or were charged by a vendor not registered for GST, are on the{" "}
-          <Link href="/accounting" className="underline underline-offset-2">
+          <Link href="/accounting" className="text-brand underline underline-offset-[3px]">
             GST page
           </Link>
           .
         </p>
       )}
     </div>
+  );
+}
+
+/** A check that found nothing. */
+function Tick() {
+  return (
+    <span aria-hidden="true" className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-palm/15 text-[0.75rem] text-[#00702f]">
+      ✓
+    </span>
   );
 }

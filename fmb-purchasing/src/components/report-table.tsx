@@ -109,7 +109,9 @@ export function ReportTableView({
                 {table.columns.map((c) => {
                   const text = formatCell(r[c.key], c);
                   const href = c.link ? r[c.link] : null;
-                  const danger = !!c.tone && r[c.tone] === "danger";
+                  const mark = c.tone ? r[c.tone] : null;
+                  const danger = mark === "danger";
+                  const warn = mark === "warn";
                   return (
                     <td
                       key={c.key}
@@ -130,6 +132,8 @@ export function ReportTableView({
                       ) : danger && text ? (
                         // Too long, too late, over: marked so it is seen in a column of plain figures.
                         <span className="badge badge-bad -my-0.5">{text}</span>
+                      ) : warn && text ? (
+                        <span className="badge badge-waiting -my-0.5">{text}</span>
                       ) : (
                         text
                       )}

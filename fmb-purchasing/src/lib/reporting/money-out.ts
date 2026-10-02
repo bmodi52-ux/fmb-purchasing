@@ -322,7 +322,11 @@ export function paymentsMadeTables(r: PaymentsMade): ReportTable[] {
   return [transfersTable(r), paidByPayeeTable(r), paidByMonthTable(r)];
 }
 
-/** Each expense waiting, longest first. On a page the entry opens the expense, and a wait past 30 days is marked. */
+/**
+ * Each expense waiting, longest first. On a page the entry opens the expense,
+ * and a wait is marked by its length: amber past a week, red past a
+ * fortnight — the same ages, in the same colours, as the dashboard's bar.
+ */
 export function waitingListTable(title: string, sinceLabel: string, w: Waiting): ReportTable {
   return {
     title,
@@ -342,7 +346,7 @@ export function waitingListTable(title: string, sinceLabel: string, w: Waiting):
       days: r.days,
       total: r.total,
       href: `/expenses/${r.id}`,
-      tone: r.days > AGE_BANDS[2].upTo ? "danger" : "",
+      tone: r.days > AGE_BANDS[1].upTo ? "danger" : r.days > AGE_BANDS[0].upTo ? "warn" : "",
     })),
     totals: { entry: "Total", total: w.amount },
   };

@@ -23,7 +23,10 @@ export type ReportColumn = {
   link?: string;
   /** A difference that can go either way: shown with its sign on a page. */
   signed?: boolean;
-  /** On a page, the name of a row field that is "danger" when the cell deserves the eye. */
+  /**
+   * On a page, the name of a row field that says the cell deserves the eye:
+   * "danger" for what is wrong or overdue, "warn" for what is on its way there.
+   */
   tone?: string;
   /**
    * On a page, the cell is a status badge (components/status-badge): the name

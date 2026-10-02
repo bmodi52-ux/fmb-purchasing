@@ -57,20 +57,13 @@ export async function RegistryReport({ user, definition, params }: { user: Curre
 
   return (
     <div className="flex flex-col gap-5">
-      <ReportHeader report={definition.key} user={user} title={doc.title} basis={doc.subtitle} />
-
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-ink/10">
-        <nav aria-label="Tables" className="tabs border-b-0">
-          {doc.tables.map((t, i) => (
-            <Link key={t.title} href={tableHref(i)} aria-current={i === index ? "page" : undefined} className="tab">
-              {t.title}
-            </Link>
-          ))}
-        </nav>
-        <div className="pb-2">
-          <DownloadLinks href={`/reports/export?${exported}`} />
-        </div>
-      </div>
+      <ReportHeader
+        report={definition.key}
+        user={user}
+        title={doc.title}
+        basis={doc.subtitle}
+        actions={<DownloadLinks href={`/reports/export?${exported}`} />}
+      />
 
       <ReportFilterBar
         filters={definition.filters}
@@ -80,20 +73,35 @@ export async function RegistryReport({ user, definition, params }: { user: Curre
         options={doc.filterOptions}
         selected={{ vendors: selected.vendors, categories: selected.categories, items: selected.items }}
         counting={selected.status}
+        // Which of the report's tables is showing: one control, as a report's sections are.
+        lead={
+          doc.tables.length > 1 ? (
+            <div className="flex basis-full flex-col gap-1 text-support">
+              <span className="font-medium text-ink/70">Table</span>
+              <nav aria-label="Tables" className="segmented flex-wrap self-start">
+                {doc.tables.map((t, i) => (
+                  <Link key={t.title} href={tableHref(i)} aria-current={i === index ? "page" : undefined} className="segment py-[0.4rem]">
+                    {t.title}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+          ) : undefined
+        }
       />
 
       {paged ? (
-        <section className="card p-4">
-          <h2 className="section-title text-ink">{paged.table.title}</h2>
-          <p className="mt-0.5 text-xs text-ink/50">
+        <section className="card p-[1.1rem]">
+          <h2 className="text-base font-semibold text-ink">{paged.table.title}</h2>
+          <p className="mt-0.5 text-support text-ink/70">
             {paged.view.total.toLocaleString("en-AU")} {paged.view.total === 1 ? "row" : "rows"} — select a heading to sort
           </p>
-          <div className="mt-3">
+          <div className="mt-3.5">
             <ReportTableView table={paged.table} server={paged.view} />
           </div>
         </section>
       ) : (
-        <p className="card px-4 py-8 text-center text-sm text-ink/55">Nothing in this report.</p>
+        <p className="card px-4 py-6 text-center text-body text-ink/70">Nothing in this report.</p>
       )}
     </div>
   );
