@@ -3,9 +3,11 @@ import { Suspense } from "react";
 import type { CurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatRange } from "@/lib/periods";
 import { earliestExpenseDate, todayIso } from "@/lib/periods-data";
-import { loadDashboardNow, loadDashboardRange, type DashboardNow, type SpendFigure } from "@/lib/reporting/dashboard-data";
-import { favouritesFirst, loadFavouriteReports } from "@/lib/reporting/favourites";
+import { loadDashboardNow, loadDashboardRange, type DashboardNow, type DashboardRange, type SpendFigure } from "@/lib/reporting/dashboard-data";
+import { favouritesFirst } from "@/lib/reporting/favourites";
+import { favouriteReportsOf } from "@/lib/reporting/favourites-data";
 import { SECTIONS, buildHref } from "@/lib/reporting/query";
 import { RANGE_PRESETS, resolveRange, type RangePreset } from "@/lib/reporting/range-presets";
 import { DASHBOARD_KEY, findReport, reportNavFor } from "@/lib/reporting/registry";
@@ -25,6 +27,13 @@ const plural = (n: number, word: string) => `${n.toLocaleString("en-AU")} ${n ==
 
 const GRAIN_WORD = { day: "by the day", week: "by the week", month: "by the month" } as const;
 
+/** The Spending report on a period, at one of its sections: where each chart's link leads. */
+const spendingHref = (periodCode: string, patch: Parameters<typeof buildHref>[1] = {}) =>
+  buildHref(
+    { period: periodCode, section: "overview", status: "spend", vendors: [], categories: [], items: [], breakdownBy: "category", compareBy: "item" },
+    patch
+  );
+
 /**
  * The way in to Reports: how things stand today, what a chosen period looks
  * like, and the reports and saved views someone keeps to hand.
@@ -33,9 +42,12 @@ const GRAIN_WORD = { day: "by the day", week: "by the week", month: "by the mont
  * (lib/reporting/dashboard) and links to that report, on the same period, so
  * the dashboard and the reports cannot tell different stories.
  *
+ * Laid out for one look: the four figures, then spend over the period with
+ * what is waiting to be paid beside it — the two things asked of this page
+ * most — then where the spend went, and last the ways out to the reports.
+ *
  * Each part loads by itself and takes its place when it is ready, in a card
- * that already has its shape — the page never jumps, and one slow part does
- * not hold up the rest.
+ * that already has its name, so one slow part does not hold up the rest.
  */
 export async function ReportsDashboard({ user, params }: { user: CurrentUser; params: Params }) {
   const today = todayIso();
@@ -44,9 +56,11 @@ export async function ReportsDashboard({ user, params }: { user: CurrentUser; pa
   const by = one(params.by) === "item" ? "item" : "category";
 
   const canBudgets = await userCan(user, "budgets", "view");
-  // Started once and read by two parts of the page: the figures along the
-  // top, and the ageing of what is waiting further down.
+  // Each started once and read by several parts of the page: the figures
+  // along the top and the ageing of what is waiting; the period's chart, its
+  // rankings and its split.
   const now = loadDashboardNow(admin, today, canBudgets);
+  const range = loadDashboardRange(period, by, today);
   const earliest = earliestExpenseDate(admin);
 
   const presetHref = (key: RangePreset) => {
@@ -65,6 +79,11 @@ export async function ReportsDashboard({ user, params }: { user: CurrentUser; pa
     return qs ? `/reports?${qs}` : "/reports";
   };
 
+  const dates = formatRange(period.start, period.end);
+  // Keyed by what they show, so choosing another range shows the loading
+  // state again rather than the old charts under a new label.
+  const shown = `${period.code}:${by}`;
+
   return (
     <div className="flex flex-col gap-6">
       <ReportNav active={DASHBOARD_KEY} user={user} />
@@ -77,26 +96,20 @@ export async function ReportsDashboard({ user, params }: { user: CurrentUser; pa
         <KpiRow now={now} canBudgets={canBudgets} />
       </Suspense>
 
-      <section aria-labelledby="period-heading" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+      <section aria-labelledby="period-heading" className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
           <div>
             <h2 id="period-heading" className="section-title text-ink">
               Over a period
             </h2>
-            <p className="mt-0.5 text-support text-ink/70">{period.label}</p>
+            <p className="mt-0.5 text-support text-ink/70">
+              {period.label}
+              {period.label !== dates && ` · ${dates}`}
+            </p>
           </div>
-          <nav aria-label="Date range" className="flex flex-wrap gap-1.5">
+          <nav aria-label="Date range" className="segmented flex-wrap">
             {RANGE_PRESETS.map((p) => (
-              <Link
-                key={p.key}
-                href={presetHref(p.key)}
-                aria-current={preset === p.key ? "true" : undefined}
-                className={`rounded-full px-3.5 py-2 text-support transition-colors ${
-                  preset === p.key
-                    ? "bg-gold/25 text-ink ring-1 ring-gold/50"
-                    : "border border-ink/15 text-ink/70 hover:border-ink/30 hover:text-ink"
-                }`}
-              >
+              <Link key={p.key} href={presetHref(p.key)} aria-current={preset === p.key ? "true" : undefined} className="segment py-[0.4rem]">
                 {p.label}
               </Link>
             ))}
@@ -110,22 +123,39 @@ export async function ReportsDashboard({ user, params }: { user: CurrentUser; pa
           </div>
         )}
 
-        {/* Keyed by what it shows, so choosing another range shows the
-            loading state again rather than the old charts under a new label. */}
-        <Suspense key={`${period.code}:${by}`} fallback={<ChartsFallback />}>
-          <PeriodCharts period={period} by={by} today={today} byHref={{ category: byHref("category"), item: byHref("item") }} />
+        {/* On a wide screen the spend and what is owed sit side by side; below that, one over the other. */}
+        <div className="grid items-start gap-4 xl:grid-cols-12">
+          <Suspense key={`trend:${shown}`} fallback={<CardFallback title="Spend over time" className="xl:col-span-8" tall />}>
+            <TrendCard range={range} className="xl:col-span-8" />
+          </Suspense>
+          <Suspense fallback={<CardFallback title="Awaiting payment" className="xl:col-span-4" />}>
+            <AwaitingCard now={now} className="xl:col-span-4" />
+          </Suspense>
+        </div>
+
+        <Suspense
+          key={`top:${shown}`}
+          fallback={
+            <div className="grid items-start gap-4 md:grid-cols-2">
+              <CardFallback title="Top 10 categories" tall />
+              <CardFallback title="Top 10 items" tall />
+            </div>
+          }
+        >
+          <TopLists range={range} />
+        </Suspense>
+
+        <Suspense key={`split:${shown}`} fallback={<CardFallback title={by === "item" ? "Spend by item, over time" : "Spend by category, over time"} tall />}>
+          <OverTimeCard range={range} byHref={{ category: byHref("category"), item: byHref("item") }} />
         </Suspense>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Suspense fallback={<CardFallback title="Awaiting payment, by how long" />}>
-          <AwaitingCard now={now} />
+      <div className="grid items-start gap-4 xl:grid-cols-12">
+        <Suspense fallback={<CardFallback title="Your reports" className="xl:col-span-8" />}>
+          <ReportsCard user={user} className="xl:col-span-8" />
         </Suspense>
-        <Suspense fallback={<CardFallback title="Your reports" />}>
-          <ReportsCard user={user} />
-        </Suspense>
-        <Suspense fallback={<CardFallback title="Saved views" className={LAST_OF_THREE} />}>
-          <SavedViewsCard user={user} />
+        <Suspense fallback={<CardFallback title="Saved views" className="xl:col-span-4" />}>
+          <SavedViewsCard user={user} className="xl:col-span-4" />
         </Suspense>
       </div>
     </div>
@@ -138,7 +168,6 @@ export async function ReportsDashboard({ user, params }: { user: CurrentUser; pa
 
 async function KpiRow({ now, canBudgets }: { now: Promise<DashboardNow>; canBudgets: boolean }) {
   const { month, year, financialYear, overdue, awaiting, budget } = await now;
-  const spendingHref = (code: string) => `/reports/spending?period=${encodeURIComponent(code)}`;
 
   return (
     <section aria-label="Today" className={`grid gap-3 sm:grid-cols-2 ${canBudgets ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
@@ -224,29 +253,14 @@ async function CustomPeriod({ code, today, earliest }: { code: string; today: st
   return <PeriodPicker value={code} today={today} earliest={await earliest} />;
 }
 
-async function PeriodCharts({
-  period,
-  by,
-  today,
-  byHref,
-}: {
-  period: Awaited<ReturnType<typeof loadDashboardRange>>["period"];
-  by: "category" | "item";
-  today: string;
-  byHref: { category: string; item: string };
-}) {
-  const range = await loadDashboardRange(period, by, today);
-  const spendingHref = (patch: Parameters<typeof buildHref>[1]) =>
-    buildHref(
-      { period: period.code, section: "overview", status: "spend", vendors: [], categories: [], items: [], breakdownBy: "category", compareBy: "item" },
-      patch
-    );
+async function TrendCard({ range, className }: { range: Promise<DashboardRange>; className: string }) {
+  const r = await range;
 
-  if (range.expenses === 0) {
+  if (r.expenses === 0) {
     return (
-      <p className="card px-4 py-8 text-center text-body text-ink/70">
-        Nothing recorded for {period.label}. Choose another range above, or{" "}
-        <Link href="/submit" className="underline underline-offset-2">
+      <p className={`card px-4 py-8 text-center text-body text-ink/70 ${className}`}>
+        Nothing recorded for {r.period.label}. Choose another range above, or{" "}
+        <Link href="/submit" className="text-brand underline underline-offset-[3px]">
           submit an expense
         </Link>
         .
@@ -255,60 +269,76 @@ async function PeriodCharts({
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <ChartCard
-        className="md:col-span-2"
-        title="Spend over time"
-        subtitle={`${money(range.spend)} · ${plural(range.expenses, "expense")} · ${GRAIN_WORD[range.trend.grain]}`}
-        link={{ href: spendingHref({}), label: "Open in Spending" }}
-      >
-        <TrendChart points={range.trend.points} label={`Spend over ${period.label}, ${GRAIN_WORD[range.trend.grain]}`} />
-        {range.change !== null && (
-          <p className="mt-3 text-support text-ink/70 [&_strong]:font-semibold [&_strong]:text-ink">
-            <Change figure={range} />
-          </p>
-        )}
-      </ChartCard>
+    <ChartCard
+      className={className}
+      title="Spend over time"
+      subtitle={`${money(r.spend)} · ${plural(r.expenses, "expense")} · ${GRAIN_WORD[r.trend.grain]}`}
+      link={{ href: spendingHref(r.period.code), label: "Open in Spending" }}
+    >
+      <TrendChart
+        points={r.trend.points}
+        label={`Spend over ${r.period.label}, ${GRAIN_WORD[r.trend.grain]}`}
+        period={r.period.label}
+        against={r.against}
+      />
+      {r.change !== null && (
+        <p className="mt-3 text-support text-ink/70 [&_strong]:font-semibold [&_strong]:text-ink">
+          <Change figure={r} />
+        </p>
+      )}
+    </ChartCard>
+  );
+}
 
+/** Where the period's spend went: its ten largest categories and items. Nothing, when nothing was spent. */
+async function TopLists({ range }: { range: Promise<DashboardRange> }) {
+  const r = await range;
+  if (r.expenses === 0) return null;
+  const code = r.period.code;
+
+  return (
+    <div className="grid items-start gap-4 md:grid-cols-2">
       <ChartCard
         title="Top 10 categories"
-        subtitle="By spend"
-        link={{ href: spendingHref({ section: "breakdown", breakdownBy: "category" }), label: "All categories" }}
+        subtitle="By spend, with each one's share of the period"
+        link={{ href: spendingHref(code, { section: "breakdown", breakdownBy: "category" }), label: "All categories" }}
       >
-        {range.topCategories.length ? <RankedBars data={range.topCategories} total={range.spend} /> : <Empty>No lines have a category in this period.</Empty>}
+        {r.topCategories.length ? <RankedBars data={r.topCategories} total={r.spend} /> : <Empty>No lines have a category in this period.</Empty>}
       </ChartCard>
 
       <ChartCard
         title="Top 10 items"
-        subtitle="By spend"
-        link={{ href: spendingHref({ section: "breakdown", breakdownBy: "item" }), label: "All items" }}
+        subtitle="By spend, with each one's share of the period"
+        link={{ href: spendingHref(code, { section: "breakdown", breakdownBy: "item" }), label: "All items" }}
       >
-        {range.topItems.length ? <RankedBars data={range.topItems} total={range.spend} /> : <Empty>No lines are matched to an item in this period.</Empty>}
-      </ChartCard>
-
-      <ChartCard
-        className="md:col-span-2"
-        title={by === "item" ? "Spend by item, over time" : "Spend by category, over time"}
-        subtitle="The largest named; the rest together"
-        link={{ href: spendingHref({ section: "breakdown", breakdownBy: by }), label: "Open Breakdown" }}
-        control={
-          <div className="segmented" role="group" aria-label="Split by">
-            <Link href={byHref.category} aria-current={by === "category" ? "true" : undefined} className="segment" scroll={false}>
-              Categories
-            </Link>
-            <Link href={byHref.item} aria-current={by === "item" ? "true" : undefined} className="segment" scroll={false}>
-              Items
-            </Link>
-          </div>
-        }
-      >
-        {range.overTime.months.length ? (
-          <OverTimeChart months={range.overTime.months} series={range.overTime.series} />
-        ) : (
-          <Empty>Nothing to split in this period.</Empty>
-        )}
+        {r.topItems.length ? <RankedBars data={r.topItems} total={r.spend} /> : <Empty>No lines are matched to an item in this period.</Empty>}
       </ChartCard>
     </div>
+  );
+}
+
+async function OverTimeCard({ range, byHref }: { range: Promise<DashboardRange>; byHref: { category: string; item: string } }) {
+  const r = await range;
+  if (r.expenses === 0) return null;
+
+  return (
+    <ChartCard
+      title={r.by === "item" ? "Spend by item, over time" : "Spend by category, over time"}
+      subtitle="The largest named; the rest together"
+      link={{ href: spendingHref(r.period.code, { section: "breakdown", breakdownBy: r.by }), label: "Open Breakdown" }}
+      control={
+        <div className="segmented" role="group" aria-label="Split by">
+          <Link href={byHref.category} aria-current={r.by === "category" ? "true" : undefined} className="segment" scroll={false}>
+            Categories
+          </Link>
+          <Link href={byHref.item} aria-current={r.by === "item" ? "true" : undefined} className="segment" scroll={false}>
+            Items
+          </Link>
+        </div>
+      }
+    >
+      {r.overTime.months.length ? <OverTimeChart months={r.overTime.months} series={r.overTime.series} /> : <Empty>Nothing to split in this period.</Empty>}
+    </ChartCard>
   );
 }
 
@@ -328,7 +358,7 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`card p-[1.1rem] ${className}`}>
+    <section className={`card min-w-0 p-[1.1rem] ${className}`}>
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-ink">{title}</h3>
@@ -348,47 +378,83 @@ function ChartCard({
   );
 }
 
+/** Nothing to show, said in a line: a card with nothing in it is no taller than that. */
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="py-4 text-body text-ink/70">{children}</p>;
+  return <p className="text-body text-ink/70">{children}</p>;
+}
+
+/** Nothing to show because nothing is wrong. */
+function AllClear({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="flex items-center gap-2 text-body text-ink/70">
+      <span aria-hidden="true" className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-palm/15 text-[0.75rem] text-[#00702f]">
+        ✓
+      </span>
+      {children}
+    </p>
+  );
 }
 
 /* ------------------------------------------------------------------ */
 /* What is waiting                                                     */
 /* ------------------------------------------------------------------ */
 
-async function AwaitingCard({ now }: { now: Promise<DashboardNow> }) {
+/** The longer something has waited, the warmer its colour: brand, gold, then the two reds. */
+const AGE_COLOURS = ["var(--color-brand)", "var(--color-gold)", "var(--color-alert)", "var(--color-danger)"];
+
+/**
+ * Everything approved and not yet paid, by how long it has waited: one bar
+ * split by age, the same four ages Money out lists, and what of it is
+ * overdue. As of today, whatever period is chosen above — it sits beside the
+ * spend because what has been spent and what is still owed are read together.
+ */
+async function AwaitingCard({ now, className }: { now: Promise<DashboardNow>; className: string }) {
   const { awaiting, overdue } = await now;
-  const largest = Math.max(...awaiting.bands.map((b) => b.amount), 0);
 
   return (
     <ChartCard
-      title="Awaiting payment, by how long"
-      subtitle={awaiting.count > 0 ? `${money(awaiting.amount)} · ${plural(awaiting.count, "expense")} · since approval` : "As of today"}
+      className={className}
+      title="Awaiting payment"
+      subtitle={awaiting.count > 0 ? `${money(awaiting.amount)} · ${plural(awaiting.count, "expense")} · as of today` : "As of today"}
       link={{ href: "/reports/money-out?section=waiting", label: "Open" }}
     >
       {awaiting.count === 0 ? (
-        <Empty>Nothing is waiting to be paid.</Empty>
+        <AllClear>Nothing is waiting to be paid.</AllClear>
       ) : (
-        <ul className="flex flex-col gap-2.5">
-          {awaiting.bands.map((band) => (
-            <li key={band.label}>
-              <div className="flex items-baseline justify-between gap-3 text-body">
-                <span>{band.label}</span>
-                <span className="font-medium tabular-nums">
-                  {band.count > 0 ? `${money(band.amount)} · ${band.count}` : "—"}
+        <>
+          <div
+            role="img"
+            aria-label={`Awaiting payment by age: ${awaiting.bands.map((b) => `${b.label}, ${money(b.amount)}`).join("; ")}`}
+            className="flex h-3.5 gap-[2px] overflow-hidden rounded-full"
+          >
+            {awaiting.bands.map((band, i) =>
+              band.amount > 0 ? <span key={band.label} className="min-w-1" style={{ flex: `${band.amount} 1 0`, background: AGE_COLOURS[i] }} /> : null
+            )}
+          </div>
+          <div className="mt-3.5 grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-4 gap-y-2 text-body">
+            {awaiting.bands.map((band, i) => (
+              <div key={band.label} className={`contents ${band.count === 0 ? "text-ink/55" : ""}`}>
+                <span className="flex items-baseline gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-2.5 w-2.5 shrink-0 translate-y-px rounded-sm"
+                    style={{ background: band.count > 0 ? AGE_COLOURS[i] : "rgb(43 33 28 / 0.12)" }}
+                  />
+                  {band.label}
                 </span>
+                <span className="text-right text-support tabular-nums">{band.count}</span>
+                <span className="text-right font-medium tabular-nums">{band.count > 0 ? money(band.amount) : "—"}</span>
               </div>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-ink/[0.06]" aria-hidden="true">
-                <div className="h-full rounded-full bg-brand" style={{ width: `${largest > 0 ? (band.amount / largest) * 100 : 0}%` }} />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      {awaiting.count > 0 && (
-        <p className="mt-3.5 text-support text-ink/70">
-          Overdue is anything waiting more than {plural(overdue.afterDays, "day")} — when a payment reminder is escalated.
-        </p>
+            ))}
+            <div className="contents font-semibold">
+              <span className="border-t border-ink/15 pt-2.5">Overdue (more than {plural(overdue.afterDays, "day")})</span>
+              <span className="border-t border-ink/15 pt-2.5 text-right text-support tabular-nums">{overdue.count}</span>
+              <span className={`border-t border-ink/15 pt-2.5 text-right tabular-nums ${overdue.count > 0 ? "text-danger" : ""}`}>
+                {money(overdue.amount)}
+              </span>
+            </div>
+          </div>
+        </>
       )}
     </ChartCard>
   );
@@ -398,8 +464,8 @@ async function AwaitingCard({ now }: { now: Promise<DashboardNow> }) {
 /* Kept to hand                                                        */
 /* ------------------------------------------------------------------ */
 
-async function ReportsCard({ user }: { user: CurrentUser }) {
-  const [links, favourites] = await Promise.all([reportNavFor(user), loadFavouriteReports(createAdminClient(), user.id)]);
+async function ReportsCard({ user, className }: { user: CurrentUser; className: string }) {
+  const [links, favourites] = await Promise.all([reportNavFor(user), favouriteReportsOf(user.id)]);
   const reports = favouritesFirst(
     links.filter((l) => l.key !== DASHBOARD_KEY),
     favourites
@@ -407,19 +473,22 @@ async function ReportsCard({ user }: { user: CurrentUser }) {
   const starred = new Set(favourites);
 
   return (
-    <ChartCard title="Your reports" subtitle={starred.size ? "Favourites first" : "Star the ones you use most"}>
-      <ul className="flex flex-col divide-y divide-ink/5">
+    <ChartCard className={className} title="Your reports" subtitle={starred.size ? "Your favourites first" : "Star the ones you use most"}>
+      <ul className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
         {reports.map((r) => {
           const definition = findReport(r.key)!;
           return (
-            <li key={r.key} className="flex items-start gap-1 py-2 first:pt-0 last:pb-0">
-              <FavouriteStar reportKey={r.key} title={r.label} initial={starred.has(r.key)} />
-              <Link href={r.href} className="group min-w-0 flex-1 pt-1">
-                <span className="block text-body font-semibold text-ink underline-offset-[3px] group-hover:underline">{r.label}</span>
+            <li key={r.key} className="relative rounded-lg border border-ink/10 transition-colors hover:border-ink/25">
+              <Link href={r.href} className="block h-full px-3.5 py-3 pr-11">
+                <span className="block text-body font-semibold text-ink">{r.label}</span>
                 <span className="mt-0.5 line-clamp-2 text-support text-ink/70" title={definition.description}>
                   {definition.description}
                 </span>
               </Link>
+              {/* Beside the link, not inside it: a star is pressed, a report is opened. */}
+              <span className="absolute top-1.5 right-1.5">
+                <FavouriteStar reportKey={r.key} title={r.label} initial={starred.has(r.key)} />
+              </span>
             </li>
           );
         })}
@@ -428,32 +497,29 @@ async function ReportsCard({ user }: { user: CurrentUser }) {
   );
 }
 
-/** Three cards in two columns would leave the third alone in half the width: on a tablet it takes the row. */
-const LAST_OF_THREE = "md:col-span-2 lg:col-span-1";
-
-async function SavedViewsCard({ user }: { user: CurrentUser }) {
+async function SavedViewsCard({ user, className }: { user: CurrentUser; className: string }) {
   const views = sortViews(await loadSavedViews(createAdminClient(), user), user.id);
   const shown = views.slice(0, 8);
 
   return (
     <ChartCard
+      className={className}
       title="Saved views"
-      className={LAST_OF_THREE}
       subtitle={views.length ? "Spending, set up the way you saved it" : undefined}
       link={{ href: "/reports/spending", label: views.length > shown.length ? `All ${views.length}` : "Manage" }}
     >
       {views.length === 0 ? (
         <Empty>
           No saved views yet. In{" "}
-          <Link href="/reports/spending" className="underline underline-offset-2">
+          <Link href="/reports/spending" className="text-brand underline underline-offset-[3px]">
             Spending
           </Link>
-          , set up a report and choose <strong className="font-medium text-ink/70">Saved views</strong> to keep it.
+          , set up a report and choose <strong className="font-semibold text-ink">Saved views</strong> to keep it.
         </Empty>
       ) : (
-        <ul className="flex flex-col divide-y divide-ink/5">
+        <ul className="flex flex-col divide-y divide-ink/[0.06]">
           {shown.map((v) => (
-            <li key={v.id} className="py-2 first:pt-0 last:pb-0">
+            <li key={v.id} className="py-2.5 first:pt-0 last:pb-0">
               <Link href={buildHref(v.query, {})} className="group block">
                 <span className="text-body font-medium text-ink underline-offset-[3px] group-hover:underline">{v.name}</span>
                 <span className="mt-0.5 block text-support text-ink/70">
@@ -477,7 +543,7 @@ async function SavedViewsCard({ user }: { user: CurrentUser }) {
  * Loading states are the cards themselves, already in place and named, with
  * a quiet word inside — not grey bars, which on a wide screen read as a
  * broken page (see components/page-loading). They render once and keep
- * still, so nothing moves when the figures arrive.
+ * still.
  */
 function KpiFallback({ withBudget }: { withBudget: boolean }) {
   const labels = ["Spend this month", "Spend this year", "Overdue payables", ...(withBudget ? ["Budget used"] : [])];
@@ -494,18 +560,7 @@ function CardFallback({ title, className = "", tall = false }: { title: string; 
   return (
     <section role="status" aria-live="polite" className={`card p-[1.1rem] ${className}`}>
       <h3 className="text-base font-semibold text-ink">{title}</h3>
-      <p className={`flex items-center text-body text-ink/60 ${tall ? "h-[17rem]" : "h-24"}`}>Loading…</p>
+      <p className={`flex items-center text-body text-ink/60 ${tall ? "h-[17rem]" : "h-12"}`}>Loading…</p>
     </section>
-  );
-}
-
-function ChartsFallback() {
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <CardFallback title="Spend over time" className="md:col-span-2" tall />
-      <CardFallback title="Top 10 categories" tall />
-      <CardFallback title="Top 10 items" tall />
-      <CardFallback title="Spend by category, over time" className="md:col-span-2" tall />
-    </div>
   );
 }

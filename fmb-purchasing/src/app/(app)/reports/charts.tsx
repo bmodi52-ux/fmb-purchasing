@@ -308,6 +308,8 @@ export type ColumnDatum = {
   count?: number;
   /** The period this column stands for is not over: drawn broken, so a part-month is not read as a fall. */
   underWay?: boolean;
+  /** What the same column came to in the period it is compared with: drawn as a gold mark across it. */
+  compare?: number | null;
 };
 
 /**
@@ -321,6 +323,8 @@ export function ColumnChart({
   tickFormat = shortMoney,
   emptyLabel = "No spend in this period.",
   label,
+  seriesLabel,
+  compareLabel,
 }: {
   data: ColumnDatum[];
   height?: number;
@@ -331,12 +335,19 @@ export function ColumnChart({
   emptyLabel?: string;
   /** Overrides the generated description when the caller knows better. */
   label?: string;
+  /** What the columns are, for the key: the period by name. */
+  seriesLabel?: string;
+  /** What the gold marks are, for the key and the reading under the pointer. */
+  compareLabel?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
 
   if (data.length === 0) return <p className="text-body text-ink/60">{emptyLabel}</p>;
 
-  const { top, ticks } = niceScale(Math.max(...data.map((d) => d.value)));
+  const compared = data.some((d) => d.compare != null);
+  const anyUnderWay = data.some((d) => d.underWay);
+  // The scale holds the marks as well as the columns, so a mark above its column is still on the chart.
+  const { top, ticks } = niceScale(Math.max(...data.map((d) => Math.max(d.value, d.compare ?? 0))));
   const valueLabel = valueLabelClass(data.length);
 
   return (
@@ -357,6 +368,11 @@ export function ColumnChart({
                 {data[hover].count != null && ` · ${data[hover].count} ${data[hover].count === 1 ? "expense" : "expenses"}`}
                 {data[hover].underWay && " · still under way"}
               </p>
+              {data[hover].compare != null && (
+                <p className="text-ink/70">
+                  {compareLabel ?? "Before"}: <span className="text-ink tabular-nums">{valueFormat(data[hover].compare!)}</span>
+                </p>
+              )}
             </PlotTip>
           )
         }
@@ -386,9 +402,37 @@ export function ColumnChart({
                 )}
               </div>
             )}
+            {d.compare != null && d.compare > 0 && (
+              <span
+                aria-hidden="true"
+                className="absolute left-1/2 w-[min(3.9rem,84%)] -translate-x-1/2 border-t-2 border-gold-deep"
+                style={{ bottom: `${(d.compare / top) * 100}%` }}
+              />
+            )}
           </div>
         ))}
       </Plot>
+
+      {(compared || anyUnderWay) && (
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-support text-ink/70">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: BRAND }} />
+            {seriesLabel ?? "This period"}
+          </span>
+          {compared && (
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-4 border-t-2 border-gold-deep" />
+              {compareLabel ?? "The period before"}
+            </span>
+          )}
+          {anyUnderWay && (
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: UNDER_WAY }} />
+              Still under way
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

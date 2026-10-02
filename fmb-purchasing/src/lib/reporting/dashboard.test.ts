@@ -108,14 +108,77 @@ describe("spendTrend", () => {
     assert.deepEqual(points.map((p) => p.value), [0, 0, 7.5, 0, 0]);
   });
 
-  test("a long range is the Spending report's months", () => {
+  test("a long range is drawn by the month: every month so far, empty or not, and none to come", () => {
     const slice = {
       expenses: [expense("a", "2026-07-03"), expense("b", "2026-09-10")],
       lines: [line("a", 10), line("b", 30)],
     };
     const { grain, points } = spendTrend(slice, { start: "2026-07-01", end: "2027-06-30" }, "2026-10-02");
     assert.equal(grain, "month");
-    assert.deepEqual(points.map((p) => [p.key, p.value]), [["2026-07", 10], ["2026-09", 30]]);
+    assert.deepEqual(
+      points.map((p) => [p.key, p.value, p.count]),
+      [
+        ["2026-07", 10, 1],
+        ["2026-08", 0, 0],
+        ["2026-09", 30, 1],
+        ["2026-10", 0, 0],
+      ]
+    );
+  });
+
+  test("the month today is in is under way; a month that is over is not, nor a range that has ended", () => {
+    const year = { start: "2026-07-01", end: "2027-06-30" };
+    const none = { expenses: [], lines: [] };
+    assert.deepEqual(spendTrend(none, year, "2026-10-02").points.map((p) => p.underWay), [false, false, false, true]);
+    // On the last day of a month there is no more of it to come.
+    assert.deepEqual(spendTrend(none, year, "2026-09-30").points.map((p) => p.underWay), [false, false, false]);
+    // Last year, looked at from this one.
+    assert.ok(spendTrend(none, { start: "2025-07-01", end: "2026-06-30" }, "2026-10-02").points.every((p) => !p.underWay));
+    // A week: Friday 2 October is in a week that runs to Sunday the 4th.
+    assert.deepEqual(spendTrend(none, { start: "2026-09-01", end: "2026-10-31" }, "2026-10-02").points.at(-1)?.underWay, true);
+    // "So far this year" ends today by definition; its last month is still only part of one.
+    assert.equal(spendTrend(none, { start: "2026-07-01", end: "2026-10-02" }, "2026-10-02").points.at(-1)?.underWay, true);
+    // Days are never marked: a day is one figure, not part of one.
+    assert.ok(spendTrend(none, { start: "2026-10-01", end: "2026-10-07" }, "2026-10-02").points.every((p) => !p.underWay));
+  });
+
+  test("each month is marked against the same month of the period before", () => {
+    const now = { expenses: [expense("a", "2026-07-03"), expense("b", "2026-08-10")], lines: [line("a", 10), line("b", 30)] };
+    const then = { expenses: [expense("x", "2025-07-20"), expense("y", "2025-09-01")], lines: [line("x", 7), line("y", 99)] };
+    const { points } = spendTrend(now, { start: "2026-07-01", end: "2027-06-30" }, "2026-08-31", "gregorian", {
+      slice: then,
+      // The same stretch of last year: July and August.
+      range: { start: "2025-07-01", end: "2025-08-31" },
+    });
+    assert.deepEqual(points.map((p) => [p.key, p.value, p.compare]), [["2026-07", 10, 7], ["2026-08", 30, 0]]);
+  });
+
+  test("weeks are marked against the same days counted from the start, whatever weekday they fall on", () => {
+    // September 2026 starts on a Tuesday, August on a Saturday.
+    const now = { expenses: [expense("a", "2026-09-02")], lines: [line("a", 50)] };
+    const then = { expenses: [expense("x", "2026-08-03"), expense("y", "2026-08-08")], lines: [line("x", 5), line("y", 8)] };
+    const { points } = spendTrend(now, { start: "2026-09-01", end: "2026-09-30" }, "2026-10-02", "gregorian", {
+      slice: then,
+      range: { start: "2026-08-01", end: "2026-08-31" },
+    });
+    // The first week is 1–6 September, six days: 1–6 August holds the 3rd, not the 8th.
+    assert.deepEqual(points.slice(0, 2).map((p) => [p.key, p.value, p.compare]), [["2026-09-01", 50, 5], ["2026-09-07", 0, 8]]);
+  });
+
+  test("months within a year are named without it; across more than a year they keep it", () => {
+    const none = { expenses: [], lines: [] };
+    assert.deepEqual(
+      spendTrend(none, { start: "2026-07-01", end: "2027-06-30" }, "2026-09-30").points.map((p) => p.label),
+      ["Jul", "Aug", "Sep"]
+    );
+    const long = spendTrend(none, { start: "2025-07-01", end: "2026-09-30" }, "2026-10-02").points;
+    assert.equal(long.length, 15);
+    assert.equal(long[0].label, "Jul 2025");
+  });
+
+  test("with no period before given, nothing is marked", () => {
+    const { points } = spendTrend({ expenses: [], lines: [] }, { start: "2026-07-01", end: "2027-06-30" }, "2026-10-02");
+    assert.ok(points.every((p) => p.compare === null));
   });
 
   test("the points add up to the slice", () => {

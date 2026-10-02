@@ -11,13 +11,26 @@ import { BarChart, ColumnChart, StackedColumnChart, formatMoney } from "./charts
  * worked out on the server and arrive ready.
  */
 
-export function TrendChart({ points, label }: { points: TrendPoint[]; label: string }) {
+export function TrendChart({
+  points,
+  label,
+  period,
+  against,
+}: {
+  points: TrendPoint[];
+  label: string;
+  /** The period drawn, and the one each column is marked against, by name: for the key under the chart. */
+  period: string;
+  against: string;
+}) {
   return (
     <ColumnChart
-      data={points.map((p) => ({ key: p.key, label: p.label, value: p.value, count: p.count }))}
+      data={points.map((p) => ({ key: p.key, label: p.label, value: p.value, count: p.count, compare: p.compare, underWay: p.underWay }))}
       valueFormat={formatMoney}
       height={220}
       label={label}
+      seriesLabel={period}
+      compareLabel={against}
     />
   );
 }
