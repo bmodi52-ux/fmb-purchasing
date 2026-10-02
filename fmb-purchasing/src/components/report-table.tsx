@@ -5,6 +5,7 @@ import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReportColumn, ReportTable } from "@/lib/reporting/tables";
 import { PAGE_SIZE, formatCell, nextSort, pageOfRows, type SortState, type TablePage } from "@/lib/reporting/table-view";
+import { StatusBadge } from "./status-badge";
 
 /**
  * A report's table, as every report shows one: headings that sort, pages of
@@ -114,13 +115,18 @@ export function ReportTableView({
                       key={c.key}
                       className={`py-2.5 pr-4 last:pr-0 ${align(c)} ${c.kind === "date" ? "tabular-nums text-ink/70" : ""} ${
                         // A date, a figure or an entry number is read whole: never broken across lines.
-                        c.kind !== "text" || c.link ? "whitespace-nowrap" : ""
+                        c.kind !== "text" || c.link || c.badge ? "whitespace-nowrap" : ""
                       }`}
                     >
                       {typeof href === "string" && href ? (
                         <Link href={href} className="font-medium text-brand tabular-nums underline-offset-[3px] hover:underline">
                           {text || "View"}
                         </Link>
+                      ) : c.badge && text ? (
+                        // A status, said and coloured as it is on every other page.
+                        <span className="-my-0.5 inline-block">
+                          <StatusBadge status={String(r[c.badge] ?? "")} label={text} />
+                        </span>
                       ) : danger && text ? (
                         // Too long, too late, over: marked so it is seen in a column of plain figures.
                         <span className="badge badge-bad -my-0.5">{text}</span>

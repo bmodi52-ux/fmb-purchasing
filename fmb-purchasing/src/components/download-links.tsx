@@ -17,8 +17,20 @@ const FORMATS = [
  * One button rather than a row of three: beside a report's name there is
  * room for what the report is, and the formats only matter once someone has
  * decided to take it away.
+ *
+ * A page with another way of being taken away (Spending's Print) adds it as
+ * a last choice: `children`, given a function, is handed the way to close
+ * the menu, for a choice that opens something of its own.
  */
-export function DownloadLinks({ href, label, children }: { href: string; label?: string; children?: React.ReactNode }) {
+export function DownloadLinks({
+  href,
+  label,
+  children,
+}: {
+  href: string;
+  label?: string;
+  children?: React.ReactNode | ((close: () => void) => React.ReactNode);
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const sep = href.includes("?") ? "&" : "?";
@@ -70,7 +82,7 @@ export function DownloadLinks({ href, label, children }: { href: string; label?:
               <span className="block text-support text-ink/70">{f.says}</span>
             </a>
           ))}
-          {children}
+          {typeof children === "function" ? children(() => setOpen(false)) : children}
         </div>
       )}
     </div>

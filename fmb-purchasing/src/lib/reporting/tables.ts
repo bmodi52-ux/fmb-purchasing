@@ -25,6 +25,12 @@ export type ReportColumn = {
   signed?: boolean;
   /** On a page, the name of a row field that is "danger" when the cell deserves the eye. */
   tone?: string;
+  /**
+   * On a page, the cell is a status badge (components/status-badge): the name
+   * of the row field that holds the status as the record does — "submitted",
+   * "approved" — which decides its colour. Downloads print the cell's words.
+   */
+  badge?: string;
 };
 
 export type ReportCell = string | number | null;

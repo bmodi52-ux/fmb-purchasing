@@ -52,7 +52,7 @@ export function ReportTile({
         )}
       </div>
       {/* Proportional figures, not tabular: at this size tabular digits make a number like 121 look gappy. */}
-      <p className={`text-[clamp(1.6rem,1.3rem+1.1vw,2rem)] leading-[1.1] font-semibold tracking-tight ${figure}`}>{value}</p>
+      <p className={`text-[clamp(1.2rem,17cqi,2rem)] leading-[1.1] font-semibold tracking-tight ${figure}`}>{value}</p>
       {meter !== undefined && (
         <span
           role="img"
@@ -74,7 +74,8 @@ export function ReportTile({
     </>
   );
 
-  const shape = "flex min-w-0 flex-col gap-1.5 card px-[1.1rem] py-4";
+  // Its own measure for the figure: three tiles across a tablet are narrow whatever the screen is.
+  const shape = "@container flex min-w-0 flex-col gap-1.5 card px-[1.1rem] py-4";
   return href ? (
     <Link
       href={href}

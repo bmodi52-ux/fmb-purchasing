@@ -9,6 +9,7 @@ import { loadSavedViews } from "@/lib/saved-report-views";
 import { findReport } from "@/lib/reporting/registry";
 import { ReportHeader } from "./report-header";
 import { ReportsView } from "./reports-view";
+import { SpendingActions } from "./spending-actions";
 
 /** The Spending report: what was spent, by category, vendor and item. */
 export async function SpendingReport({
@@ -36,7 +37,6 @@ export async function SpendingReport({
       report={forScreen(view.report)}
       // One page of the lines, sorted and cut here — not every line of the period.
       transactions={transactionsPage(view.report, tableStateFrom(params))}
-      summary={view.summary}
       today={todayIso()}
       earliest={earliest}
       vendors={view.options.vendors}
@@ -45,10 +45,23 @@ export async function SpendingReport({
       periodLabel={view.period.label}
       previousLabel={view.previousRange.label}
       hasCategoryOrItemFilter={view.query.categories.length > 0 || view.query.items.length > 0}
-      savedViews={savedViews}
-      userId={user.id}
-      teams={(teams ?? []).map((t) => ({ id: t.id as string, name: t.name as string }))}
-      header={<ReportHeader report="spend" user={user} basis={view.basisLabel} />}
+      header={
+        <ReportHeader
+          report="spend"
+          user={user}
+          basis={view.basisLabel}
+          actions={
+            <SpendingActions
+              query={view.query}
+              summary={view.summary}
+              empty={view.report.now.expenseCount === 0}
+              savedViews={savedViews}
+              userId={user.id}
+              teams={(teams ?? []).map((t) => ({ id: t.id as string, name: t.name as string }))}
+            />
+          }
+        />
+      }
       filters={findReport("spend")!.filters}
     />
   );

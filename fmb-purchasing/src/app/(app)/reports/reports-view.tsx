@@ -5,18 +5,14 @@ import { useMemo, useState } from "react";
 import { formatHijri } from "@/lib/hijri/hijri";
 import { hijriOfIso } from "@/lib/periods";
 import { formatDate } from "@/lib/format";
-import { SectionTabs, type FilterOption } from "./report-filters";
+import type { FilterOption } from "./report-filters";
 import { ReportFilterBar, type FilterKey } from "./report-filter-bar";
 import { ReportTableView } from "@/components/report-table";
-import type { transactionsPage } from "@/lib/reporting/spend-tables";
+import { spendReportTables, type transactionsPage } from "@/lib/reporting/spend-tables";
 
 type TransactionsPage = NonNullable<ReturnType<typeof transactionsPage>>;
-import { SECTIONS, SPENDING_PATH, buildHref, type ReportQuery } from "@/lib/reporting/query";
+import { SECTIONS, buildHref, type ReportQuery } from "@/lib/reporting/query";
 import { PrintRegistryProvider, Printable } from "./printable";
-import { PrintButton } from "./print-button";
-import { DownloadLinks } from "@/components/download-links";
-import { SavedViews } from "./saved-views";
-import type { SavedReportView } from "@/lib/saved-report-views";
 import {
   percentChange,
   MAX_COMPARE_SUBJECTS,
@@ -27,6 +23,7 @@ import {
   type MonthBreakdown,
 } from "@/lib/reporting/aggregate";
 import type { SpendReport } from "@/lib/reporting/spend-report";
+import type { ReportTable } from "@/lib/reporting/tables";
 import {
   HeroFigure,
   StatTile,
@@ -56,21 +53,17 @@ function DateCell({ date, calendar }: { date: string | null; calendar: "gregoria
 }
 
 /**
- * The download of what is on screen: the same URL, sent to reports/export,
- * which builds the file on the server from the same figures.
- */
-function exportHref(query: ReportQuery): string {
-  return buildHref(query, {}).replace(`${SPENDING_PATH}?`, "/reports/export?report=spend&");
-}
-
-/**
  * Draws a report the server has already worked out (lib/reporting/spend-report).
  * Nothing here computes a figure: the page sends the figures, not the rows.
+ *
+ * The tables on the page are the ones its downloads are made of
+ * (lib/reporting/spend-tables), drawn by the table every report uses — so
+ * what is on screen and what is in the file are one definition, and every
+ * table here sorts and pages the same way.
  */
 export function ReportsView({
   query,
   report,
-  summary,
   today,
   earliest,
   vendors,
@@ -79,17 +72,12 @@ export function ReportsView({
   periodLabel,
   previousLabel,
   hasCategoryOrItemFilter,
-  savedViews,
-  userId,
-  teams,
   transactions,
   header,
   filters,
 }: {
   query: ReportQuery;
   report: SpendReport;
-  /** Period, filters and basis in one line — the heading of anything printed or downloaded. */
-  summary: string;
   today: string;
   earliest: string | null;
   vendors: FilterOption[];
@@ -98,12 +86,9 @@ export function ReportsView({
   periodLabel: string;
   previousLabel: string;
   hasCategoryOrItemFilter: boolean;
-  savedViews: SavedReportView[];
-  userId: string;
-  teams: { id: string; name: string }[];
   /** One page of the transactions, when that section is showing. */
   transactions: TransactionsPage | null;
-  /** The top of the page (report-header), drawn on the server. */
+  /** The top of the page (report-header) with its buttons, drawn on the server. */
   header: React.ReactNode;
   /** Which of the standard filters this report takes (its registry entry). */
   filters: FilterKey[];
@@ -118,32 +103,20 @@ export function ReportsView({
   const empty = now.expenseCount === 0;
   const isFiltered = query.vendors.length > 0 || query.categories.length > 0 || query.items.length > 0;
 
-  const sectionLabel = SECTIONS.find((s) => s.key === query.section)?.label ?? query.section;
+  // The section's own table, first of the ones its download holds. Transactions
+  // arrive already cut to a page, so that section brings its own.
+  const mainTable = useMemo(
+    () => (section.key === "transactions" ? null : (spendReportTables(report, periodLabel, previousLabel)[0] ?? null)),
+    [report, section.key, periodLabel, previousLabel]
+  );
 
   return (
     <PrintRegistryProvider>
       <div className="flex flex-col gap-5">
         {header}
 
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-ink/10">
-          <SectionTabs query={query} active={query.section} />
-          <div className="flex flex-wrap items-center gap-2 pb-2">
-            <SavedViews views={savedViews} query={query} userId={userId} teams={teams} />
-            {!empty && (
-              <>
-                <DownloadLinks href={exportHref(query)} />
-                <PrintButton
-                  title={`Spending — ${sectionLabel}`}
-                  subtitle={summary}
-                  filenameBase={`reports-${query.section}-${query.period}`}
-                />
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* One filter row, above every section — so whichever tab you are on,
-            the numbers describe the same slice. */}
+        {/* One filter row, above every section — so whichever part you are on,
+            the numbers describe the same slice. Which part comes first. */}
         <ReportFilterBar
           filters={filters}
           period={query.period}
@@ -152,10 +125,27 @@ export function ReportsView({
           options={{ vendors, categories, items }}
           selected={{ vendors: query.vendors, categories: query.categories, items: query.items }}
           counting={query.status}
+          lead={
+            <div className="flex basis-full flex-col gap-1 text-support">
+              <span className="font-medium text-ink/70">Section</span>
+              <nav aria-label="Report sections" className="segmented flex-wrap self-start">
+                {SECTIONS.map((s) => (
+                  <Link
+                    key={s.key}
+                    href={buildHref(query, { section: s.key })}
+                    aria-current={s.key === query.section ? "page" : undefined}
+                    className="segment py-[0.4rem]"
+                  >
+                    {s.label}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+          }
         />
 
         {empty ? (
-          <p className="card px-4 py-8 text-center text-sm text-ink/55">
+          <p className="card px-4 py-6 text-center text-body text-ink/70">
             Nothing recorded for {periodLabel}
             {isFiltered && " with these filters"}.
           </p>
@@ -164,32 +154,29 @@ export function ReportsView({
             {/* The headline rides above every section: whatever you are looking
                 at, the total it belongs to stays in view. */}
             <Printable id="headline" label="Headline totals">
-              <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-                <div className="flex flex-col justify-center rounded-xl border border-gold/30 bg-gold/[0.07] p-5">
+              <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                <div className="flex flex-col justify-center rounded-[0.625rem] border border-gold/30 bg-gold/[0.07] px-[1.1rem] py-4">
                   <HeroFigure
                     label={`Total spend · ${periodLabel}`}
                     value={formatMoney(now.spend)}
                     caption={`${now.expenseCount} ${now.expenseCount === 1 ? "expense" : "expenses"}, ${now.lineCount} ${now.lineCount === 1 ? "line" : "lines"}`}
                   />
                   {spendDelta != null && previousLabel && (
-                    <p className="mt-2.5 text-sm text-ink/70">
-                      <span aria-hidden="true">{spendDelta > 0 ? "↑" : spendDelta < 0 ? "↓" : "→"}</span>{" "}
-                      {Math.abs(Math.round(spendDelta * 100))}%{" "}
-                      <span className="text-ink/50">
-                        {spendDelta > 0 ? "more than" : spendDelta < 0 ? "less than" : "vs"}{" "}
-                        {previousLabel}
-                        {before && ` (${formatMoney(before.spend)})`}
-                      </span>
+                    <p className="mt-2 text-support text-ink/70">
+                      <span className="font-semibold text-ink">
+                        <span aria-hidden="true">{spendDelta > 0 ? "↑" : spendDelta < 0 ? "↓" : "→"}</span>{" "}
+                        {Math.abs(Math.round(spendDelta * 100))}%
+                      </span>{" "}
+                      {spendDelta > 0 ? "more than" : spendDelta < 0 ? "less than" : "vs"} {previousLabel}
+                      {before && ` (${formatMoney(before.spend)})`}
                     </p>
                   )}
-                  {isFiltered && (
-                    <p className="mt-2 text-xs text-ink/45">Filtered — not the whole period.</p>
-                  )}
+                  {isFiltered && <p className="mt-1.5 text-support text-ink/70">Filtered — not the whole period.</p>}
                   {/* A discount is a line of its own with no category, so a
                       category or item filter never keeps it: these figures are
                       before it, and say by how much. */}
                   {report.discountsLeftOut < 0 && (
-                    <p className="mt-1 text-xs text-ink/55">
+                    <p className="mt-1 text-support text-ink/70">
                       Before {formatMoney(-report.discountsLeftOut)} of discounts on these receipts, which have no
                       category of their own.
                     </p>
@@ -229,7 +216,13 @@ export function ReportsView({
             </Printable>
 
             {section.key === "overview" && (
-              <OverviewSection monthly={monthly} found={found} statusMix={section.statusMix} hijri={report.calendar === "hijri"} />
+              <OverviewSection
+                monthly={monthly}
+                found={found}
+                statusMix={section.statusMix}
+                hijri={report.calendar === "hijri"}
+                table={mainTable}
+              />
             )}
             {section.key === "breakdown" && (
               <BreakdownSection
@@ -237,6 +230,7 @@ export function ReportsView({
                 dimension={section.dimension}
                 ranked={section.ranked}
                 overTime={section.overTime}
+                table={mainTable}
               />
             )}
             {section.key === "compare" && (
@@ -253,6 +247,7 @@ export function ReportsView({
                       : vendors.length
                 }
                 unitCostByItem={section.unitCostByItem}
+                table={mainTable}
               />
             )}
             {section.key === "unit-costs" && (
@@ -275,30 +270,32 @@ function OverviewSection({
   found,
   statusMix,
   hijri,
+  table,
 }: {
   monthly: Bucket[];
   found: Insight[];
   statusMix: Bucket[];
   /** Months are Hijri months — a Hijri period's are. */
   hijri: boolean;
+  /** Spend by month, as the download has it. */
+  table: ReportTable | null;
 }) {
   return (
     <>
       {found.length > 0 && (
         <Printable id="overview-insights" label="What stands out">
-          <section className="card p-[1.1rem]">
-            <h2 className="text-xs tracking-wide text-ink/45 uppercase">What stands out</h2>
-            <ul className="mt-2.5 flex flex-col gap-1.5">
+          <Panel title="What stands out">
+            <ul className="flex flex-col gap-1.5">
               {found.map((insight) => (
-                <li key={insight.text} className="flex gap-2 text-sm text-ink/85">
-                  <span aria-hidden="true" className="text-ink/30">
+                <li key={insight.text} className="flex gap-2 text-body text-ink">
+                  <span aria-hidden="true" className="text-ink/45">
                     {insight.tone === "up" ? "↑" : insight.tone === "down" ? "↓" : "•"}
                   </span>
                   {insight.text}
                 </li>
               ))}
             </ul>
-          </section>
+          </Panel>
         </Printable>
       )}
 
@@ -317,7 +314,12 @@ function OverviewSection({
               }))}
               valueFormat={formatMoney}
             />
-            <MonthTable monthly={monthly} />
+            {/* Monthly figures in full, so they are never hover-only. */}
+            {table && (
+              <div className="mt-5 border-t border-ink/[0.08] pt-4">
+                <ReportTableView table={table} />
+              </div>
+            )}
           </Panel>
         </Printable>
       )}
@@ -340,14 +342,34 @@ function OverviewSection({
 
 /* ------------------------------------------------------------------ */
 
-const BREAKDOWN_CONFIG: Record<
-  Dimension,
-  { title: string; unit: "lines" | "expenses"; pillLabel: string }
-> = {
-  category: { title: "Categories", unit: "lines", pillLabel: "Categories" },
-  vendor: { title: "Vendors", unit: "expenses", pillLabel: "Vendors" },
-  item: { title: "Items", unit: "lines", pillLabel: "Items" },
+const BREAKDOWN_CONFIG: Record<Dimension, { title: string; choice: string }> = {
+  category: { title: "Categories", choice: "Categories" },
+  vendor: { title: "Vendors", choice: "Vendors" },
+  item: { title: "Items", choice: "Items" },
 };
+
+/** Two or three ways of cutting the same section, as one control: a choice of what to group by. */
+function DimensionChoice({
+  label,
+  choices,
+  current,
+  href,
+}: {
+  label: string;
+  choices: readonly (readonly [Dimension, string])[];
+  current: Dimension;
+  href: (dimension: Dimension) => string;
+}) {
+  return (
+    <div className="segmented" role="group" aria-label={label}>
+      {choices.map(([value, text]) => (
+        <Link key={value} href={href(value)} aria-current={current === value ? "true" : undefined} className="segment" scroll={false}>
+          {text}
+        </Link>
+      ))}
+    </div>
+  );
+}
 
 /**
  * Categories, Vendors and Items are the same question asked of a different
@@ -360,11 +382,14 @@ function BreakdownSection({
   dimension,
   ranked,
   overTime,
+  table,
 }: {
   query: ReportQuery;
   dimension: Dimension;
   ranked: Bucket[];
   overTime: MonthBreakdown;
+  /** The ranking in full, as the download has it. */
+  table: ReportTable | null;
 }) {
   const config = BREAKDOWN_CONFIG[dimension];
 
@@ -377,144 +402,51 @@ function BreakdownSection({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 card p-3">
-        <span className="text-xs text-ink/55">Break down by</span>
-        <div className="flex flex-wrap gap-1.5">
-          {(
-            [
-              ["category", BREAKDOWN_CONFIG.category.pillLabel],
-              ["vendor", BREAKDOWN_CONFIG.vendor.pillLabel],
-              ["item", BREAKDOWN_CONFIG.item.pillLabel],
-            ] as const
-          ).map(([value, label]) => (
-            <Link
-              key={value}
-              href={buildHref(query, { breakdownBy: value })}
-              aria-current={dimension === value ? "true" : undefined}
-              className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                dimension === value
-                  ? "bg-gold/25 text-ink ring-1 ring-gold/50"
-                  : "border border-ink/15 text-ink/60 hover:border-ink/30 hover:text-ink"
-              }`}
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      <DimensionSection
-        ranked={ranked}
-        breakdown={overTime}
-        dimension={dimension}
-        title={config.title}
-        unit={config.unit}
-        filterHint={
-          selectedCount > 0
-            ? `Showing only the ${config.title.toLowerCase()} you've selected above.`
-            : undefined
-        }
-      />
-    </>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-
-function DimensionSection({
-  ranked,
-  breakdown,
-  dimension,
-  title,
-  unit,
-  filterHint,
-}: {
-  ranked: Bucket[];
-  breakdown: MonthBreakdown;
-  dimension: Dimension;
-  title: string;
-  unit: "lines" | "expenses";
-  filterHint?: string;
-}) {
-  const total = ranked.reduce((s, b) => s + b.spend, 0);
-
-  return (
-    <>
-      {filterHint && (
-        <p className="rounded-lg border border-gold/30 bg-gold/[0.06] px-3 py-2 text-xs text-ink/70">
-          {filterHint}
-        </p>
-      )}
-
       <Printable id="breakdown-chart" label={`Spend by ${dimension}`}>
-        <Panel title={`Spend by ${dimension}`}>
-          <BarChart
-            data={ranked.map((b) => ({ label: b.label, value: b.spend, count: b.count }))}
-            maxBars={12}
-          />
+        <Panel
+          title={`Spend by ${dimension}`}
+          subtitle={
+            selectedCount > 0
+              ? `Only the ${config.title.toLowerCase()} chosen in the filters above`
+              : "The largest, with each one's share of the total"
+          }
+          action={
+            <DimensionChoice
+              label="Break down by"
+              choices={[
+                ["category", BREAKDOWN_CONFIG.category.choice],
+                ["vendor", BREAKDOWN_CONFIG.vendor.choice],
+                ["item", BREAKDOWN_CONFIG.item.choice],
+              ]}
+              current={dimension}
+              href={(value) => buildHref(query, { breakdownBy: value })}
+            />
+          }
+        >
+          <BarChart data={ranked.map((b) => ({ label: b.label, value: b.spend, count: b.count }))} maxBars={12} />
         </Panel>
       </Printable>
 
-      {breakdown.months.length > 1 && (
-        <Printable id="breakdown-time" label={`${title} over time`}>
+      {overTime.months.length > 1 && (
+        <Printable id="breakdown-time" label={`${config.title} over time`}>
           <Panel
-            title={`${title} over time`}
+            title={`${config.title} over time`}
             subtitle={`Each month split by ${dimension}${
-              breakdown.foldedCount > 0 ? ` — the smallest ${breakdown.foldedCount} are grouped` : ""
+              overTime.foldedCount > 0 ? ` — the smallest ${overTime.foldedCount} are grouped` : ""
             }`}
           >
-            <StackedColumnChart months={breakdown.months} series={breakdown.series} />
+            <StackedColumnChart months={overTime.months} series={overTime.series} />
           </Panel>
         </Printable>
       )}
 
-      <Printable id="breakdown-table" label={`${title} — the numbers`}>
-        <Panel title="The numbers" subtitle="The record — chart colours are only a guide">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-                  <th scope="col" className="py-2 pr-4 font-medium">{title.replace(/s$/, "")}</th>
-                  <th scope="col" className="py-2 pr-4 text-right font-medium capitalize">{unit}</th>
-                  <th scope="col" className="py-2 pr-4 text-right font-medium">Total</th>
-                  <th scope="col" className="py-2 pr-4 text-right font-medium">GST</th>
-                  <th scope="col" className="py-2 pr-4 text-right font-medium">Share</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranked.map((b) => (
-                  <tr key={b.key} className="border-b border-ink/5 last:border-0">
-                    <td className="py-1.5 pr-4">{b.label}</td>
-                    <td className="py-1.5 pr-4 text-right tabular-nums text-ink/60 tabular-nums">
-                      {b.count}
-                    </td>
-                    <td className="py-1.5 pr-4 text-right tabular-nums tabular-nums">
-                      {formatMoney(b.spend)}
-                    </td>
-                    <td className="py-1.5 pr-4 text-right tabular-nums text-ink/60 tabular-nums">
-                      {formatMoney(b.gst)}
-                    </td>
-                    <td className="py-1.5 pr-4 text-right tabular-nums text-ink/60 tabular-nums">
-                      {total > 0 ? `${Math.round((b.spend / total) * 100)}%` : "—"}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-t border-ink/15 font-medium">
-                  <td className="py-2 pr-4">Total</td>
-                  <td className="py-2 pr-4 text-right tabular-nums tabular-nums">
-                    {ranked.reduce((s, b) => s + b.count, 0)}
-                  </td>
-                  <td className="py-2 pr-4 text-right tabular-nums tabular-nums">{formatMoney(total)}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums tabular-nums">
-                    {formatMoney(ranked.reduce((s, b) => s + b.gst, 0))}
-                  </td>
-                  <td className="py-2 pr-4 text-right tabular-nums tabular-nums">100%</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-      </Printable>
+      {table && (
+        <Printable id="breakdown-table" label={`${config.title} — the numbers`}>
+          <Panel title="The numbers" subtitle="The record — chart colours are only a guide">
+            <ReportTableView table={table} />
+          </Panel>
+        </Printable>
+      )}
     </>
   );
 }
@@ -535,6 +467,7 @@ function CompareSection({
   chosenCount,
   optionCount,
   unitCostByItem,
+  table,
 }: {
   query: ReportQuery;
   dimension: Dimension;
@@ -542,45 +475,36 @@ function CompareSection({
   chosenCount: number;
   optionCount: number;
   unitCostByItem: Record<string, AverageUnitCost>;
+  /** Month by month, side by side, as the download has it. */
+  table: ReportTable | null;
 }) {
   const usingDefaults = chosenCount === 0;
   const overCap = chosenCount > MAX_COMPARE_SUBJECTS;
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 card p-3">
-        <span className="text-xs text-ink/55">Compare by</span>
-        <div className="flex flex-wrap gap-1.5">
-          {(
-            [
-              ["item", "Items"],
-              ["category", "Categories"],
-              ["vendor", "Vendors"],
-            ] as const
-          ).map(([value, label]) => (
-            <Link
-              key={value}
-              href={buildHref(query, { compareBy: value })}
-              aria-current={dimension === value ? "true" : undefined}
-              className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                dimension === value
-                  ? "bg-gold/25 text-ink ring-1 ring-gold/50"
-                  : "border border-ink/15 text-ink/60 hover:border-ink/30 hover:text-ink"
-              }`}
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
-        <p className="text-xs text-ink/45">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="min-w-0 flex-1 basis-[26rem] text-support text-ink/70">
           {usingDefaults
-            ? `Showing the top ${comparison.subjects.length} by spend — pick specific ${dimension}s in the filter bar to choose your own.`
-            : `Comparing ${comparison.subjects.length} of ${optionCount}.`}
+            ? `Showing the top ${comparison.subjects.length} by spend — pick specific ${dimension}s in the filters above to choose your own.`
+            : `Comparing ${comparison.subjects.length} of ${optionCount}.`}{" "}
+          {comparison.subjects.length > 0 &&
+            `One card each, on one scale, so heights can be compared: it tops out at ${formatMoney(comparison.sharedMax)} a month.`}
         </p>
+        <DimensionChoice
+          label="Compare by"
+          choices={[
+            ["item", "Items"],
+            ["category", "Categories"],
+            ["vendor", "Vendors"],
+          ]}
+          current={dimension}
+          href={(value) => buildHref(query, { compareBy: value })}
+        />
       </div>
 
       {overCap && (
-        <p className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-xs text-ink/75">
+        <p className="rounded-lg border border-gold/40 bg-gold/10 px-3.5 py-2.5 text-support text-ink">
           {chosenCount} selected, showing the first {MAX_COMPARE_SUBJECTS}. Past that the cards get
           too narrow to read and the palette runs out of hues that stay distinct for colourblind
           readers.
@@ -588,48 +512,28 @@ function CompareSection({
       )}
 
       {comparison.subjects.length === 0 ? (
-        <p className="card px-4 py-8 text-center text-sm text-ink/55">
-          Nothing to compare with the current filters.
-        </p>
+        <p className="card px-4 py-6 text-center text-body text-ink/70">Nothing to compare with the current filters.</p>
       ) : (
         <>
-          <p className="text-xs text-ink/50">
-            One card each, one shared scale — heights are directly comparable. Axis tops out at{" "}
-            {formatMoney(comparison.sharedMax)} a month.
-          </p>
-
           <Printable id="compare-cards" label="Compare cards">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {comparison.subjects.map((s, i) => {
                 const unitCost = dimension === "item" ? unitCostByItem[s.key] : undefined;
                 return (
-                  <div
-                    key={s.key}
-                    className="card p-3.5"
-                  >
+                  <div key={s.key} className="card px-[1.1rem] py-4">
                     <div className="flex items-start gap-2">
-                      <span
-                        className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm"
-                        style={{ background: seriesHue(i) }}
-                      />
-                      <p className="min-w-0 text-sm font-medium break-words text-ink">{s.label}</p>
+                      <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: seriesHue(i) }} />
+                      <p className="min-w-0 text-body font-semibold break-words text-ink">{s.label}</p>
                     </div>
 
-                    <p className="mt-1.5 text-xl leading-none font-semibold text-ink">
-                      {formatMoney(s.total)}
-                    </p>
-                    <p className="mt-1 text-xs text-ink/50">
+                    <p className="mt-1.5 text-[1.6rem] leading-[1.1] font-semibold tracking-tight text-ink">{formatMoney(s.total)}</p>
+                    <p className="mt-1 text-support text-ink/70">
                       {s.occurrences} {occurrenceNoun(dimension, s.occurrences)}
                       {unitCost && ` · $${unitCost.average.toFixed(2)}/${unitCost.unit} avg`}
                     </p>
 
-                    <div className="mt-3">
-                      <SmallMultiple
-                        months={comparison.months}
-                        values={s.values}
-                        sharedMax={comparison.sharedMax}
-                        slot={i}
-                      />
+                    <div className="mt-3.5">
+                      <SmallMultiple months={comparison.months} values={s.values} sharedMax={comparison.sharedMax} slot={i} />
                     </div>
                   </div>
                 );
@@ -637,47 +541,13 @@ function CompareSection({
             </div>
           </Printable>
 
-          <Printable id="compare-table" label="Compare — the numbers">
-            <Panel title="The numbers" subtitle="Side by side, in full">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-                      <th scope="col" className="py-2 pr-4 font-medium">Month</th>
-                      {comparison.subjects.map((s) => (
-                        <th scope="col" key={s.key} className="py-2 pr-4 text-right font-medium">
-                          {s.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {comparison.months.map((m, i) => (
-                      <tr key={m.key} className="border-b border-ink/5 last:border-0">
-                        <td className="py-1.5 pr-4">{m.label}</td>
-                        {comparison.subjects.map((s) => (
-                          <td
-                            key={s.key}
-                            className="py-1.5 pr-4 text-right tabular-nums tabular-nums"
-                          >
-                            {s.values[i] > 0 ? formatMoney(s.values[i]) : "—"}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                    <tr className="border-t border-ink/15 font-medium">
-                      <td className="py-2 pr-4">Total</td>
-                      {comparison.subjects.map((s) => (
-                        <td key={s.key} className="py-2 pr-4 text-right tabular-nums tabular-nums">
-                          {formatMoney(s.total)}
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </Panel>
-          </Printable>
+          {table && (
+            <Printable id="compare-table" label="Compare — the numbers">
+              <Panel title="The numbers" subtitle="Side by side, in full">
+                <ReportTableView table={table} />
+              </Panel>
+            </Printable>
+          )}
         </>
       )}
     </>
@@ -735,33 +605,24 @@ function UnitCostsSection({
       title="Per-unit cost trends"
       subtitle="What we actually pay per box or pack, and per kilo, litre or item — compare vendors within an item"
       action={
-        <div className="flex items-center gap-1 text-xs">
-          <span className="text-ink/45">Dates:</span>
+        <div className="segmented" role="group" aria-label="Dates shown as">
           {(["gregorian", "hijri"] as const).map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => onCalendarChange(c)}
-              aria-pressed={calendar === c}
-              className={`rounded px-1.5 py-0.5 ${
-                calendar === c ? "bg-gold/20 text-ink" : "text-ink/50 hover:text-ink"
-              }`}
-            >
-              {c === "gregorian" ? "Gregorian" : "Hijri"}
+            <button key={c} type="button" onClick={() => onCalendarChange(c)} aria-pressed={calendar === c} className="segment">
+              {c === "gregorian" ? "Gregorian dates" : "Hijri dates"}
             </button>
           ))}
         </div>
       }
     >
       {grouped.length === 0 ? (
-        <p className="text-sm text-ink/50">
+        <p className="text-body text-ink/70">
           No per-unit data here yet. It appears once a receipt line is matched to a pricelist item
           with confirmed pack contents.
         </p>
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-7">
           {disputedCount > 0 && (
-            <p className="text-xs text-ink/55">
+            <p className="max-w-3xl text-support text-ink/70">
               {disputedCount} {disputedCount === 1 ? "purchase is" : "purchases are"} left out of the
               trends and averages: the pack&rsquo;s contents and the receipt disagree by five times or
               more, so the per-unit figure can&rsquo;t be trusted — the Pricelist leaves{" "}
@@ -773,42 +634,42 @@ function UnitCostsSection({
             const datedPoints = series.reduce((n, s) => n + s.points.length, 0);
             return (
               <Printable key={groupName} id={`unit-cost-${groupName}`} label={`Unit cost — ${groupName}`}>
-                <div>
-                  <h3 className="mb-2 text-sm font-medium text-ink">{groupName}</h3>
+                <div className="border-t border-ink/[0.08] pt-5 first:border-0 first:pt-0">
+                  <h3 className="mb-2 text-body font-semibold text-ink">{groupName}</h3>
                   {datedPoints >= 2 ? (
                     <LineChart series={series} valueFormat={(v) => `$${v.toFixed(2)}`} height={150} />
                   ) : (
-                    <p className="text-xs text-ink/50">
-                      A trend appears once there are two dated purchases to compare.
-                    </p>
+                    <p className="text-support text-ink/70">A trend appears once there are two dated purchases to compare.</p>
                   )}
-                  <div className="mt-2 overflow-x-auto">
-                    <table className="min-w-full text-xs">
+                  {/* The purchases behind the line. The date can be read in
+                      either calendar, which the shared report table cannot
+                      do, so this one keeps its own rows in the same dress. */}
+                  <div className="mt-3 max-w-4xl overflow-x-auto">
+                    {/* Fixed columns, so the same column sits in the same place under every item down the page. */}
+                    <table className="w-full min-w-[34rem] table-fixed text-body">
                       <thead>
-                        <tr className="text-left text-ink/45">
-                          <th scope="col" className="py-1 pr-3 font-medium">Vendor</th>
-                          <th scope="col" className="py-1 pr-3 font-medium">Date</th>
-                          <th scope="col" className="py-1 pr-3 text-right font-medium">Quantity</th>
-                          <th scope="col" className="py-1 pr-3 text-right font-medium">Per pack</th>
-                          <th scope="col" className="py-1 text-right font-medium">Per unit</th>
+                        <tr className="border-b border-ink/15 text-left text-support text-ink/70">
+                          <th scope="col" className="w-[38%] pr-4 pb-2 font-semibold">Vendor</th>
+                          <th scope="col" className="w-[20%] pr-4 pb-2 font-semibold">Date</th>
+                          <th scope="col" className="w-[14%] pr-4 pb-2 text-right font-semibold">Quantity</th>
+                          <th scope="col" className="w-[14%] pr-4 pb-2 text-right font-semibold">Per pack</th>
+                          <th scope="col" className="w-[14%] pb-2 text-right font-semibold">Per unit</th>
                         </tr>
                       </thead>
                       <tbody>
                         {rows.map((r, i) => (
-                          <tr key={i} className="border-t border-ink/5">
-                            <td className="py-1 pr-3">{r.vendorName}</td>
-                            <td className="py-1 pr-3 tabular-nums text-ink/60">
+                          <tr key={i} className="border-b border-ink/[0.06] last:border-0 hover:bg-gold/[0.07]">
+                            <td className="py-2 pr-4">{r.vendorName}</td>
+                            <td className="py-2 pr-4 whitespace-nowrap text-ink/70 tabular-nums">
                               <DateCell date={r.receiptDate} calendar={calendar} />
                             </td>
-                            <td className="py-1 pr-3 text-right tabular-nums text-ink/60 tabular-nums">
+                            <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">
                               {r.normalizedQuantity} {r.normalizedUnit}
                             </td>
-                            <td className="py-1 pr-3 text-right tabular-nums text-ink/60 tabular-nums">
-                              {r.perPack != null ? `$${r.perPack.toFixed(2)}` : "—"}
-                            </td>
-                            <td className="py-1 text-right tabular-nums tabular-nums">
+                            <td className="py-2 pr-4 text-right tabular-nums">{r.perPack != null ? `$${r.perPack.toFixed(2)}` : "—"}</td>
+                            <td className="py-2 text-right font-medium tabular-nums">
                               {r.disputed ? (
-                                <span className="text-ink/45" title="The pack's contents and the receipt disagree by five times or more">
+                                <span className="badge badge-muted" title="The pack's contents and the receipt disagree by five times or more">
                                   pack in doubt
                                 </span>
                               ) : (
@@ -832,36 +693,6 @@ function UnitCostsSection({
 
 /* ------------------------------------------------------------------ */
 
-/** Monthly figures in full, so they are never hover-only. */
-function MonthTable({ monthly }: { monthly: Bucket[] }) {
-  return (
-    <div className="mt-4 overflow-x-auto border-t border-ink/5 pt-3">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="border-b border-ink/10 text-left text-xs text-ink/55">
-            <th scope="col" className="py-2 pr-4 font-medium">Month</th>
-            <th scope="col" className="py-2 pr-4 text-right font-medium">Expenses</th>
-            <th scope="col" className="py-2 pr-4 text-right font-medium">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {monthly.map((m) => (
-            <tr key={m.key} className="border-b border-ink/5 last:border-0">
-              <td className="py-1.5 pr-4">{m.label}</td>
-              <td className="py-1.5 pr-4 text-right tabular-nums text-ink/60 tabular-nums">
-                {m.count}
-              </td>
-              <td className="py-1.5 pr-4 text-right tabular-nums tabular-nums">
-                {formatMoney(m.spend)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function Panel({
   title,
   subtitle,
@@ -875,7 +706,7 @@ function Panel({
 }) {
   return (
     <section className="card p-[1.1rem]">
-      <div className="mb-3.5 flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+      <div className="mb-3.5 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-ink">{title}</h2>
           {subtitle && <p className="mt-0.5 text-support text-ink/70">{subtitle}</p>}
