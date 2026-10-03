@@ -21,7 +21,7 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { gregorianToHijri, formatHijri } from "./hijri.ts";
+import { gregorianToHijri, formatHijri, formatHijriDay } from "./hijri.ts";
 
 /**
  * hijri.js only exposes forward conversion, so finding the Gregorian date of
@@ -61,6 +61,15 @@ describe("gregorianToHijri", () => {
       formatHijri(gregorianToHijri(new Date(2026, 5, 15))),
       "1 Muharram al-Haraam 1448H"
     );
+  });
+});
+
+describe("formatHijriDay", () => {
+  // A calendar cell sits under a heading that has said the year once.
+  test("is the day and month of formatHijri, without the year", () => {
+    const date = gregorianToHijri(new Date(2026, 9, 3));
+    assert.equal(formatHijri(date), "22 Rabi al-Aakhar 1448H");
+    assert.equal(formatHijriDay(date), "22 Rabi al-Aakhar");
   });
 });
 

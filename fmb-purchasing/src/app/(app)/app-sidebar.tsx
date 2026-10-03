@@ -74,7 +74,7 @@ export function AppSidebar({
     <div className="sticky top-0 z-40 md:contents">
 
       {/* Mobile-only top bar: unaffected by md: below, invisible on desktop */}
-      <div className="relative z-40 flex items-center justify-between border-b border-gold/20 bg-cream px-4 py-3 md:hidden">
+      <div className="relative z-40 flex items-center justify-between border-b border-gold/20 bg-cream py-2 pr-2 pl-4 md:hidden">
         <Link href="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
           <Image src="/fmb-logo.png" alt="FMB" width={34} height={34} className="rounded" />
           {/* Sized above body text so the header anchors the page rather than
@@ -84,14 +84,14 @@ export function AppSidebar({
             <span lang="ar" dir="rtl" className="brand-arabic text-[1.3rem]">مشک</span>
           </span>
         </Link>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center">
           <NotificationsBell count={unreadCount} onNavigate={() => setOpen(false)} />
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
-          className="rounded-md p-2 text-ink/70 hover:bg-gold/15"
+          className="flex size-11 items-center justify-center rounded-md text-ink/70 hover:bg-gold/15"
         >
           {open ? <CloseIcon /> : <MenuIcon />}
         </button>
@@ -125,7 +125,7 @@ export function AppSidebar({
                 <span className="brand-wordmark text-[1.2rem]">Mashk</span>
                 <span lang="ar" dir="rtl" className="brand-arabic text-[1.2rem]">مشک</span>
               </p>
-              <p className="text-xs text-ink/60">FMB Sydney</p>
+              <p className="text-support text-ink/70">FMB Sydney</p>
             </div>
           </Link>
           <NotificationsBell count={unreadCount} />
@@ -135,7 +135,7 @@ export function AppSidebar({
           <PalmDivider />
         </div>
 
-        <nav className="flex flex-1 flex-col gap-4 text-sm">
+        <nav className="flex flex-1 flex-col gap-4 text-body">
           {NAV_GROUPS.map((group) => {
             const items = navItems.filter((i) => i.group === group);
             if (items.length === 0) return null;
@@ -173,7 +173,7 @@ export function AppSidebar({
           })}
         </nav>
 
-        <details className="group/account border-t border-ink/10 pt-3 text-sm">
+        <details className="group/account border-t border-ink/10 pt-3 text-body">
           <summary className="flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 text-ink/70 hover:bg-gold/15 hover:text-ink">
             <span className="truncate">{userName}</span>
             <span aria-hidden="true" className="transition-transform group-open/account:-rotate-90">‹</span>
@@ -225,7 +225,7 @@ function NotificationsBell({ count, onNavigate }: { count: number; onNavigate?: 
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       aria-label={count > 0 ? `Notifications, ${count} unread` : "Notifications"}
-      className={`relative rounded-md p-2 text-ink/70 hover:bg-gold/15 hover:text-ink ${active ? "bg-gold/15 text-ink" : ""}`}
+      className={`relative flex size-11 items-center justify-center rounded-md text-ink/70 hover:bg-gold/15 hover:text-ink md:size-9 ${active ? "bg-gold/15 text-ink" : ""}`}
     >
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
         <path
@@ -237,7 +237,7 @@ function NotificationsBell({ count, onNavigate }: { count: number; onNavigate?: 
         />
       </svg>
       {count > 0 && (
-        <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-gold-deep px-1 py-0.5 text-center text-[0.6rem] leading-none font-medium text-cream">
+        <span className="absolute top-0.5 right-0 min-w-[1.2rem] rounded-full bg-brand px-1 py-[0.2rem] text-center text-[0.7333rem] leading-none font-semibold text-white md:-top-0.5 md:-right-1">
           {count > 99 ? "99+" : count}
         </span>
       )}
