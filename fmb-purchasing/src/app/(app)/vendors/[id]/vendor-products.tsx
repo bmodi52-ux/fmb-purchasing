@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { SubmitButton } from "@/components/submit-button";
+import { priceDrift } from "@/lib/item-offers";
 import { reviewOffer, updateOfferPrice } from "../../pricelist/actions";
 
 export type VendorProductRow = {
@@ -236,11 +237,9 @@ function PackLine({
   onEdit: () => void;
   onDoneEditing: () => void;
 }) {
-  // How far the last price paid is from the price on file. A percent either
-  // way is noise; beyond it, somebody should know the list has drifted.
-  const drift =
-    r.lastPaid && r.packPrice ? (r.lastPaid.price - r.packPrice) / r.packPrice : null;
-  const drifted = drift != null && Math.abs(drift) >= 0.01;
+  // How far the last price paid is from the price on file, by the same rule
+  // the item's own page marks it with.
+  const drift = priceDrift(r.lastPaid?.price ?? null, r.packPrice);
 
   const facts = [
     r.purchaseCount > 0
@@ -257,9 +256,9 @@ function PackLine({
         {r.lastPaid && (
           <p className="text-xs text-ink/55">
             Last paid {r.lastPaid.text}
-            {drifted && (
-              <span className={`ml-1.5 font-medium ${drift! > 0 ? "text-danger" : "text-palm"}`}>
-                {drift! > 0 ? "▲" : "▼"} {Math.abs(drift! * 100).toFixed(0)}% vs the price on file
+            {drift != null && (
+              <span className={`ml-1.5 font-medium ${drift > 0 ? "text-danger" : "text-palm"}`}>
+                {drift > 0 ? "▲" : "▼"} {Math.abs(drift * 100).toFixed(0)}% vs the price on file
               </span>
             )}
           </p>
