@@ -13,6 +13,7 @@ import {
   type SelectionApi,
   type SortOption,
 } from "@/components/filterable-section";
+import { LIST_ROW, ListFrame, RowDisclosure } from "@/components/list-frame";
 import type { ExportColumn } from "@/lib/export";
 import { duplicateLabel, type DuplicateMatch } from "@/lib/duplicates";
 
@@ -175,7 +176,7 @@ export function ApprovalsList({ expenses, showSubmitter }: { expenses: ApprovalR
   );
 }
 
-/** One page of the queue: a table where it fits, a card each where it doesn't. */
+/** One page of the queue, on the frame My submissions shares: a table where it fits, a card each where it doesn't. */
 function Queue({
   rows,
   selection,
@@ -191,59 +192,34 @@ function Queue({
 }) {
   if (rows.length === 0) return <p className="text-body text-ink/70">Nothing matches the filters.</p>;
 
-  // With a pager under it, "all" can only honestly mean the page in view.
-  const selectAllLabel = pager ? "Select all on this page" : `Select all ${rows.length}`;
-
   return (
-    // The list answers to its own width, not the window's: beside a sidebar
-    // a laptop has less room than its screen size suggests.
-    <div className="@container">
-      <div className="flex flex-col gap-2.5 @[62rem]:gap-0 @[62rem]:rounded-[0.625rem] @[62rem]:border @[62rem]:border-ink/[0.09] @[62rem]:bg-white @[62rem]:shadow-[0_1px_2px_rgb(43_33_28/0.04)]">
-        <div
-          className={`hidden items-center gap-x-3.5 border-b border-ink/15 px-[1.2rem] py-2.5 text-support font-semibold text-ink/70 @[62rem]:grid ${TABLE_COLUMNS}`}
-        >
-          <input
-            type="checkbox"
-            checked={selection.allShownSelected}
-            onChange={selection.toggleAllShown}
-            aria-label={selectAllLabel}
-            className="size-4"
-          />
+    <ListFrame
+      columns={TABLE_COLUMNS}
+      selection={selection}
+      rowCount={rows.length}
+      pager={pager}
+      headings={
+        <>
           <span>Vendor</span>
           <span>Receipt date</span>
           <span className="text-right">Lines</span>
           <span>Receipt</span>
           <span className="text-right">Total</span>
           <span />
-        </div>
-
-        {/* No headings to hold a tick box until there is a table. */}
-        <label className="flex items-center gap-2.5 self-start px-0.5 text-support text-ink/70 @[62rem]:hidden">
-          <input
-            type="checkbox"
-            checked={selection.allShownSelected}
-            onChange={selection.toggleAllShown}
-            className="size-4"
-          />
-          {selectAllLabel}
-        </label>
-
-        <ul className="flex flex-col gap-2.5 @[62rem]:gap-0">
-          {rows.map((e) => (
-            <QueueRow
-              key={e.id}
-              expense={e}
-              showSubmitter={showSubmitter}
-              selected={selection.isSelected(e.id)}
-              onSelect={() => selection.toggle(e.id)}
-              onReview={() => onReview(e.id)}
-            />
-          ))}
-        </ul>
-
-        {pager && <div className="@[62rem]:border-t @[62rem]:border-ink/10 @[62rem]:px-[1.2rem] @[62rem]:py-3">{pager}</div>}
-      </div>
-    </div>
+        </>
+      }
+    >
+      {rows.map((e) => (
+        <QueueRow
+          key={e.id}
+          expense={e}
+          showSubmitter={showSubmitter}
+          selected={selection.isSelected(e.id)}
+          onSelect={() => selection.toggle(e.id)}
+          onReview={() => onReview(e.id)}
+        />
+      ))}
+    </ListFrame>
   );
 }
 
@@ -288,7 +264,7 @@ function QueueRow({
   const rowButton = "control @[62rem]:h-8 @[62rem]:px-3 @[62rem]:text-support";
 
   return (
-    <li className="card p-3.5 @[62rem]:rounded-none @[62rem]:border-0 @[62rem]:border-b @[62rem]:border-ink/[0.06] @[62rem]:bg-transparent @[62rem]:px-[1.2rem] @[62rem]:py-2.5 @[62rem]:shadow-none @[62rem]:last:border-b-0 @[62rem]:hover:bg-gold/[0.06]">
+    <li className={LIST_ROW}>
       <div className={`flex flex-wrap items-center gap-x-3.5 gap-y-2 @[62rem]:grid ${TABLE_COLUMNS}`}>
         <input
           type="checkbox"
@@ -351,25 +327,11 @@ function QueueRow({
           >
             Review
           </button>
-          <button
-            type="button"
-            onClick={() => setExpanded((x) => !x)}
-            aria-expanded={expanded}
-            aria-label={`${expanded ? "Hide" : "Show"} the lines of ${e.expense_number ?? "this expense"}`}
-            title={expanded ? "Hide details" : "Details"}
-            className="btn btn-secondary control aspect-square shrink-0 px-0 text-ink/70 hover:text-ink @[62rem]:h-8 @[62rem]:border-transparent @[62rem]:bg-transparent"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 20 20"
-              fill="none"
-              aria-hidden="true"
-              className={`transition-transform ${expanded ? "rotate-180" : ""}`}
-            >
-              <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
+          <RowDisclosure
+            open={expanded}
+            onToggle={() => setExpanded((x) => !x)}
+            label={`${expanded ? "Hide" : "Show"} the lines of ${e.expense_number ?? "this expense"}`}
+          />
         </div>
 
         <p className="order-1 w-full pl-[1.875rem] text-support text-ink/70 @[62rem]:hidden">
