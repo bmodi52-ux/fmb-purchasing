@@ -51,7 +51,7 @@ export function NavLink({
       <span className="flex items-center gap-2">
         {badge != null && badge > 0 && (
           <span
-            className="rounded-full bg-gold-deep px-1.5 py-0.5 text-[0.65rem] font-medium leading-none text-cream"
+            className="rounded-full bg-brand px-1.5 py-[0.2rem] text-[0.7333rem] font-semibold leading-none text-white"
             aria-label={`${badge} unread`}
           >
             {badge > 99 ? "99+" : badge}

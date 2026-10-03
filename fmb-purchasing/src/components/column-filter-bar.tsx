@@ -54,36 +54,57 @@ export function ColumnFilterBar<T>({
   filters,
   setFilters,
   text,
+  open,
 }: {
   rows: readonly T[];
   columns: readonly FilterColumn<T>[];
   filters: ColumnFilters;
   setFilters: React.Dispatch<React.SetStateAction<ColumnFilters>>;
   text: (row: T, key: string) => string;
+  /**
+   * Whether the chips are showing, when the page keeps a Filters button of
+   * its own beside its other controls. Left out, the bar keeps its own: a
+   * button on a phone, and the chips always there on anything wider.
+   */
+  open?: boolean;
 }) {
   // On a phone the chips took three rows before the first record (#26), so
   // they wait behind a button there.
   const [shown, setShown] = useState(false);
   if (columns.length === 0) return null;
   const active = activeCount(filters);
+  const owned = open !== undefined;
+  if (owned && !open) return null;
 
   return (
     <div className="flex flex-col gap-2">
-    <button
-      type="button"
-      onClick={() => setShown((s) => !s)}
-      aria-expanded={shown}
-      className="btn btn-secondary btn-xs self-start md:hidden"
+    {!owned && (
+      <button
+        type="button"
+        onClick={() => setShown((s) => !s)}
+        aria-expanded={shown}
+        className="btn btn-secondary btn-xs self-start md:hidden"
+      >
+        {shown ? "Hide filters" : active > 0 ? `Filters (${active})` : "Filters"}
+      </button>
+    )}
+    <div
+      className={
+        owned
+          ? "flex flex-wrap items-center gap-1.5 text-support text-ink/70"
+          : `${shown ? "flex" : "hidden"} flex-wrap items-center gap-x-1 gap-y-1 text-xs text-ink/60 md:flex`
+      }
     >
-      {shown ? "Hide filters" : active > 0 ? `Filters (${active})` : "Filters"}
-    </button>
-    <div className={`${shown ? "flex" : "hidden"} flex-wrap items-center gap-x-1 gap-y-1 text-xs text-ink/60 md:flex`}>
-      <span className="mr-1 text-ink/45">Filter:</span>
+      {!owned && <span className="mr-1 text-ink/45">Filter:</span>}
       {columns.map((column) => (
         <span
           key={column.key}
           className={`flex items-center gap-0.5 rounded-md border px-2 py-1 ${
-            isActive(filters[column.key]) ? "border-gold-deep bg-gold/10 text-ink" : "border-ink/10 text-ink/55"
+            isActive(filters[column.key])
+              ? "border-gold-deep bg-gold/10 text-ink"
+              : owned
+                ? "border-ink/15 bg-white text-ink/70"
+                : "border-ink/10 text-ink/55"
           }`}
         >
           {column.label}

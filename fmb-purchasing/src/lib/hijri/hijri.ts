@@ -152,6 +152,14 @@ export function formatHijri(
 }
 
 /**
+ * The day and month alone, e.g. "11 Safar al-Muzaffar" — for a calendar cell
+ * or a list row, where the heading above has already said the year.
+ */
+export function formatHijriDay({ day, month }: Pick<HijriDate, "day" | "month">): string {
+  return `${day} ${HIJRI_MONTHS_EN[month - 1]}`;
+}
+
+/**
  * Build a calendar grid (array of week rows, each with 7 day cells) for a
  * given Gregorian month, with the Hijri date attached to every cell —
  * mirroring the dual Gregorian/Hijri day-cell layout used by community

@@ -22,11 +22,14 @@ export function ExportToolbar({
   title,
   columns,
   rows,
+  inToolbar = false,
 }: {
   filenameBase: string;
   title: string;
   columns: ExportColumn[];
   rows: Record<string, unknown>[];
+  /** Beside a filter field and a sort menu: their height, and no row count — the list says how many it holds. */
+  inToolbar?: boolean;
 }) {
   const [busy, setBusy] = useState<Format | null>(null);
   const [open, setOpen] = useState(false);
@@ -60,9 +63,11 @@ export function ExportToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs text-ink/50">
-        {rows.length} row{rows.length === 1 ? "" : "s"}
-      </span>
+      {!inToolbar && (
+        <span className="text-xs text-ink/50">
+          {rows.length} row{rows.length === 1 ? "" : "s"}
+        </span>
+      )}
       <div ref={ref} className="relative">
         <button
           type="button"
@@ -70,7 +75,7 @@ export function ExportToolbar({
           disabled={busy !== null}
           aria-expanded={open}
           aria-haspopup="menu"
-          className="btn btn-secondary btn-xs"
+          className={inToolbar ? "btn btn-secondary control" : "btn btn-secondary btn-xs"}
         >
           {busy ? "Exporting…" : "Export ▾"}
         </button>
@@ -88,7 +93,7 @@ export function ExportToolbar({
                   className="flex w-full items-baseline justify-between gap-3 rounded px-2.5 py-1.5 text-left hover:bg-gold/10"
                 >
                   <span className="text-ink">{f.label}</span>
-                  <span className="text-xs text-ink/45">{f.hint}</span>
+                  <span className="text-support text-ink/70">{f.hint}</span>
                 </button>
               </li>
             ))}

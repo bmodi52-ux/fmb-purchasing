@@ -43,8 +43,9 @@ export default async function AppLayout({
         />
 
         {/* Desktop spacing cost a phone 60px of a 375px screen before any
-            card added padding of its own. */}
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-12 md:px-16">{children}</main>
+            card added padding of its own — and, beside the sidebar, a laptop
+            a fifth of what was left. The full margin waits for a wide screen. */}
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-12 xl:px-10 2xl:px-16">{children}</main>
       </div>
       {/* Receipt photos taken with no signal, sent once there is (#47). */}
       <OfflineReceiptSync />
