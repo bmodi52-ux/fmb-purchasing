@@ -1,7 +1,9 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { AnchoredPopover } from "@/components/anchored-popover";
+import { useReportPending } from "@/components/pending";
 import { SubmitButton } from "@/components/submit-button";
 import { StatusBadge } from "@/components/status-badge";
 import { ReceiptViewer } from "@/components/receipt-viewer";
@@ -17,20 +19,10 @@ import {
   type SortableOffer,
 } from "@/lib/item-offers";
 import { addOffer, deleteOffer, retireOffer, reviewOffer, updateOffer } from "../actions";
-import { OfferForm } from "./offer-form";
+import { OfferForm, type OfferPack } from "./offer-form";
 import { MoveOfferPanel } from "./move-offer-panel";
 
 type Vendor = { id: string; name: string; vendor_number: string | null };
-
-/** A pack size an offer can be for, with what its forms need to say. */
-export type OfferPack = {
-  id: string;
-  title: string;
-  /** "Price per box" — what an entered price is for. */
-  priceLabel: string;
-  totalQuantity: number;
-  unitLabel: string | null;
-};
 
 /** The receipt an offer's details came from (#58). */
 export type OfferSource = {
@@ -89,9 +81,10 @@ const ownsItsClick = (target: EventTarget) =>
  * compares a 1 kg bag with a 5 kg tub — and puts what was last paid beside
  * the price on file, so a price that has drifted shows on its own row.
  *
- * Everything else about an offer (its form, where the price came from, its
- * history, moving or retiring it) is behind the row, and opens in place, so the
- * other offers stay in view while one is being changed.
+ * A row opens in place to the offer's fields, in two short rows, so the other
+ * offers stay in view while one is being changed. What is wanted less often —
+ * its history, the receipt, moving or retiring it — is a button away rather
+ * than laid out beside the form.
  */
 export function OffersTable({
   itemId,
@@ -117,7 +110,6 @@ export function OffersTable({
   );
   const [showRejected, setShowRejected] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [addPackId, setAddPackId] = useState(packs[0]?.id ?? "");
   const close = useCallback(() => setOpenId(null), []);
   const closeAdd = useCallback(() => setAdding(false), []);
 
@@ -126,7 +118,8 @@ export function OffersTable({
   const cheapest = useMemo(() => cheapestOfferId(offers), [offers]);
   const packById = useMemo(() => new Map(packs.map((p) => [p.id, p])), [packs]);
 
-  const perUnit = `Per ${unitName(unitCode) || "unit"}`;
+  const unit = unitName(unitCode) || "unit";
+  const perUnit = `Per ${unit}`;
   const columns: { key: OfferSortKey; label: string; right?: boolean }[] = [
     { key: "vendor", label: "Vendor" },
     { key: "brand", label: "Brand" },
@@ -144,34 +137,17 @@ export function OffersTable({
   }
   const toggle = (id: string) => setOpenId((current) => (current === id ? null : id));
 
-  const addPack = packById.get(addPackId) ?? packs[0];
-  const addForm = addPack && (
-    <div className="flex flex-col gap-3">
-      {packs.length > 1 && (
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-ink/70">Pack size</span>
-          <select value={addPack.id} onChange={(e) => setAddPackId(e.target.value)} className="input">
-            {packs.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      <OfferForm
-        key={addPack.id}
-        action={addOffer}
-        itemId={itemId}
-        packSizeId={addPack.id}
-        priceLabel={addPack.priceLabel}
-        totalQuantity={addPack.totalQuantity}
-        innerUnitLabel={addPack.unitLabel}
-        vendors={vendors}
-        submitLabel="Add offer"
-        onSaved={closeAdd}
-      />
-    </div>
+  const addForm = packs.length > 0 && (
+    <OfferForm
+      action={addOffer}
+      itemId={itemId}
+      packs={packs}
+      packSizeId={packs[0]!.id}
+      vendors={vendors}
+      submitLabel="Add offer"
+      onSaved={closeAdd}
+      onCancel={closeAdd}
+    />
   );
 
   const vendorCell = (o: OfferRow) => (
@@ -315,7 +291,7 @@ export function OffersTable({
         vendors={vendors}
         canEdit={canEdit}
         canApprove={canApprove}
-        onSaved={close}
+        onClose={close}
       />
     );
   };
@@ -352,7 +328,7 @@ export function OffersTable({
         {open && (
           <tr className="border-b border-ink/10 bg-gold/[0.09]">
             <td colSpan={8} className="px-3 pb-4">
-              <div className="rounded-lg border border-ink/10 bg-cream p-4">{detail(o)}</div>
+              <div className="rounded-lg border border-ink/10 bg-cream p-3">{detail(o)}</div>
             </td>
           </tr>
         )}
@@ -399,7 +375,7 @@ export function OffersTable({
         <div>
           <h2 className="section-title text-ink">Vendor offers</h2>
           <p className="mt-1 text-sm text-ink/50">
-            Who sells it and for how much, cheapest {perUnit.toLowerCase()} first.
+            Who sells it and for how much, cheapest per {unit} first.
             <span className="hidden xl:inline"> Select a heading to sort.</span>
           </p>
         </div>
@@ -411,12 +387,9 @@ export function OffersTable({
       </div>
 
       {adding && (
-        <div className="mb-4 rounded-lg border border-ink/10 bg-cream p-4">
-          <p className="mb-3 text-sm font-medium text-ink">New offer</p>
+        <div className="mb-4 rounded-lg border border-ink/10 bg-cream p-3">
+          <p className="mb-2 text-sm font-medium text-ink">New offer</p>
           {addForm}
-          <button type="button" onClick={closeAdd} className="mt-2 text-sm text-ink/55 underline hover:text-ink">
-            Cancel
-          </button>
         </div>
       )}
 
@@ -546,9 +519,12 @@ function Chevron({ up }: { up: boolean }) {
   );
 }
 
+const QUIET = "btn btn-quiet btn-xs";
+
 /**
- * Everything about one offer that the row has no room for: its form, the
- * receipt its price came from, its history, and the ways out of it.
+ * What is behind an offer's row: its fields, and on the same line as Save the
+ * things wanted less often. History and moving the offer open underneath when
+ * asked for; nothing but the fields is on show until then.
  */
 function OfferDetail({
   offer: o,
@@ -558,7 +534,7 @@ function OfferDetail({
   vendors,
   canEdit,
   canApprove,
-  onSaved,
+  onClose,
 }: {
   offer: OfferRow;
   pack: OfferPack | undefined;
@@ -567,19 +543,34 @@ function OfferDetail({
   vendors: Vendor[];
   canEdit: boolean;
   canApprove: boolean;
-  onSaved: () => void;
+  onClose: () => void;
 }) {
+  // Somebody who may only look has no form to see, so the history is what
+  // opening the row is for.
+  const [showing, setShowing] = useState<"history" | "move" | null>(canEdit ? null : "history");
+  const show = (what: "history" | "move") => setShowing((current) => (current === what ? null : what));
+
+  const extras = (
+    <>
+      <button type="button" onClick={() => show("history")} aria-expanded={showing === "history"} className={QUIET}>
+        History{o.history.length > 0 && ` (${o.history.length})`}
+      </button>
+      {o.source?.canOpen && o.source.hasReceipt && (
+        <ReceiptViewer expenseId={o.source.expenseId} className={QUIET} />
+      )}
+      {canEdit && <MoreMenu offer={o} itemId={itemId} canApprove={canApprove} onMove={() => show("move")} />}
+    </>
+  );
+
   return (
-    <div className={`grid gap-6 ${canEdit ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : ""}`}>
-      {canEdit && pack && (
+    <div className="flex flex-col gap-3">
+      {canEdit && pack ? (
         <OfferForm
           action={updateOffer}
           itemId={itemId}
+          packs={packs}
           packSizeId={o.packSizeId}
           offerId={o.id}
-          priceLabel={pack.priceLabel}
-          totalQuantity={pack.totalQuantity}
-          innerUnitLabel={pack.unitLabel}
           vendorId={o.vendorId}
           brand={o.brand}
           vendorSku={o.vendorSku}
@@ -587,97 +578,147 @@ function OfferDetail({
           packPrice={o.packPrice}
           comments={o.comments}
           vendors={vendors}
-          packSizes={packs.map((p) => ({ id: p.id, label: p.title }))}
           submitLabel="Save"
-          onSaved={onSaved}
+          onSaved={onClose}
+          onCancel={onClose}
+          footer={extras}
         />
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-1">{extras}</div>
       )}
 
-      <div className={`flex flex-col gap-4 text-sm ${canEdit ? "border-t border-ink/10 pt-4 lg:border-0 lg:pt-0" : ""}`}>
-        <div>
-          <h3 className="mb-1 text-xs font-semibold tracking-wide text-ink/45 uppercase">Where the price came from</h3>
-          {o.source ? (
-            <p className="flex flex-wrap items-center gap-x-1.5 text-ink/70">
-              <span>
-                <SourceLink source={o.source} prefix="Receipt " />
-                {o.priceSetOn && <> of {formatPlainDate(o.priceSetOn)}</>}
-              </span>
-              {o.source.canOpen && o.source.hasReceipt && (
-                <>
-                  <span className="text-ink/30">·</span>
-                  <ReceiptViewer expenseId={o.source.expenseId} />
-                </>
-              )}
-            </p>
-          ) : (
-            <p className="text-ink/70">
-              {o.packPrice == null
-                ? "No price has been entered yet."
-                : o.priceSetOn
-                  ? `Entered on ${formatPlainDate(o.priceSetOn)}, not from a receipt.`
-                  : "Entered by hand, not from a receipt."}
-            </p>
-          )}
-        </div>
-
-        <div>
-          <h3 className="mb-1 text-xs font-semibold tracking-wide text-ink/45 uppercase">
-            History{o.history.length > 0 && ` · ${o.history.length}`}
-          </h3>
+      {showing === "history" && (
+        <div className="border-t border-ink/10 pt-3">
           {o.history.length === 0 ? (
-            <p className="text-ink/70">No changes recorded yet.</p>
+            <p className="text-support text-ink/60">No changes recorded yet.</p>
           ) : (
-            <ul className="flex flex-col gap-2">
+            <ul className="flex flex-col gap-1.5 text-support">
               {o.history.map((h) => (
-                <li key={h.id} className="rounded border border-ink/10 bg-white p-2">
-                  <p className="mb-0.5 text-xs text-ink/45">
+                <li key={h.id} className="flex flex-wrap gap-x-3">
+                  <span className="whitespace-nowrap text-ink/45">
                     {h.when}
                     {h.by && ` · ${h.by}`}
-                  </p>
-                  <ul>
-                    {h.changes.map((c) => (
-                      <li key={c.label} className="text-ink/70">
-                        <span className="text-ink/45">{c.label}:</span> {c.from} → {c.to}
-                      </li>
-                    ))}
-                  </ul>
+                  </span>
+                  <span className="text-ink/75">
+                    {h.changes.map((c) => `${c.label}: ${c.from} → ${c.to}`).join(" · ")}
+                  </span>
                 </li>
               ))}
             </ul>
           )}
         </div>
+      )}
 
-        {canEdit && (
-          <div>
-            <h3 className="mb-1 text-xs font-semibold tracking-wide text-ink/45 uppercase">More</h3>
-            <div className="flex flex-col items-start gap-2 text-ink/60">
-              <MoveOfferPanel
-                offerId={o.id}
-                itemId={itemId}
-                offerLabel={`${o.vendorName ?? "this offer"}, ${pack?.title ?? ""}`}
-                purchaseCount={o.lineCount}
-              />
-              {o.lineCount === 0 && (
-                <form action={deleteOffer}>
-                  <input type="hidden" name="offer_id" value={o.id} />
-                  <input type="hidden" name="item_id" value={itemId} />
-                  <SubmitButton className="text-danger/80 hover:underline">Delete offer</SubmitButton>
-                </form>
-              )}
-              {/* Delete would orphan the purchases, so an offer that has some is
-                  retired instead: nothing new matches it, and what it has keeps
-                  counting. A pending one an approver can already reject. */}
-              {o.lineCount > 0 && o.status !== "rejected" && !(canApprove && o.status === "pending") && (
-                <form action={retireOffer}>
-                  <input type="hidden" name="offer_id" value={o.id} />
-                  <input type="hidden" name="item_id" value={itemId} />
-                  <SubmitButton className="text-danger/80 hover:underline">Retire offer</SubmitButton>
-                </form>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      {showing === "move" && (
+        <div className="border-t border-ink/10 pt-3">
+          <MoveOfferPanel
+            offerId={o.id}
+            itemId={itemId}
+            offerLabel={`${o.vendorName ?? "this offer"}, ${pack?.title ?? ""}`}
+            purchaseCount={o.lineCount}
+            onCancel={() => setShowing(null)}
+          />
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * The ways out of an offer — move it to another item, retire it, delete it —
+ * behind one button, because they are wanted rarely and two of them cannot be
+ * taken back.
+ *
+ * Through AnchoredPopover, since the table scrolls sideways and would clip a
+ * menu positioned inside it. Its choices call the actions directly rather
+ * than through forms of their own: the menu is opened from inside the offer's
+ * form, and a form cannot hold another.
+ */
+function MoreMenu({
+  offer: o,
+  itemId,
+  canApprove,
+  onMove,
+}: {
+  offer: OfferRow;
+  itemId: string;
+  canApprove: boolean;
+  onMove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  useReportPending(pending);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!buttonRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const run = (action: (formData: FormData) => Promise<void>) =>
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set("offer_id", o.id);
+      formData.set("item_id", itemId);
+      await action(formData);
+      setOpen(false);
+    });
+
+  const item = "block w-full px-3 py-2 text-left hover:bg-gold/10 disabled:opacity-55";
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={QUIET}
+      >
+        More
+        <Chevron up={open} />
+      </button>
+      <AnchoredPopover anchorRef={buttonRef} open={open} minWidth={220} align="end">
+        <div ref={menuRef} role="menu" className="py-1 text-sm">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onMove();
+            }}
+            className={`${item} text-ink`}
+          >
+            Wrong item? Move it
+          </button>
+          {o.lineCount === 0 && (
+            <button type="button" role="menuitem" disabled={pending} onClick={() => run(deleteOffer)} className={`${item} text-danger`}>
+              Delete offer
+            </button>
+          )}
+          {/* Delete would orphan the purchases, so an offer that has some is
+              retired instead: nothing new matches it, and what it has keeps
+              counting. A pending one an approver can already reject. */}
+          {o.lineCount > 0 && o.status !== "rejected" && !(canApprove && o.status === "pending") && (
+            <button type="button" role="menuitem" disabled={pending} onClick={() => run(retireOffer)} className={`${item} text-danger`}>
+              Retire offer
+            </button>
+          )}
+        </div>
+      </AnchoredPopover>
+    </>
   );
 }

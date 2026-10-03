@@ -10,17 +10,22 @@ const initialState: MoveOfferState = { error: null };
 /**
  * "This is on the wrong item" (#81): pick the right one, and the offer moves
  * there with its purchases and the vendor's wording.
+ *
+ * Shown when asked for, from the offer's More menu, so it has no opener of its
+ * own.
  */
 export function MoveOfferPanel({
   offerId,
   itemId,
   offerLabel,
   purchaseCount,
+  onCancel,
 }: {
   offerId: string;
   itemId: string;
   offerLabel: string;
   purchaseCount: number;
+  onCancel: () => void;
 }) {
   const [state, formAction, pending] = useActionState(moveOfferAction, initialState);
   const [target, setTarget] = useState<Target | null>(null);
@@ -37,47 +42,45 @@ export function MoveOfferPanel({
   }, [query, itemId]);
 
   return (
-    <details>
-      <summary className="cursor-pointer hover:text-ink">Wrong item? Move it</summary>
-      <div className="mt-2 flex flex-col gap-3">
-        {!target ? (
+    <div className="flex flex-col gap-3 text-sm">
+      {!target ? (
+        <>
+          <p className="text-ink/70">
+            Filed under the wrong item? Find the right one and <strong>{offerLabel}</strong> moves there.
+          </p>
           <SearchBox query={query} setQuery={setQuery} results={results} searching={searching} onPick={setTarget} />
-        ) : (
-          <form action={formAction} className="rounded-md border border-gold/40 bg-gold/5 p-3 text-sm">
-            <input type="hidden" name="offer_id" value={offerId} />
-            <input type="hidden" name="item_id" value={itemId} />
-            <input type="hidden" name="target_item_id" value={target.id} />
-            <p className="text-ink">
-              Move <strong>{offerLabel}</strong> to <strong>{target.label}</strong>?
-            </p>
-            <ul className="mt-2 list-disc pl-5 text-ink/70">
-              <li>
-                {purchaseCount > 0
-                  ? `${purchaseCount} recorded purchase${purchaseCount === 1 ? "" : "s"} move with it, and the costs on both items recalculate`
-                  : "no purchases are recorded against it yet"}
-              </li>
-              <li>it goes onto the same pack size there, which is added if that item doesn&apos;t have it</li>
-              <li>this vendor&apos;s wording moves too, so their next receipt lands on the right item</li>
-            </ul>
-            <div className="mt-3 flex gap-3">
-              <SubmitButton
-                disabled={pending}
-                className="btn btn-primary"
-              >
-                {pending ? "Moving…" : "Move offer"}
-              </SubmitButton>
-              <button
-                type="button"
-                onClick={() => setTarget(null)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-            </div>
-            {state.error && <p className="mt-2 text-danger">{state.error}</p>}
-          </form>
-        )}
-      </div>
-    </details>
+          <button type="button" onClick={onCancel} className="btn btn-quiet btn-sm self-start">
+            Cancel
+          </button>
+        </>
+      ) : (
+        <form action={formAction} className="rounded-md border border-gold/40 bg-gold/5 p-3">
+          <input type="hidden" name="offer_id" value={offerId} />
+          <input type="hidden" name="item_id" value={itemId} />
+          <input type="hidden" name="target_item_id" value={target.id} />
+          <p className="text-ink">
+            Move <strong>{offerLabel}</strong> to <strong>{target.label}</strong>?
+          </p>
+          <ul className="mt-2 list-disc pl-5 text-ink/70">
+            <li>
+              {purchaseCount > 0
+                ? `${purchaseCount} recorded purchase${purchaseCount === 1 ? "" : "s"} move with it, and the costs on both items recalculate`
+                : "no purchases are recorded against it yet"}
+            </li>
+            <li>it goes onto the same pack size there, which is added if that item doesn&apos;t have it</li>
+            <li>this vendor&apos;s wording moves too, so their next receipt lands on the right item</li>
+          </ul>
+          <div className="mt-3 flex gap-3">
+            <SubmitButton disabled={pending} className="btn btn-primary btn-sm">
+              {pending ? "Moving…" : "Move offer"}
+            </SubmitButton>
+            <button type="button" onClick={() => setTarget(null)} className="btn btn-secondary btn-sm">
+              Cancel
+            </button>
+          </div>
+          {state.error && <p className="mt-2 text-danger">{state.error}</p>}
+        </form>
+      )}
+    </div>
   );
 }

@@ -15,7 +15,16 @@ import { PdfPages } from "./pdf-pages";
  * URLs are signed on demand, when the dialog opens, rather than for every row
  * of a list that mostly will not be opened.
  */
-export function ReceiptViewer({ expenseId, label = "View receipt" }: { expenseId: string; label?: string }) {
+export function ReceiptViewer({
+  expenseId,
+  label = "View receipt",
+  className = "text-ink underline",
+}: {
+  expenseId: string;
+  label?: string;
+  /** How the opener looks, where a link among buttons would be the odd one out. */
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<SignedAttachment[] | null>(null);
   const [active, setActive] = useState(0);
@@ -84,7 +93,7 @@ export function ReceiptViewer({ expenseId, label = "View receipt" }: { expenseId
 
   return (
     <>
-      <button ref={openerRef} type="button" onClick={handleOpen} className="text-ink underline">
+      <button ref={openerRef} type="button" onClick={handleOpen} className={className}>
         {label}
       </button>
 
