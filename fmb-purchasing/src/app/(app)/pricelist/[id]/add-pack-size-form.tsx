@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { SubmitButton } from "@/components/submit-button";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import { addPackSize, type AddPackSizeState } from "../actions";
@@ -19,12 +19,22 @@ export function AddPackSizeForm({
   itemId,
   canonicalUnitId,
   units,
+  onAdded,
 }: {
   itemId: string;
   canonicalUnitId: string;
   units: Unit[];
+  /** Called once the pack is added, so whatever holds the form can close. */
+  onAdded?: () => void;
 }) {
   const [state, formAction] = useActionState(addPackSize, initialState);
+  const onAddedRef = useRef(onAdded);
+  useEffect(() => {
+    onAddedRef.current = onAdded;
+  });
+  useEffect(() => {
+    if (state.success) onAddedRef.current?.();
+  }, [state]);
   return (
     <form action={formAction} className="mt-3 flex flex-col gap-3">
       <input type="hidden" name="item_id" value={itemId} />

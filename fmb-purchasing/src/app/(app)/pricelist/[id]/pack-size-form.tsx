@@ -1,3 +1,5 @@
+"use client";
+
 import { SubmitButton } from "@/components/submit-button";
 import { soldAsOf } from "@/lib/pack-description";
 import { updatePackSize } from "../actions";
@@ -22,6 +24,7 @@ export function PackSizeForm({
   packaging,
   units,
   purchaseCount,
+  onSaved,
 }: {
   itemId: string;
   packSizeId: string;
@@ -34,9 +37,17 @@ export function PackSizeForm({
   units: Unit[];
   /** How many recorded purchases would have their per-unit cost restated. */
   purchaseCount: number;
+  /** Called once the save has gone through, so whatever holds the form can close. */
+  onSaved?: () => void;
 }) {
   return (
-    <form action={updatePackSize} className="flex flex-col gap-3">
+    <form
+      action={async (formData) => {
+        await updatePackSize(formData);
+        onSaved?.();
+      }}
+      className="flex flex-col gap-3"
+    >
       <FormResetBoundary>
       <input type="hidden" name="pack_size_id" value={packSizeId} />
       <input type="hidden" name="item_id" value={itemId} />

@@ -2,7 +2,7 @@
 
 import { SubmitButton } from "@/components/submit-button";
 import { formatUnitCost } from "@/lib/pack-description";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { FormResetBoundary } from "@/components/form-reset-boundary";
 import type { OfferFormState } from "../actions";
 
@@ -28,6 +28,7 @@ export function OfferForm({
   packSizes,
   submitLabel,
   priceLabel,
+  onSaved,
 }: {
   /** What the price is for — "Price per box". */
   priceLabel?: string;
@@ -49,9 +50,21 @@ export function OfferForm({
   comments?: string | null;
   vendors: Vendor[];
   submitLabel: string;
+  /** Called once a save has gone through, so whatever holds the form can close. */
+  onSaved?: () => void;
 }) {
   const [state, formAction] = useActionState(action, initialState);
   const [packPriceStr, setPackPriceStr] = useState(packPrice != null ? String(packPrice) : "");
+
+  // Every result of the action is a new object, so a change of state is a
+  // submission that came back; one with no error is a save.
+  const onSavedRef = useRef(onSaved);
+  useEffect(() => {
+    onSavedRef.current = onSaved;
+  });
+  useEffect(() => {
+    if (state !== initialState && state.error == null) onSavedRef.current?.();
+  }, [state]);
 
   const costPerUnit = useMemo(() => {
     const price = Number(packPriceStr);
