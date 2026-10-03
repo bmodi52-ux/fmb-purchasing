@@ -7,6 +7,7 @@ import { useState } from "react";
 import { withdrawExpense, bulkWithdrawExpenses } from "./actions";
 import { formatDate, formatPlainDate } from "@/lib/format";
 import { FilterableSection, type BulkAction, type SortOption } from "@/components/filterable-section";
+import { LIST_ROW, ListFrame, RowDisclosure } from "@/components/list-frame";
 import { ReceiptViewer } from "@/components/receipt-viewer";
 import type { ExportColumn } from "@/lib/export";
 
@@ -60,6 +61,12 @@ const TABS: { key: Tab; label: string }[] = [
 const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
 /**
+ * The columns once there is room for a table: the tick box, the vendor, the
+ * three dates an expense passes, its total, where it stands, and the arrow.
+ */
+const TABLE_COLUMNS = "@[62rem]:grid-cols-[1rem_minmax(0,1fr)_6.2rem_6.2rem_6.2rem_6.6rem_5.8rem_2rem]";
+
+/**
  * A submitter's own expenses.
  *
  * Every expense was a full card — note, comments, receipt, Edit and Delete all
@@ -68,17 +75,20 @@ const money = (n: number) => n.toLocaleString("en-AU", { style: "currency", curr
  * Submitted → Approved → Paid, the rest opening on a tap; tabs narrow the list
  * by status; and a declined expense sits at the top with its reason and a way
  * to fix it.
+ *
+ * On a screen with the room for it the rows are the lines of one table, the
+ * three steps its date columns, and the list is drawn a page at a time — as
+ * Approvals is, on the frame the two share.
  */
 export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
   // Opens on what needs doing: a declined expense, when there is one.
   const [tab, setTab] = useState<Tab>(() => (expenses.some((e) => e.status === "declined") ? "declined" : "all"));
-  const [open, setOpen] = useState<Set<string>>(new Set());
 
   if (expenses.length === 0) {
     return (
-      <p className="text-sm text-ink/50">
+      <p className="text-body text-ink/70">
         Nothing yet —{" "}
-        <Link href="/submit" className="underline">
+        <Link href="/submit" className="font-medium text-brand underline underline-offset-2">
           submit an expense
         </Link>
         .
@@ -111,18 +121,9 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
     },
   ];
 
-  function toggleOpen(id: string) {
-    setOpen((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <div role="tablist" aria-label="Show by status" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+      <div role="tablist" aria-label="Show by status" className="tabs">
         {/* Withdrawn only appears once something has been withdrawn — for
             most people it would be an empty tab for ever. */}
         {TABS.filter((t) => t.key !== "withdrawn" || counts.withdrawn > 0).map((t) => (
@@ -132,12 +133,10 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
             role="tab"
             aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${
-              tab === t.key ? "bg-ink text-cream" : "bg-ink/5 text-ink/70 hover:bg-ink/10"
-            }`}
+            className="tab cursor-pointer"
           >
             {t.label}
-            <span className="ml-1.5 text-xs opacity-70">{counts[t.key]}</span>
+            <span className="ml-1.5 text-support font-normal tabular-nums text-ink/70">{counts[t.key]}</span>
           </button>
         ))}
       </div>
@@ -152,90 +151,39 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
         bulkActions={bulkActions}
         amountOf={(e) => e.total}
         sortOptions={SORT_OPTIONS}
+        pageKey="my-submissions"
+        selectAllButton={false}
       >
-        {(rows, selection) =>
+        {(rows, selection, pager) =>
           rows.length === 0 ? (
-            <p className="text-sm text-ink/50">None here.</p>
+            <p className="text-body text-ink/70">None here.</p>
           ) : (
-            <div className="flex flex-col gap-2">
-              {rows.map((e) => {
-                const isOpen = open.has(e.id);
-                return (
-                  <div
-                    key={e.id}
-                    className={`rounded-lg border bg-white/60 ${
-                      e.status === "declined" ? "border-danger/30" : "border-ink/10"
-                    }`}
-                  >
-                    <div className="flex items-start gap-3 px-3 pt-3 sm:px-4">
-                      <input
-                        type="checkbox"
-                        checked={selection.isSelected(e.id)}
-                        onChange={() => selection.toggle(e.id)}
-                        aria-label={`Select ${e.expense_number ?? "submission"}`}
-                        className="mt-1"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleOpen(e.id)}
-                        aria-expanded={isOpen}
-                        className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-left"
-                      >
-                        <span className="min-w-0">
-                          <span className="block font-medium break-words text-ink">
-                            {e.vendor_name_raw ?? "Vendor not recorded"}
-                          </span>
-                          <span className="block text-xs text-ink/50">
-                            <span className="tabular-nums">{e.expense_number ?? "—"}</span> · {formatDate(e.created_at)}
-                          </span>
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <span className="tabular-nums text-ink">{money(e.total)}</span>
-                          <StatusBadge status={e.status} label={e.status === "submitted" ? "waiting" : undefined} />
-                          <span aria-hidden="true" className="text-ink/40">
-                            {isOpen ? "▾" : "▸"}
-                          </span>
-                        </span>
-                      </button>
-                    </div>
-
-                    <div className="flex flex-col gap-2 px-3 pt-2 pb-3 pl-10 sm:px-4 sm:pl-11">
-                      <Progress expense={e} />
-
-                      {e.status === "declined" && (
-                        <div className="flex flex-col gap-2 rounded-md bg-danger/5 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-                          <p className="text-danger">
-                            {e.decision_comment
-                              ? `Declined: ${e.decision_comment}`
-                              : "Declined without a reason — fix and resubmit, or ask the Procurement Head."}
-                          </p>
-                          <Link
-                            href={`/submit?resubmit=${e.id}`}
-                            className="btn btn-primary btn-sm self-start sm:self-auto"
-                          >
-                            Fix and resubmit
-                          </Link>
-                        </div>
-                      )}
-
-                      {e.status === "withdrawn" && (
-                        <div className="flex flex-col gap-2 rounded-md bg-ink/5 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-                          <p className="text-ink/70">You withdrew this. It isn&apos;t counted anywhere, but stays on the record.</p>
-                          <Link
-                            href={`/submit?resubmit=${e.id}`}
-                            className="btn btn-secondary btn-sm self-start sm:self-auto"
-                          >
-                            Submit again
-                          </Link>
-                        </div>
-                      )}
-
-                      {isOpen && <SubmissionDetails expense={e} />}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <ListFrame
+              columns={TABLE_COLUMNS}
+              selection={selection}
+              rowCount={rows.length}
+              pager={pager}
+              headings={
+                <>
+                  <span>Vendor</span>
+                  <span>Submitted</span>
+                  <span>Decided</span>
+                  <span>Paid</span>
+                  <span className="text-right">Total</span>
+                  <span>Status</span>
+                  <span />
+                </>
+              }
+            >
+              {rows.map((e) => (
+                <SubmissionRowItem
+                  key={e.id}
+                  expense={e}
+                  selected={selection.isSelected(e.id)}
+                  onSelect={() => selection.toggle(e.id)}
+                />
+              ))}
+            </ListFrame>
           )
         }
       </FilterableSection>
@@ -243,14 +191,155 @@ export function SubmissionsList({ expenses }: { expenses: SubmissionRow[] }) {
   );
 }
 
-/** Where the expense is along Submitted → Approved → Paid, with the dates it got there. */
+/**
+ * One submission.
+ *
+ * In a card: the vendor and total; the entry number, date and where it
+ * stands; then the steps it has passed; and beside those two lines the arrow
+ * that opens the rest.
+ * In the table each of those is a column. Either way the whole row opens it,
+ * not only the arrow — that is how the page has always worked.
+ */
+function SubmissionRowItem({
+  expense: e,
+  selected,
+  onSelect,
+}: {
+  expense: SubmissionRow;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const declined = e.status === "declined";
+  const withdrawn = e.status === "withdrawn";
+  const decided = e.decided_at && (declined || e.status === "approved" || e.status === "paid");
+  const number = e.expense_number ?? "—";
+
+  const status = <StatusBadge status={e.status} label={e.status === "submitted" ? "waiting" : undefined} />;
+
+  // A cell placed by hand in the card, and left to fall into its column in the table.
+  const inTable = "@[62rem]:col-start-auto @[62rem]:row-start-auto";
+
+  return (
+    <li
+      className={`${LIST_ROW} cursor-pointer ${declined ? "border-danger/30" : ""}`}
+      onClick={(event) => {
+        // Anything that does something of its own keeps its click.
+        if ((event.target as HTMLElement).closest("a, button, input, label, form")) return;
+        setOpen((o) => !o);
+      }}
+    >
+      <div
+        className={`grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1.5 ${TABLE_COLUMNS}`}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onSelect}
+          aria-label={`Select ${e.expense_number ?? "submission"}`}
+          className={`col-start-1 row-start-1 size-4 ${inTable}`}
+        />
+
+        <p className={`col-start-2 row-start-1 flex min-w-0 items-baseline gap-2 ${inTable}`}>
+          <span
+            title={e.vendor_name_raw ?? undefined}
+            className="min-w-0 text-base font-semibold break-words text-ink @[62rem]:truncate @[62rem]:text-body"
+          >
+            {e.vendor_name_raw ?? "Vendor not recorded"}
+          </span>
+          <Link
+            href={`/expenses/${e.id}`}
+            className="hidden shrink-0 text-support font-medium tabular-nums text-brand underline-offset-2 hover:underline @[62rem]:inline"
+          >
+            {number}
+          </Link>
+        </p>
+
+        <span className="hidden text-body tabular-nums text-ink/70 @[62rem]:block">{formatDate(e.created_at)}</span>
+        <span className={`hidden text-body tabular-nums @[62rem]:block ${declined ? "text-danger" : "text-ink/70"}`}>
+          {decided ? formatDate(e.decided_at!) : "—"}
+        </span>
+        <span className="hidden text-body tabular-nums text-ink/70 @[62rem]:block">
+          {e.status === "paid" && e.payment_date ? formatPlainDate(e.payment_date) : "—"}
+        </span>
+
+        <span
+          className={`col-start-3 row-start-1 text-right text-base font-semibold tabular-nums text-ink @[62rem]:text-body ${inTable}`}
+        >
+          {money(e.total)}
+        </span>
+
+        <span className="hidden @[62rem]:block">{status}</span>
+
+        <RowDisclosure
+          open={open}
+          onToggle={() => setOpen((o) => !o)}
+          label={`${open ? "Hide" : "Show"} the details of ${e.expense_number ?? "this submission"}`}
+          className={`col-start-3 row-span-2 row-start-2 justify-self-end @[62rem]:row-span-1 ${inTable}`}
+        />
+
+        <p className="col-start-2 row-start-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-support text-ink/70 @[62rem]:hidden">
+          <span>
+            <Link
+              href={`/expenses/${e.id}`}
+              className="font-medium tabular-nums text-brand underline-offset-2 hover:underline"
+            >
+              {number}
+            </Link>{" "}
+            · {formatDate(e.created_at)}
+          </span>
+          {status}
+        </p>
+
+        <div className="col-start-2 row-start-3 @[62rem]:hidden">
+          <Progress expense={e} />
+        </div>
+
+        {(declined || withdrawn || open) && (
+          <div className="col-span-full flex flex-col gap-2 @[62rem]:pl-[1.875rem]">
+            {declined && (
+              <div className="flex flex-col gap-2 rounded-md bg-danger/5 px-3 py-2 text-body sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-danger">
+                  {e.decision_comment
+                    ? `Declined: ${e.decision_comment}`
+                    : "Declined without a reason — fix and resubmit, or ask the Procurement Head."}
+                </p>
+                <Link href={`/submit?resubmit=${e.id}`} className="btn btn-primary btn-sm self-start pointer-coarse:min-h-10 sm:self-auto">
+                  Fix and resubmit
+                </Link>
+              </div>
+            )}
+
+            {withdrawn && (
+              <div className="flex flex-col gap-2 rounded-md bg-ink/5 px-3 py-2 text-body sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-ink/70">You withdrew this. It isn&apos;t counted anywhere, but stays on the record.</p>
+                <Link href={`/submit?resubmit=${e.id}`} className="btn btn-secondary btn-sm self-start pointer-coarse:min-h-10 sm:self-auto">
+                  Submit again
+                </Link>
+              </div>
+            )}
+
+            {open && <SubmissionDetails expense={e} />}
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Where the expense is along Submitted → Approved → Paid, with the dates it
+ * got to the later two. The day it was submitted is on the line above this
+ * one, beside the entry number, and saying it twice wrapped the steps on a phone.
+ */
 function Progress({ expense: e }: { expense: SubmissionRow }) {
   const declined = e.status === "declined";
   const withdrawn = e.status === "withdrawn";
   const approvedOrPaid = e.status === "approved" || e.status === "paid";
 
   const steps: { label: string; date: string | null; done: boolean; bad?: boolean }[] = [
-    { label: "Submitted", date: formatDate(e.created_at), done: true },
+    { label: "Submitted", date: null, done: true },
     declined
       ? { label: "Declined", date: e.decided_at ? formatDate(e.decided_at) : null, done: true, bad: true }
       : withdrawn
@@ -266,15 +355,15 @@ function Progress({ expense: e }: { expense: SubmissionRow }) {
   }
 
   return (
-    <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs" aria-label="Progress">
+    <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-support" aria-label="Progress">
       {steps.map((s, i) => (
         <li key={s.label} className="flex items-center gap-1.5">
           {i > 0 && (
-            <span aria-hidden="true" className="text-ink/25">
+            <span aria-hidden="true" className="text-ink/40">
               →
             </span>
           )}
-          <span className={s.bad ? "text-danger" : s.done ? "text-palm" : "text-ink/40"}>
+          <span className={s.bad ? "text-danger" : s.done ? "font-medium text-palm-deep" : "text-ink/65"}>
             {s.done && !s.bad ? "✓ " : ""}
             {s.label}
             {s.done && s.date ? ` ${s.date}` : ""}
@@ -287,20 +376,20 @@ function Progress({ expense: e }: { expense: SubmissionRow }) {
 
 function SubmissionDetails({ expense: e }: { expense: SubmissionRow }) {
   return (
-    <div className="flex flex-col gap-2 border-t border-ink/10 pt-2 text-sm">
-      {e.invoice_number && <p className="text-ink/60">Invoice {e.invoice_number}</p>}
+    <div className="flex flex-col gap-2 border-t border-ink/10 pt-2.5 text-body">
+      {e.invoice_number && <p className="text-support text-ink/70">Invoice {e.invoice_number}</p>}
 
       {/* The submitter's own note, so they can see what they said —
           particularly when a decision comes back referring to it. */}
       {e.submitter_comment && (
-        <p className="rounded-md bg-ink/5 px-3 py-2 text-ink/70">
-          <span className="text-ink/50">Your note: </span>
+        <p className="rounded-md bg-ink/5 px-3 py-2 text-ink">
+          <span className="text-ink/70">Your note: </span>
           <span className="whitespace-pre-wrap">{e.submitter_comment}</span>
         </p>
       )}
 
       {e.status === "approved" && e.decision_comment && (
-        <p className="rounded-md bg-palm/5 px-3 py-2 text-palm">Comment: {e.decision_comment}</p>
+        <p className="rounded-md bg-palm/5 px-3 py-2 text-palm-deep">Comment: {e.decision_comment}</p>
       )}
 
       {e.status === "paid" && (
@@ -310,23 +399,21 @@ function SubmissionDetails({ expense: e }: { expense: SubmissionRow }) {
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
-        <Link href={`/expenses/${e.id}`} className="-ml-2 px-2 py-1.5 text-ink/70 underline hover:text-ink">
+      <div className="flex flex-wrap items-center gap-2">
+        <Link href={`/expenses/${e.id}`} className="btn btn-secondary btn-sm pointer-coarse:min-h-10">
           Open expense
         </Link>
         {e.hasReceipt && (
-          <span className="px-2 py-1.5">
-            <ReceiptViewer expenseId={e.id} label="Receipt" />
-          </span>
+          <ReceiptViewer expenseId={e.id} label="Receipt" className="btn btn-secondary btn-sm pointer-coarse:min-h-10" />
         )}
         {e.status === "submitted" && (
           <>
-            <Link href={`/submit?edit=${e.id}`} className="px-2 py-1.5 text-ink/70 underline hover:text-ink">
+            <Link href={`/submit?edit=${e.id}`} className="btn btn-secondary btn-sm pointer-coarse:min-h-10">
               Edit
             </Link>
             <form action={withdrawExpense}>
               <input type="hidden" name="expense_id" value={e.id} />
-              <SubmitButton pendingLabel="Withdrawing…" className="px-2 py-1.5 text-danger/70 underline hover:text-danger">
+              <SubmitButton pendingLabel="Withdrawing…" className="btn btn-danger btn-sm pointer-coarse:min-h-10">
                 Withdraw
               </SubmitButton>
             </form>

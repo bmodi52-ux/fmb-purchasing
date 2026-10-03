@@ -320,7 +320,9 @@ export function FilterableSection<T extends Record<string, unknown>>({
             {filtered.length} of {rows.length} shown
           </span>
         )}
-        <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+        {/* On a phone the page's own action wants a full row, and Export shares it;
+            with no action, Export sits at the end of the row above. */}
+        <div className={`flex items-center gap-2 sm:ml-auto sm:w-auto ${actions ? "w-full" : ""}`}>
           <ExportToolbar filenameBase={filenameBase} title={title} columns={columns} rows={exportSourceRows} inToolbar />
           {actions?.(filtered)}
         </div>
