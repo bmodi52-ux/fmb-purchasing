@@ -38,6 +38,7 @@ export function PackFields({
   defaultLabel,
   sameAsUnitId,
   onChange,
+  compact = false,
 }: {
   units: Unit[];
   defaults: PackFieldValues;
@@ -51,6 +52,12 @@ export function PackFields({
   sameAsUnitId?: string;
   /** Called with the values the form will post. */
   onChange?: (values: PackFieldValues) => void;
+  /**
+   * Smaller labels and shorter fields, with the tick box and the preview on
+   * one line: for a form that opens under a row of a table, where it should
+   * not push the rest of the table out of sight.
+   */
+  compact?: boolean;
 }) {
   const [values, setValues] = useState(defaults);
   const [hasSmallerPacks, setHasSmallerPacks] = useState(Number(defaults.packCount) > 1);
@@ -91,6 +98,10 @@ export function PackFields({
         })
       : null;
 
+  const field = compact ? "flex flex-col gap-1" : "flex flex-col gap-1 text-sm";
+  const label = compact ? "text-support text-ink/60" : "text-ink/70";
+  const input = compact ? "input input-sm text-body text-ink" : "input";
+
   const unitSelect = (
     <select
       name="inner_unit_id"
@@ -98,7 +109,7 @@ export function PackFields({
       aria-label="Unit"
       value={values.innerUnitId}
       onChange={(e) => update({ innerUnitId: e.target.value })}
-      className="input w-36"
+      className={`${input} w-36`}
     >
       {sameAsUnitId !== undefined && <option value="">— as above —</option>}
       {units.map((u) => (
@@ -110,19 +121,19 @@ export function PackFields({
   );
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={`flex flex-col ${compact ? "gap-2.5" : "gap-3"}`}>
       <input type="hidden" name="packaging" value={loose ? "" : values.soldAs} />
       {loose && <input type="hidden" name="sold_loose" value="on" />}
       {(loose || !hasSmallerPacks) && <input type="hidden" name="pack_count" value="1" />}
       {loose && <input type="hidden" name="inner_quantity" value="1" />}
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-ink/70">Comes as</span>
+      <div className={`flex flex-wrap items-end ${compact ? "gap-x-3 gap-y-2.5" : "gap-2"}`}>
+        <label className={field}>
+          <span className={label}>Comes as</span>
           <select
             value={values.soldAs}
             onChange={(e) => update({ soldAs: e.target.value as SoldAs })}
-            className="input w-32"
+            className={`${input} w-32`}
           >
             {values.soldAs === "" && <option value="">— choose —</option>}
             <option value="loose">Loose</option>
@@ -135,15 +146,15 @@ export function PackFields({
         </label>
 
         {loose ? (
-          <div className="flex flex-col gap-1 text-sm">
-            <span className="text-ink/70">Priced per</span>
+          <div className={field}>
+            <span className={label}>Priced per</span>
             {unitSelect}
           </div>
         ) : (
           <>
             {hasSmallerPacks && (
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-ink/70">How many inside</span>
+              <label className={field}>
+                <span className={label}>How many inside</span>
                 <input
                   name="pack_count"
                   type="number"
@@ -152,12 +163,12 @@ export function PackFields({
                   required
                   value={values.packCount}
                   onChange={(e) => update({ packCount: e.target.value })}
-                  className="input w-24"
+                  className={`${input} w-24`}
                 />
               </label>
             )}
-            <div className="flex flex-col gap-1 text-sm">
-              <span className="text-ink/70">{hasSmallerPacks ? "Each one holds" : `Each ${container} holds`}</span>
+            <div className={field}>
+              <span className={label}>{hasSmallerPacks ? "Each one holds" : `Each ${container} holds`}</span>
               <div className="flex gap-2">
                 <input
                   name="inner_quantity"
@@ -168,7 +179,7 @@ export function PackFields({
                   aria-label="Amount"
                   value={values.innerQuantity}
                   onChange={(e) => update({ innerQuantity: e.target.value })}
-                  className="input w-20"
+                  className={`${input} w-20`}
                 />
                 {unitSelect}
               </div>
@@ -176,28 +187,30 @@ export function PackFields({
           </>
         )}
 
-        <label className="flex min-w-40 flex-1 flex-col gap-1 text-sm">
-          <span className="text-ink/70">
+        <label className={`min-w-40 flex-1 ${field}`}>
+          <span className={label}>
             Name <span className="text-ink/40">(optional)</span>
           </span>
-          <input name={labelName} defaultValue={defaultLabel ?? ""} placeholder="e.g. Large box" className="input" />
+          <input name={labelName} defaultValue={defaultLabel ?? ""} placeholder="e.g. Large box" className={input} />
         </label>
       </div>
 
-      {!loose && (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={hasSmallerPacks} onChange={(e) => toggleSmallerPacks(e.target.checked)} />
-          <span className="text-ink/70">
-            Has smaller packs inside — e.g. a carton of 10 × 1 L bottles
-          </span>
-        </label>
-      )}
+      {/* One line when compact; otherwise each is a line of its own, as the
+          wrapper then takes no part in the layout. */}
+      <div className={compact ? "flex flex-wrap items-center justify-between gap-x-6 gap-y-1.5" : "contents"}>
+        {!loose && (
+          <label className={`flex items-center gap-2 ${compact ? "text-support" : "text-sm"}`}>
+            <input type="checkbox" checked={hasSmallerPacks} onChange={(e) => toggleSmallerPacks(e.target.checked)} />
+            <span className={label}>Has smaller packs inside — e.g. a carton of 10 × 1 L bottles</span>
+          </label>
+        )}
 
-      {preview && (
-        <p className="text-sm text-ink/60">
-          Shows as: <span className="font-medium text-ink">{preview}</span>
-        </p>
-      )}
+        {preview && (
+          <p className={`${compact ? "text-support" : "text-sm"} text-ink/60`}>
+            Shows as: <span className="font-medium text-ink">{preview}</span>
+          </p>
+        )}
+      </div>
     </div>
   );
 }
