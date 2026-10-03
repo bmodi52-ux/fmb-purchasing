@@ -1,8 +1,6 @@
 "use client";
 
 import { Fragment, useCallback, useState } from "react";
-import { SubmitButton } from "@/components/submit-button";
-import { removePackSize } from "../actions";
 import { PackSizeForm } from "./pack-size-form";
 import { AddPackSizeForm } from "./add-pack-size-form";
 
@@ -65,28 +63,21 @@ export function PackSizesTable({
   const toggle = (id: string) => setOpenId((current) => (current === id ? null : id));
 
   const form = (p: PackRow) => (
-    <div className="flex flex-col gap-3">
-      <PackSizeForm
-        itemId={itemId}
-        packSizeId={p.id}
-        innerQuantity={p.innerQuantity}
-        innerUnitId={p.innerUnitId}
-        packCount={p.packCount}
-        label={p.label}
-        soldLoose={p.soldLoose}
-        packaging={p.packaging}
-        units={units}
-        purchaseCount={p.lineCount}
-        onSaved={close}
-      />
-      {!p.hasOffers && (
-        <form action={removePackSize}>
-          <input type="hidden" name="pack_size_id" value={p.id} />
-          <input type="hidden" name="item_id" value={itemId} />
-          <SubmitButton className="text-sm text-danger/80 hover:underline">Remove this pack size</SubmitButton>
-        </form>
-      )}
-    </div>
+    <PackSizeForm
+      itemId={itemId}
+      packSizeId={p.id}
+      innerQuantity={p.innerQuantity}
+      innerUnitId={p.innerUnitId}
+      packCount={p.packCount}
+      label={p.label}
+      soldLoose={p.soldLoose}
+      packaging={p.packaging}
+      units={units}
+      purchaseCount={p.lineCount}
+      canRemove={!p.hasOffers}
+      onSaved={close}
+      onCancel={close}
+    />
   );
 
   const contents = (p: PackRow) =>
@@ -126,9 +117,15 @@ export function PackSizesTable({
       </div>
 
       {adding && (
-        <div className="mb-4 rounded-lg border border-ink/10 bg-cream p-4">
-          <p className="text-sm font-medium text-ink">New pack size</p>
-          <AddPackSizeForm itemId={itemId} canonicalUnitId={canonicalUnitId} units={units} onAdded={closeAdd} />
+        <div className="mb-4 rounded-lg border border-ink/10 bg-cream p-3">
+          <p className="mb-2 text-sm font-medium text-ink">New pack size</p>
+          <AddPackSizeForm
+            itemId={itemId}
+            canonicalUnitId={canonicalUnitId}
+            units={units}
+            onAdded={closeAdd}
+            onCancel={closeAdd}
+          />
         </div>
       )}
 
@@ -168,7 +165,7 @@ export function PackSizesTable({
                       {open && (
                         <tr className="border-b border-ink/10 bg-gold/[0.09]">
                           <td colSpan={7} className="px-3 pb-4">
-                            <div className="rounded-lg border border-ink/10 bg-cream p-4">{form(p)}</div>
+                            <div className="rounded-lg border border-ink/10 bg-cream p-3">{form(p)}</div>
                           </td>
                         </tr>
                       )}

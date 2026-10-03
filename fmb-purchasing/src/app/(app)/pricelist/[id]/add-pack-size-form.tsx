@@ -20,12 +20,14 @@ export function AddPackSizeForm({
   canonicalUnitId,
   units,
   onAdded,
+  onCancel,
 }: {
   itemId: string;
   canonicalUnitId: string;
   units: Unit[];
   /** Called once the pack is added, so whatever holds the form can close. */
   onAdded?: () => void;
+  onCancel?: () => void;
 }) {
   const [state, formAction] = useActionState(addPackSize, initialState);
   const onAddedRef = useRef(onAdded);
@@ -36,10 +38,11 @@ export function AddPackSizeForm({
     if (state.success) onAddedRef.current?.();
   }, [state]);
   return (
-    <form action={formAction} className="mt-3 flex flex-col gap-3">
+    <form action={formAction} className="flex flex-col gap-3">
       <input type="hidden" name="item_id" value={itemId} />
       <FormResetBoundary>
         <PackFields
+          compact
           units={units}
           defaults={{ soldAs: "", innerQuantity: "1", innerUnitId: canonicalUnitId, packCount: "1" }}
         />
@@ -49,7 +52,14 @@ export function AddPackSizeForm({
           {state.error}
         </p>
       )}
-      <SubmitButton className="btn btn-primary self-start">Add pack size</SubmitButton>
+      <div className="flex items-center gap-2">
+        <SubmitButton className="btn btn-primary btn-sm">Add pack size</SubmitButton>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="btn btn-quiet btn-sm">
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }
