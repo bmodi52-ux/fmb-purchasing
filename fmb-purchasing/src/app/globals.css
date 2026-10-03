@@ -414,6 +414,16 @@ select.input:disabled {
   background-color: rgb(43 33 28 / 0.03);
 }
 
+/* A field in a dense form, such as an offer's fields under its row. Here
+   rather than a padding utility on the field, because `.input` is unlayered
+   and so outranks every utility. */
+.input-sm {
+  padding: 0.3125rem 0.625rem;
+}
+select.input-sm {
+  padding: 0.3125rem 1.75rem 0.3125rem 0.625rem;
+}
+
 input[type="checkbox"],
 input[type="radio"] {
   accent-color: var(--color-gold-deep);
